@@ -1,0 +1,6 @@
+[submodule "stac-fastapi-pgstac"]
+	path = stac-fastapi-pgstac
+	url = https://github.com/janzkyle/wb-philsa-geo-stac-fastapi-pgstac.git
+[submodule "stac-browser"]
+	path = stac-browser
+	url = https://github.com/janzkyle/wb-philsa-geo-stac-browser.git

@@ -1,0 +1,62 @@
+flowchart LR
+    subgraph SRC["External Data Sources"]
+        COP["CopPhil S3<br/>raw Sentinel / EODATA"]
+        VEC["Vector sources<br/>HDX admin · Copernicus EMS · OSM / synthetic"]
+        PUB["Public STAC APIs<br/>Earth Search · Planetary Computer"]
+    end
+
+    subgraph ETLP["ETL — CopPhil JupyterLab"]
+        JUP["Processing<br/>clip · NDVI · SAR flood · vector to PMTiles<br/>tag sensitivity (open / restricted)"]
+    end
+
+    subgraph STORE["Storage"]
+        R2PRIV["Cloudflare R2 · private<br/>sensitive data + licensed imagery"]
+        DB[("PostgreSQL + PostGIS<br/>pgSTAC — internal only")]
+        R2PUB["Cloudflare R2 · public<br/>open COGs + PMTiles"]
+    end
+
+    subgraph UIP["End user layer"]
+        BROW["STAC Browser<br/>catalog explorer<br/><i>audience: analysts / data engineers</i>"]
+        MAP["MapLibre webmap<br/>open: public · restricted: authenticated<br/><i>audience: partner agencies</i>"]
+    end
+
+    subgraph GATE["Access &amp; Governance"]
+        AUTH["Auth / Identity provider<br/>RBAC · token issuance<br/>presigned URLs · data-sharing policy"]
+    end
+
+    subgraph SERVE["Interoperability layer"]
+        API["stac-fastapi-pgstac<br/>catalog API<br/>collection-level access control"]
+        TIT["TiTiler<br/>raster tiling"]
+    end
+
+    COP --> JUP
+    VEC --> JUP
+    PUB -. "query asset URLs (ETL only)" .-> JUP
+    JUP -- "write open assets" --> R2PUB
+    JUP -- "write restricted assets" --> R2PRIV
+
+    BROW -- "authenticate" --> AUTH
+    MAP -- "authenticate" --> AUTH
+    AUTH -- "authorized discovery" --> API
+    AUTH -- "authorized tiles" --> TIT
+    API <--> DB
+
+    TIT -- "fetch open COGs" --> R2PUB
+    TIT -- "fetch restricted COGs" --> R2PRIV
+    MAP -- "open PMTiles (direct)" --> R2PUB
+    MAP -- "restricted PMTiles (presigned)" --> R2PRIV
+    JUP -- "load collections + items<br/>pypgstac (hrefs to R2)" --> DB
+
+    classDef src fill:#e0f2f1,stroke:#00897b,color:#004d40;
+    classDef etl fill:#eceff1,stroke:#546e7a,color:#263238;
+    classDef store fill:#f3e5f5,stroke:#8e24aa,color:#4a148c;
+    classDef serve fill:#fff3e0,stroke:#fb8c00,color:#e65100;
+    classDef gate fill:#fde7e9,stroke:#c62828,color:#7f0000;
+    classDef ui fill:#e3f2fd,stroke:#1e88e5,color:#0d47a1;
+
+    class COP,PUB,VEC src;
+    class JUP etl;
+    class DB,R2PUB,R2PRIV store;
+    class API,TIT serve;
+    class AUTH gate;
+    class MAP,BROW ui;
