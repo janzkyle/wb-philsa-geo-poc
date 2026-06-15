@@ -1,5 +1,5 @@
 flowchart LR
-    subgraph SRC["External Data Sources"]
+    subgraph SRC["Authoritative Data Sources"]
         COP["CopPhil S3<br/>raw Sentinel / EODATA"]
         VEC["Vector sources<br/>HDX admin · Copernicus EMS · OSM / synthetic"]
         PUB["Public STAC APIs<br/>Earth Search · Planetary Computer"]
@@ -10,9 +10,9 @@ flowchart LR
     end
 
     subgraph STORE["Storage"]
-        R2PRIV["Cloudflare R2 · private<br/>sensitive data + licensed imagery"]
-        DB[("PostgreSQL + PostGIS<br/>pgSTAC — internal only")]
-        R2PUB["Cloudflare R2 · public<br/>open COGs + PMTiles"]
+        R2PRIV["private<br/>sensitive data + licensed imagery · Cloudflare R2"]
+        DB["STAC DB — internal only<br/>PostgreSQL + PostGIS (pgSTAC)"]
+        R2PUB["public<br/>open COGs + PMTiles · Cloudflare R2"]
     end
 
     subgraph UIP["End user layer"]
@@ -25,8 +25,8 @@ flowchart LR
     end
 
     subgraph SERVE["Interoperability layer"]
-        API["stac-fastapi-pgstac<br/>catalog API<br/>collection-level access control"]
-        TIT["TiTiler<br/>raster tiling"]
+        API["Catalog API<br/>collection-level access control<br/>stac-fastapi-pgstac"]
+        TIT["Raster tiling<br/>"TiTiler]
     end
 
     COP --> JUP

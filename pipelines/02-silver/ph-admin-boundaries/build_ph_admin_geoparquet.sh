@@ -36,7 +36,7 @@
 #   --- Cloudflare R2 upload (set R2_BUCKET to switch from local to R2) ---
 #   R2_BUCKET     R2 bucket name. When set, output goes to R2, not local disk.
 #   R2_ACCOUNT_ID Cloudflare account id (forms the S3 endpoint). REQUIRED for R2.
-#   R2_PREFIX     key prefix inside the bucket (default "ph-admin-boundaries").
+#   R2_PREFIX     key prefix in the bucket (default "02-silver/ph-admin-boundaries").
 #   R2_PUBLIC_BASE  optional public base URL (your r2.dev subdomain or a custom
 #                   domain). If set, the summary prints each object's https URL.
 #   AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY
@@ -44,7 +44,7 @@
 #                 hard-code these — export them in your shell or a gitignored
 #                 env file. (These are the standard S3 vars; R2 honours them.)
 #   ENV_FILE      path to a KEY=VALUE env file to load before running. If unset,
-#                 the script auto-loads ./.env.r2 or <script-dir>/.env.r2 if present.
+#                 auto-loads .env.r2 from cwd, the repo root, or this script's dir.
 #
 # Usage:
 #   ./build_ph_admin_geoparquet.sh                                 # local, full res
@@ -59,18 +59,28 @@
 # slivers, invisible at display scales). Good for web/overview maps; for analysis
 # keep the full-resolution files.
 #
+# Sizes: full-resolution total ~870 MB (adm4 ~207 MB); at TOLERANCE_M=100 ~13 MB
+# total. Mind the full-res size when uploading to R2. Levels & feature counts:
+# adm0 country=1, adm1 region=17, adm2 province=88, adm3 city/mun=1642, adm4 brgy=42048.
+#
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # ---- optional env file (so R2 creds aren't typed on every run) --------------
 # Loads KEY=VALUE lines (exported) BEFORE the parameters below are resolved.
-# Search order: $ENV_FILE (if set), ./.env.r2 (cwd), <script-dir>/.env.r2.
-# Keep this file OUT of git — it holds AWS_SECRET_ACCESS_KEY. See SKILL.md.
+# Search order: $ENV_FILE (if set), ./.env.r2 (cwd), <repo-root>/.env.r2,
+# <script-dir>/.env.r2. The shared R2 creds live in the repo-root .env.r2.
+# Keep this file OUT of git — it holds AWS_SECRET_ACCESS_KEY. See README.md.
 if [ -n "${ENV_FILE:-}" ] && [ ! -f "${ENV_FILE}" ]; then
   echo "ERROR: ENV_FILE=${ENV_FILE} not found"; exit 1
 fi
-for _envf in "${ENV_FILE:-}" "${PWD}/.env.r2" "${SCRIPT_DIR}/.env.r2"; do
+REPO_ROOT="$SCRIPT_DIR"
+while [ "$REPO_ROOT" != "/" ]; do
+  if [ -e "$REPO_ROOT/.git" ] || [ -e "$REPO_ROOT/AGENTS.md" ]; then break; fi
+  REPO_ROOT="$(dirname "$REPO_ROOT")"
+done
+for _envf in "${ENV_FILE:-}" "${PWD}/.env.r2" "${REPO_ROOT}/.env.r2" "${SCRIPT_DIR}/.env.r2"; do
   if [ -n "$_envf" ] && [ -f "$_envf" ]; then
     echo ">> loading env from ${_envf}"
     set -a; . "$_envf"; set +a
@@ -86,7 +96,7 @@ GDB_URL="https://data.humdata.org/dataset/caf116df-f984-4deb-85ca-41b349d3f313/r
 # Cloudflare R2 (S3-compatible) parameters
 R2_BUCKET="${R2_BUCKET:-}"
 R2_ACCOUNT_ID="${R2_ACCOUNT_ID:-}"
-R2_PREFIX="${R2_PREFIX:-ph-admin-boundaries}"
+R2_PREFIX="${R2_PREFIX:-02-silver/ph-admin-boundaries}"
 R2_PUBLIC_BASE="${R2_PUBLIC_BASE:-}"
 
 # ---- sanity: drivers --------------------------------------------------------

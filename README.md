@@ -14,9 +14,8 @@ just *what it is* and *how to run it*.
 
 | Path                                  | What it is                                                                                                                                                                                                                     |
 | ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `mirror_philsa_catalog.py`            | Mirrors every Collection + Item from the public PhilSA Satellite Imagery Catalog (`api.catalog.data.philsa.gov.ph`) into local pgSTAC, by reference. Stdlib only. `--dry-run`, `--only <ids>`, `--collections-only` supported. |
-| `load_esri_lulc.sh`                   | Registers ESRI 10 m Annual LULC (Impact Observatory v003) COGs over the PH as a STAC collection, by reference to the public Azure blobs. Loops MGRS tiles, skips non-existent / out-of-bbox ones.                              |
-| `.claude/skills/ph-admin-geoparquet/` | Skill that builds PH admin-boundary GeoParquet (adm0–adm4) from the OCHA COD-AB geodatabase on HDX; writes locally or to Cloudflare R2. See its `SKILL.md`.                                                                    |
+| `pipelines/`                          | All data pipeline scripts, organized by medallion tier (`01-bronze` / `02-silver` / `03-gold`) plus a `reference/` lane for by-reference loaders: PhilSA mirror, ESRI LULC, CopPhil raw-Sentinel download, and (planned) NDVI / SAR-flood derivation. See `pipelines/README.md`. |
+| `.claude/skills/ph-admin-geoparquet/` | **Thin skill** that points at `pipelines/02-silver/ph-admin-boundaries/` so the agent can auto-invoke the PH admin-boundary build. The script there runs standalone without the skill.                                          |
 | `poc-architecture.mmd`                | Mermaid diagram of the target architecture.                                                                                                                                                                                    |
 | `stac-fastapi-pgstac/`                | **Git submodule** — the catalog API (brings up API + Postgres/pgSTAC locally). Points at our fork `janzkyle/wb-philsa-geo-stac-fastapi-pgstac`.                                                                                |
 | `stac-browser/`                       | **Git submodule** — the catalog explorer UI. Points at our fork `janzkyle/wb-philsa-geo-stac-browser`.                                                                                                                         |
@@ -59,14 +58,19 @@ All ingest scripts default to `http://localhost:8082` and accept a
 `STAC_API=` / `DST=` env override.
 
 ```bash
-./mirror_philsa_catalog.py --dry-run     # preview the PhilSA mirror, no writes
-./mirror_philsa_catalog.py               # mirror everything by reference
-YEAR=2025 ./load_esri_lulc.sh            # load ESRI 10 m LULC tiles for a year
+# by-reference loaders
+python3 pipelines/reference/philsa-catalog/mirror_philsa_catalog.py --dry-run  # preview PhilSA mirror
+python3 pipelines/reference/philsa-catalog/mirror_philsa_catalog.py            # mirror everything by reference
+YEAR=2025 bash pipelines/reference/esri-lulc/load_esri_lulc.sh                 # load ESRI 10 m LULC for a year
+# bronze: download latest raw Sentinel scenes from CopPhil (needs .env.copphil)
+python3 pipelines/01-bronze/copphil-sentinel/download_copphil_eodata.py --dry-run
 ```
 
-**PH admin boundaries** are built via the `ph-admin-geoparquet` skill (wraps
-`build_ph_admin_geoparquet.sh`; key knob `TOLERANCE_M`, can write to R2). See the
-skill's `SKILL.md` rather than running the script by hand.
+**PH admin boundaries** are built by
+`pipelines/02-silver/ph-admin-boundaries/build_ph_admin_geoparquet.sh` (key knob
+`TOLERANCE_M`, can write to R2 — see that folder's `README.md`). It runs
+standalone; the `ph-admin-geoparquet` skill is just a thin pointer at it for
+agent auto-invocation.
 
 ## Explore the catalog (STAC Browser)
 
@@ -105,8 +109,8 @@ inside the submodule, push to `origin`, then record the new gitlink as above.
 
 ## Status & what's next
 
-- ✅ **Ingest works.** PhilSA catalog mirror, ESRI 10 m LULC, and PH admin
-  boundaries all load into pgSTAC today.
+- 🔜 **Ingest.** PhilSA catalog mirror, ESRI 10 m LULC, and PH admin
+  boundaries all load into pgSTAC today. Ingesting CopPhil S3 raw Sentinel/EODATA, Copernicus EMS vectors, OSM/synthetic vectors, and Earth Search Sentinel-2 L2A assets is next.
 - 🔜 **Storage (Cloudflare R2).** Wire the public (open COGs + PMTiles) and
   private (sensitive/licensed imagery) buckets, with presigned URLs for
   restricted assets. The admin-boundary skill already supports R2 output.

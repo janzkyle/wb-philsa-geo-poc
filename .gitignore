@@ -8,3 +8,10 @@ phl_adm*.parquet
 
 # local geodatabase download cache
 *.gdb.zip
+
+# downloaded raw Sentinel scenes from CopPhil (download_copphil_eodata.py)
+/eodata/
+
+# Python
+__pycache__/
+*.py[cod]

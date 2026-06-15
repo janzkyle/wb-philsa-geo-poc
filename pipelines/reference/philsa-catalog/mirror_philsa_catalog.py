@@ -14,11 +14,11 @@ Idempotent: POST first, and on 409 Conflict fall back to PUT, so re-running
 updates in place instead of erroring.
 
 Stdlib only. Usage:
-    ./mirror_philsa_catalog.py                       # mirror everything
-    ./mirror_philsa_catalog.py --dry-run             # show what would happen
-    ./mirror_philsa_catalog.py --only diwata-2 skysat
-    SRC=... DST=... ./mirror_philsa_catalog.py
-    ./mirror_philsa_catalog.py --limit 100 --max-items 500
+    python3 pipelines/reference/philsa-catalog/mirror_philsa_catalog.py                       # mirror everything
+    python3 pipelines/reference/philsa-catalog/mirror_philsa_catalog.py --dry-run             # show what would happen
+    python3 pipelines/reference/philsa-catalog/mirror_philsa_catalog.py --only diwata-2 skysat
+    SRC=... DST=... python3 pipelines/reference/philsa-catalog/mirror_philsa_catalog.py
+    python3 pipelines/reference/philsa-catalog/mirror_philsa_catalog.py --limit 100 --max-items 500
 """
 import argparse
 import json

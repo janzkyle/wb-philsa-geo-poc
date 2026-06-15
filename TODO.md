@@ -4,14 +4,29 @@ Running task list for the PhilSA POC. Check items off as they land; the
 high-level narrative ("what's next") lives in `README.md` — this is the granular
 version. Keep both honest.
 
-## ✅ Done — ingest
+## Ingest
 
 - [x] Mirror PhilSA Satellite Imagery Catalog into pgSTAC by reference
       (`mirror_philsa_catalog.py`)
 - [x] Load ESRI 10 m Annual LULC COGs by reference (`load_esri_lulc.sh`)
 - [x] Build PH admin-boundary GeoParquet adm0–adm4 (`ph-admin-geoparquet` skill)
+- [ ] **CopPhil S3 — raw Sentinel / EODATA** (`COP`): ingest raw Sentinel-1
+      (SAR) + Sentinel-2 (optical) scenes for the AOI; feeds the `clip · NDVI ·
+      SAR flood` processing path
+  - [x] Acquire scenes via the CopPhil API (`download_copphil_eodata.py`):
+        Keycloak auth → OData search (latest S1 GRD + S2 L2A over the PH AOI) →
+        token-authed download. Creds in gitignored `.env.copphil`.
+  - [ ] Process downloaded SAFE zips (clip · NDVI · SAR flood) and write derived
+        COGs/PMTiles to R2, then catalog in pgSTAC by reference to the R2 hrefs
+- [ ] **Copernicus EMS** (`VEC`): pull Rapid Mapping delineation vectors (flood
+      extent, affected-area, damage grading) → vector-to-PMTiles path; tag as
+      open/restricted
+- [ ] **OSM / synthetic** (`VEC`): ingest OSM features (roads · buildings · POIs)
+      and/or synthetic test vectors → PMTiles
+- [ ] **Earth Search** (`PUB`): query Sentinel-2 L2A asset URLs and mirror into
+      pgSTAC by reference (ETL-only, mirror the Planetary Computer pattern)
 
-## 🔜 Storage — Cloudflare R2
+## Storage — Cloudflare R2
 
 - [x] Create the public bucket (open COGs + PMTiles) and confirm public read
 - [x] Upload PH admin-boundary GeoParquet to R2 (skill already supports this)
@@ -19,14 +34,14 @@ version. Keep both honest.
 - [ ] Decide the open/restricted **sensitivity tagging** scheme on items/assets
 - [ ] Presigned-URL flow for restricted assets
 
-## 🔜 Frontend
+## Frontend
 
 - [x] Stand up STAC Browser end-to-end against the local API
 - [ ] MapLibre webmap: open layers (public) + restricted (authenticated)
 - [ ] TiTiler for raster tiling (fetch COGs from R2 — open + restricted)
 - [ ] Serve PMTiles (open direct from public R2; restricted via presigned)
 
-## 🔜 Auth & governance
+## Auth & governance
 
 - [ ] Identity provider + token issuance
 - [ ] RBAC / collection-level access control on the catalog API

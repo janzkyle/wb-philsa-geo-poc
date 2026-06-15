@@ -15,10 +15,10 @@
 # Requirements: gdalinfo (GDAL), curl, python3.  API up on $STAC_API.
 #
 # Usage:
-#   ./load_esri_lulc.sh                       # all PH tiles, year 2025
-#   YEAR=2024 ./load_esri_lulc.sh             # all PH tiles, another year
-#   TILES="51P 51Q" ./load_esri_lulc.sh       # a custom subset
-#   STAC_API=http://localhost:8082 ./load_esri_lulc.sh
+#   bash pipelines/reference/esri-lulc/load_esri_lulc.sh                       # all PH tiles, year 2025
+#   YEAR=2024 bash pipelines/reference/esri-lulc/load_esri_lulc.sh             # all PH tiles, another year
+#   TILES="51P 51Q" bash pipelines/reference/esri-lulc/load_esri_lulc.sh       # a custom subset
+#   STAC_API=http://localhost:8082 bash pipelines/reference/esri-lulc/load_esri_lulc.sh
 #
 set -euo pipefail
 
