@@ -15,10 +15,14 @@ pipelines/
 ├── 01-bronze/                 # raw, as-acquired data — we own the bytes
 │   └── copphil-sentinel/
 ├── 02-silver/                 # cleaned / conformed / derived assets → Cloudflare R2
-│   └── ph-admin-boundaries/
-│       (sentinel2-ndvi/, sentinel1-flood/, copernicus-ems/ … as built)
-├── 03-gold/                   # catalog-served, sensitivity-tagged products
-│   └── (pgSTAC registration + open/restricted tagging … as built)
+│   ├── ph-admin-boundaries/
+│   ├── sentinel2-ndvi/
+│   ├── sentinel2-truecolor/
+│   └── sentinel1-sar/
+│       (copernicus-ems/ … as built)
+├── 03-gold/                   # catalog-served products → pgSTAC (by reference)
+│   └── catalog_silver.py
+│       (open/restricted tagging … as built)
 └── reference/                 # by-reference loaders — NOT part of the medallion flow
     ├── philsa-catalog/
     └── esri-lulc/
@@ -31,8 +35,8 @@ This is an Earth-observation STAC POC, so the medallion tiers map to asset state
 | Tier | Meaning | Storage | Example scripts |
 | --- | --- | --- | --- |
 | **01-bronze** | Raw scenes pulled in verbatim, no transformation. | R2 `01-bronze/copphil-sentinel/` (R2-only) | `download_copphil_eodata.py` (raw Sentinel-1/2 SAFE zips from CopPhil) |
-| **02-silver** | Cleaned, clipped, reprojected, or derived products (NDVI, SAR flood masks, conformed vectors → GeoParquet/PMTiles). | R2 (public/private COGs, GeoParquet, PMTiles) | `ph-admin-boundaries/build_ph_admin_geoparquet.sh`; *planned:* `ndvi.py`, `sar_flood.py`, `vector_to_pmtiles.py` |
-| **03-gold** | Serving-ready, sensitivity-tagged catalog entries — what end users discover and consume. | pgSTAC Items (hrefs → R2) | *planned:* pgSTAC registration / open-restricted tagging glue |
+| **02-silver** | Cleaned, clipped, reprojected, or derived products (NDVI, SAR flood masks, conformed vectors → GeoParquet/PMTiles). | R2 (public/private COGs, GeoParquet, PMTiles) | `build_ph_admin_geoparquet.sh`, `sentinel2-ndvi/build_ndvi.sh`, `sentinel2-truecolor/build_truecolor.sh`, `sentinel1-sar/build_sar.sh`; *planned:* `vector_to_pmtiles.py` (VEC path) |
+| **03-gold** | Serving-ready catalog entries — what end users discover and consume. | pgSTAC Items (hrefs → R2) | `catalog_silver.py` (registers silver COGs as STAC items); *planned:* open/restricted tagging |
 
 The full CopPhil path is the clean medallion example:
 **bronze** (download raw S1/S2) → **silver** (compute NDVI / SAR-flood COGs to R2)
@@ -50,6 +54,10 @@ script. This table is just the map:
 | `reference/esri-lulc/load_esri_lulc.sh` | reference | shell | Register ESRI 10 m LULC COGs by reference | `YEAR=2025 bash <path>` |
 | `01-bronze/copphil-sentinel/download_copphil_eodata.py` | 01-bronze | Python | Download latest raw Sentinel scenes → R2 | `python3 <path>` |
 | `02-silver/ph-admin-boundaries/build_ph_admin_geoparquet.sh` | 02-silver | shell | OCHA COD-AB geodatabase → GeoParquet (local or R2) | `TOLERANCE_M=100 bash <path>` |
+| `02-silver/sentinel2-ndvi/build_ndvi.sh` | 02-silver | shell | Sentinel-2 L2A SAFE → NDVI COG → R2 | `bash <path>` |
+| `02-silver/sentinel2-truecolor/build_truecolor.sh` | 02-silver | shell | Sentinel-2 TCI → true-colour RGB COG → R2 | `bash <path>` |
+| `02-silver/sentinel1-sar/build_sar.sh` | 02-silver | shell | Sentinel-1 GRD VV → geocoded backscatter (dB) COG → R2 | `bash <path>` |
+| `03-gold/catalog_silver.py` | 03-gold | Python | Register silver COGs in pgSTAC as STAC collections+items (by reference) | `python3 <path>` |
 
 ## R2 key layout (mirrors the tiers)
 
@@ -60,7 +68,10 @@ key prefix** — `<tier>/<dataset>/<file>` — so the bucket mirrors this direct
 s3://<bucket>/
   01-bronze/copphil-sentinel/   S1*/S2* .SAFE.zip      (download_copphil_eodata.py)
   02-silver/ph-admin-boundaries/ phl_adm*.parquet      (build_ph_admin_geoparquet.sh)
-  02-silver/…                    (NDVI / SAR-flood COGs, PMTiles … as built)
+  02-silver/sentinel2-ndvi/      <scene>_NDVI.tif (COG)   (build_ndvi.sh)
+  02-silver/sentinel2-truecolor/ <scene>_TCI.tif (COG)    (build_truecolor.sh)
+  02-silver/sentinel1-sar/       <scene>_VV_dB.tif (COG)  (build_sar.sh)
+  02-silver/…                    (PMTiles … as built)
   03-gold/…                      (curated, served products … as built)
 ```
 

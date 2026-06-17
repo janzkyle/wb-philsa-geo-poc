@@ -16,11 +16,22 @@ version. Keep both honest.
   - [x] Acquire scenes via the CopPhil API (`download_copphil_eodata.py`):
         Keycloak auth → OData search (latest S1 GRD + S2 L2A over the PH AOI) →
         token-authed download. Creds in gitignored `.env.copphil`.
-  - [ ] Process downloaded SAFE zips (clip · NDVI · SAR flood) and write derived
-        COGs/PMTiles to R2, then catalog in pgSTAC by reference to the R2 hrefs
-- [ ] **Copernicus EMS** (`VEC`): pull Rapid Mapping delineation vectors (flood
-      extent, affected-area, damage grading) → vector-to-PMTiles path; tag as
-      open/restricted
+  - [ ] Process raw SAFE zips → derived COGs in R2 (silver):
+    - [x] Sentinel-2 NDVI COG (`02-silver/sentinel2-ndvi/build_ndvi.sh`)
+    - [x] Sentinel-2 true-colour TCI COG (`02-silver/sentinel2-truecolor/build_truecolor.sh`)
+    - [x] Sentinel-1 VV backscatter (dB) COG (`02-silver/sentinel1-sar/build_sar.sh`)
+    - [ ] _(stretch)_ Sentinel-1 flood delineation from S1 — full SAR chain
+          (calibration · speckle · terrain-correction · change-detection vs a dry
+          reference). High effort; for the POC prefer authoritative Copernicus
+          EMS / GFM instead (see the flood ingest item below).
+  - [x] Catalog silver COGs in pgSTAC by reference (gold,
+        `pipelines/03-gold/catalog_silver.py`): S2 NDVI, S2 true-colour, S1 VV
+        backscatter as STAC collections + items (asset hrefs → public R2)
+    - [ ] also catalog ph-admin-boundaries GeoParquet (vector item) — follow-on
+- [ ] **Copernicus EMS / GFM — flood** (`VEC`/`PUB`): the POC's authoritative
+      flood layer. EMS Rapid Mapping delineation vectors (flood extent ·
+      affected-area · damage grading) → vector-to-PMTiles, tagged open/restricted;
+      and/or GFM Sentinel-1 flood-extent rasters mirrored by reference.
 - [ ] **OSM / synthetic** (`VEC`): ingest OSM features (roads · buildings · POIs)
       and/or synthetic test vectors → PMTiles
 - [ ] **Earth Search** (`PUB`): query Sentinel-2 L2A asset URLs and mirror into
@@ -37,6 +48,9 @@ version. Keep both honest.
 ## Frontend
 
 - [x] Stand up STAC Browser end-to-end against the local API
+- [x] PhilSA-brand the catalog: STAC Browser (`config.js` — title, logo, favicon,
+      blue accent) locked to our API only (`allowExternalAccess: false`); STAC API
+      landing/docs branded via `STAC_FASTAPI_*` env in `compose.yml`
 - [ ] MapLibre webmap: open layers (public) + restricted (authenticated)
 - [ ] TiTiler for raster tiling (fetch COGs from R2 — open + restricted)
 - [ ] Serve PMTiles (open direct from public R2; restricted via presigned)

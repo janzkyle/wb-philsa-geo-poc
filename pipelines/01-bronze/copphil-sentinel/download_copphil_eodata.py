@@ -230,12 +230,17 @@ class R2:
 
 
 def build_filter(collection_name, name_token, aoi_wkt, since_iso, max_cloud, supports_cloud):
-    """Assemble an OData $filter string for one collection."""
-    clauses = [
-        f"Collection/Name eq '{collection_name}'",
-        f"contains(Name,'{name_token}')",
-        f"OData.CSC.Intersects(area=geography'SRID=4326;{aoi_wkt}')",
-    ]
+    """Assemble an OData $filter string for one collection.
+
+    `name_token` may be a comma-separated list (e.g. "MSIL2A,T50PRB"); each part
+    becomes its own contains(Name,...) clause, AND-ed together. This lets a caller
+    pin both processing level and MGRS tile for a clean single-tile time series.
+    """
+    clauses = [f"Collection/Name eq '{collection_name}'"]
+    for tok in (t.strip() for t in name_token.split(",")):
+        if tok:
+            clauses.append(f"contains(Name,'{tok}')")
+    clauses.append(f"OData.CSC.Intersects(area=geography'SRID=4326;{aoi_wkt}')")
     if since_iso:
         clauses.append(f"ContentDate/Start gt {since_iso}")
     if supports_cloud and max_cloud is not None and max_cloud < 100:

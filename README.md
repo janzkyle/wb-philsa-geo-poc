@@ -39,7 +39,7 @@ Needed before any ingest script. The API + database come from the
 locally (with the Transactions extension the ingest scripts rely on):
 
 ```bash
-cd stac-fastapi-pgstac && docker compose up   # API on http://localhost:8082
+cd stac-fastapi-pgstac && ENABLE_TRANSACTIONS_EXTENSIONS=true docker compose up   # API on :8082 (transactions ON — ingest scripts need it)
 ```
 
 Confirm it's up: `curl localhost:8082/collections`.
@@ -74,11 +74,21 @@ agent auto-invocation.
 
 ## Explore the catalog (STAC Browser)
 
-Standard Vue app inside the `stac-browser/` submodule; point it at the local API:
+Standard Vue app inside the `stac-browser/` submodule, **PhilSA-branded and
+pre-wired to our own catalog**: its `config.js` pins `catalogUrl` to the local
+API (`http://localhost:8082`) and sets `allowExternalAccess: false`, so the
+Browser will *only* ever browse our `stac-fastapi-pgstac` — it can't be pointed
+at any other STAC catalog. Title, header logo (`public/philsa-logo.png`),
+favicon, and accent color (Philippine national blue) are PhilSA-specific.
 
 ```bash
-cd stac-browser && npm install && npm start   # then open it against http://localhost:8082
+cd stac-browser && npm install && npm start   # serves on http://localhost:8080, already pointed at the API
 ```
+
+Overrides without editing the submodule: `SB_catalogUrl` (deployed API host) and
+`SB_catalogImage` (logo URL) env vars, or `public/runtime-config.js`. The API
+itself is branded via `STAC_FASTAPI_TITLE` / `STAC_FASTAPI_DESCRIPTION` /
+`STAC_FASTAPI_LANDING_ID` in `stac-fastapi-pgstac/compose.yml` (env-overridable).
 
 ## Working with the submodules
 
