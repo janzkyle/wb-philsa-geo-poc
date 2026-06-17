@@ -117,15 +117,19 @@ else
 fi
 
 # ---- 4) compute NDVI -> Float32, then write a COG ---------------------------
+# Fill pixels (edge granules: no acquisition) have B04==B08==0. We mask those to
+# the NoData sentinel so viewers render them transparent instead of as NDVI==0
+# (which a colormap would otherwise paint as a solid block of colour).
 TMP="${STAGING}/${BASE}_ndvi_f32.tif"
+NODATA=-9999
 echo ">> computing NDVI (this decodes two 10 m bands; takes a minute) ..."
 gdal_calc.py --quiet --overwrite \
   -A "$B08" -B "$B04" \
-  --calc="(A.astype('float32')-B.astype('float32'))/(A.astype('float32')+B.astype('float32')+1e-6)" \
-  --type=Float32 --outfile="$TMP"
+  --calc="where((A+B)==0, ${NODATA}, (A.astype('float32')-B.astype('float32'))/(A.astype('float32')+B.astype('float32')+1e-6))" \
+  --NoDataValue=${NODATA} --type=Float32 --outfile="$TMP"
 
 echo ">> writing COG ..."
-gdal_translate -q -of COG \
+gdal_translate -q -of COG -a_nodata ${NODATA} \
   -co COMPRESS=DEFLATE -co PREDICTOR=3 -co RESAMPLING=AVERAGE \
   "$TMP" "$DEST"
 rm -f "$TMP"

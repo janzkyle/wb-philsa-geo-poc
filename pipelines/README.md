@@ -42,6 +42,26 @@ The full CopPhil path is the clean medallion example:
 **bronze** (download raw S1/S2) → **silver** (compute NDVI / SAR-flood COGs to R2)
 → **gold** (register sensitivity-tagged Items in pgSTAC).
 
+## Data lineage — where each came from, how it's processed, what it's for
+
+| Dataset / product | Source (where from) | Processing (how) | Used for (where) |
+| --- | --- | --- | --- |
+| **PhilSA satellite catalog** *(reference)* | PhilSA's public STAC API | Mirrored **by reference** — STAC metadata copied into our pgSTAC, pixels left at source | Discovery of PhilSA imagery (Diwata-2, SkySat, PlanetScope) in one catalog |
+| **ESRI 10 m LULC** *(reference)* | Esri / Impact Observatory *Living Atlas* (public COGs) | Registered **by reference** (no download/re-host) | Land-cover context layer in the catalog |
+| **CopPhil Sentinel-1/2** *(bronze)* | CopPhil / CloudFerro OData catalog + token download (Keycloak auth) | Raw `.SAFE.zip` streamed to R2 verbatim, byte-count verified | Input to every silver Sentinel derivative below |
+| **PH admin boundaries** *(silver)* | OCHA COD-AB geodatabase on HDX | `ogr2ogr` → GeoParquet (adm0–adm4, optional simplify tolerance) | AOI selection / overlay reference vector |
+| **Sentinel-2 NDVI** *(silver)* | Bronze S2 L2A — 10 m B04 (red) + B08 (NIR) | `(B08−B04)/(B08+B04)` → Float32 COG; edge-granule fill masked to `-9999` NoData | Vegetation index; served as colorized tiles (`rdylgn`, −0.2…0.8) |
+| **Sentinel-2 true-colour** *(silver)* | Bronze S2 L2A — 10 m TCI band | Extract TCI → 8-bit RGB COG; fill (`0`) flagged NoData | Visual reference imagery / basemap |
+| **Sentinel-1 SAR** *(silver)* | Bronze S1 IW GRD, VV polarization | GCP warp → EPSG:4326, amplitude → dB → Float32 COG | Backscatter base layer (**not** a validated flood product); served grayscale (15…55 dB) |
+| **STAC catalog** *(gold)* | All silver COGs already in R2 | `catalog_silver.py` registers collections + items **by reference**, with render-extension hints (rescale + colormap) | What users discover/consume via the STAC API |
+
+The three silver Sentinel products are **single-/multi-band COGs in R2**; they're
+visualized through **TiTiler** (repo-root [`compose.viz.yml`](../compose.viz.yml),
+`:8083`), which reads them over the authenticated R2 S3 endpoint and serves styled
+XYZ tiles to **STAC Browser** (per the `buildTileUrlTemplate` in its `config.js`).
+Float32 rasters (NDVI, SAR) need the rescale + colormap or they render as a flat
+tile — hence the render hints baked into each gold collection.
+
 ## Script index
 
 Per-script usage and parameters live in **each script's own header** — run a

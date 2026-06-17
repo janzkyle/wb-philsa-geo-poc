@@ -46,6 +46,7 @@ TIMEOUT = 60
 EMPTY_SHA256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
 PROJ_EXT = "https://stac-extensions.github.io/projection/v1.1.0/schema.json"
 RASTER_EXT = "https://stac-extensions.github.io/raster/v1.1.0/schema.json"
+RENDER_EXT = "https://stac-extensions.github.io/render/v1.0.0/schema.json"
 COG_TYPE = "image/tiff; application=geotiff; profile=cloud-optimized"
 
 # Silver products to catalogue: one Collection per family.
@@ -55,20 +56,28 @@ PRODUCTS = [
      "description": "Per-scene NDVI = (B08-B04)/(B08+B04) from Sentinel-2 L2A over the "
                     "Philippines, as Cloud-Optimized GeoTIFF (silver tier).",
      "platform": "sentinel-2", "instruments": ["msi"], "gsd": 10,
-     "asset_title": "NDVI (Float32 COG)"},
+     "asset_title": "NDVI (Float32 COG)",
+     "renders": {"ndvi": {"title": "NDVI (red → green)", "assets": ["data"],
+                          "rescale": [[-0.2, 0.8]], "colormap_name": "rdylgn",
+                          "resampling": "bilinear"}}},
     {"collection": "sentinel2-truecolor", "prefix": "02-silver/sentinel2-truecolor",
      "title": "Sentinel-2 True-Colour — Philippines",
      "description": "Sentinel-2 L2A true-colour (TCI, 10 m) over the Philippines, as an "
                     "8-bit RGB Cloud-Optimized GeoTIFF (silver tier).",
      "platform": "sentinel-2", "instruments": ["msi"], "gsd": 10,
-     "asset_title": "True-colour RGB (8-bit COG)"},
+     "asset_title": "True-colour RGB (8-bit COG)",
+     "renders": {"true-color": {"title": "True colour", "assets": ["data"],
+                                "resampling": "nearest"}}},
     {"collection": "sentinel1-sar", "prefix": "02-silver/sentinel1-sar",
      "title": "Sentinel-1 VV Backscatter (dB) — Philippines",
      "description": "Geocoded Sentinel-1 IW GRD VV backscatter in dB over the Philippines, "
                     "as Cloud-Optimized GeoTIFF (silver tier). Backscatter base layer — "
                     "not a validated flood product.",
      "platform": "sentinel-1", "instruments": ["c-sar"], "gsd": 10,
-     "asset_title": "VV backscatter dB (Float32 COG)"},
+     "asset_title": "VV backscatter dB (Float32 COG)",
+     "renders": {"backscatter": {"title": "VV backscatter (dB)", "assets": ["data"],
+                                 "rescale": [[15, 55]], "colormap_name": "gray",
+                                 "resampling": "bilinear"}}},
 ]
 
 
@@ -193,7 +202,7 @@ def build_item(prod, key, info, href):
 
 def build_collection(prod, bbox, dts):
     interval = [min(dts) if dts else None, max(dts) if dts else None]
-    return {
+    col = {
         "type": "Collection", "stac_version": "1.0.0", "stac_extensions": [],
         "id": prod["collection"], "title": prod["title"], "description": prod["description"],
         "license": "CC-BY-4.0",
@@ -201,6 +210,13 @@ def build_collection(prod, bbox, dts):
         "keywords": ["sentinel", "philippines", "silver", prod["platform"]],
         "links": [],
     }
+    # Render extension: tell viewers how to display these COGs (rescale + colormap),
+    # so single-band Float32 rasters don't render as a black tile. A TiTiler-backed
+    # client (or our stac-browser config) turns these into XYZ tile params.
+    if prod.get("renders"):
+        col["stac_extensions"].append(RENDER_EXT)
+        col["renders"] = prod["renders"]
+    return col
 
 
 def send(method, url, payload):

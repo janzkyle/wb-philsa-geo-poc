@@ -84,8 +84,10 @@ else
 fi
 
 # 4) TCI (already 8-bit RGB) -> COG with internal overviews
+# Edge-granule fill is (0,0,0); flag 0 as NoData so viewers render it transparent
+# instead of a black block. (TCI applies a gain, so genuine pixels are rarely 0.)
 echo ">> writing true-colour COG ..."
-gdal_translate -q -of COG \
+gdal_translate -q -of COG -a_nodata 0 \
   -co COMPRESS=DEFLATE -co PREDICTOR=2 -co RESAMPLING=AVERAGE -co NUM_THREADS=ALL_CPUS \
   "$TCI" "$DEST"
 
