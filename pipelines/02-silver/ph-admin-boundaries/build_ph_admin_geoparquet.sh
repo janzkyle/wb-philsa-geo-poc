@@ -44,7 +44,7 @@
 #                 hard-code these — export them in your shell or a gitignored
 #                 env file. (These are the standard S3 vars; R2 honours them.)
 #   ENV_FILE      path to a KEY=VALUE env file to load before running. If unset,
-#                 auto-loads .env.r2 from cwd, the repo root, or this script's dir.
+#                 auto-loads .env from cwd, the repo root, or this script's dir.
 #
 # Usage:
 #   ./build_ph_admin_geoparquet.sh                                 # local, full res
@@ -69,8 +69,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # ---- optional env file (so R2 creds aren't typed on every run) --------------
 # Loads KEY=VALUE lines (exported) BEFORE the parameters below are resolved.
-# Search order: $ENV_FILE (if set), ./.env.r2 (cwd), <repo-root>/.env.r2,
-# <script-dir>/.env.r2. The shared R2 creds live in the repo-root .env.r2.
+# Search order: $ENV_FILE (if set), ./.env (cwd), <repo-root>/.env,
+# <script-dir>/.env. The shared R2 creds live in the repo-root .env.
 # Keep this file OUT of git — it holds AWS_SECRET_ACCESS_KEY. See README.md.
 if [ -n "${ENV_FILE:-}" ] && [ ! -f "${ENV_FILE}" ]; then
   echo "ERROR: ENV_FILE=${ENV_FILE} not found"; exit 1
@@ -80,7 +80,7 @@ while [ "$REPO_ROOT" != "/" ]; do
   if [ -e "$REPO_ROOT/.git" ] || [ -e "$REPO_ROOT/AGENTS.md" ]; then break; fi
   REPO_ROOT="$(dirname "$REPO_ROOT")"
 done
-for _envf in "${ENV_FILE:-}" "${PWD}/.env.r2" "${REPO_ROOT}/.env.r2" "${SCRIPT_DIR}/.env.r2"; do
+for _envf in "${ENV_FILE:-}" "${PWD}/.env" "${REPO_ROOT}/.env" "${SCRIPT_DIR}/.env"; do
   if [ -n "$_envf" ] && [ -f "$_envf" ]; then
     echo ">> loading env from ${_envf}"
     set -a; . "$_envf"; set +a

@@ -21,11 +21,10 @@ mode. Scenes land under the medallion-tiered key prefix
 `01-bronze/copphil-sentinel/` (override R2_PREFIX). Each scene is staged to a temp
 dir, verified against ContentLength, uploaded, then the staging copy removed.
 
-CopPhil credentials come from the environment (or gitignored `.env.copphil`):
+Credentials come from the environment, or the gitignored repo-root `.env`:
     COPPHIL_USERNAME, COPPHIL_PASSWORD   (required — your CopPhil account)
     COPPHIL_CLIENT_ID                    (default: copphil-public)
     COPPHIL_AOI_WKT                      (default: PH bounding box)
-R2 credentials come from the environment (or gitignored `.env.r2`):
     R2_BUCKET        target bucket (REQUIRED — this script writes only to R2)
     R2_ACCOUNT_ID    Cloudflare account id (forms the S3 endpoint)
     R2_PREFIX        key prefix (default: 01-bronze/copphil-sentinel)
@@ -33,11 +32,11 @@ R2 credentials come from the environment (or gitignored `.env.r2`):
     AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY   R2 API-token creds
 
 Stdlib only (R2 uploads use AWS SigV4 signed with hashlib/hmac — no boto3).
-Paths (.env.copphil, .env.r2, eodata/) resolve to the repo root, so it runs from
-any directory. From the repo root:
+Paths (.env, eodata/) resolve to the repo root, so it runs from any directory.
+From the repo root:
     python3 pipelines/01-bronze/copphil-sentinel/download_copphil_eodata.py --dry-run
     python3 pipelines/01-bronze/copphil-sentinel/download_copphil_eodata.py
-(R2 creds + bucket come from the repo-root .env.r2.)
+(CopPhil + R2 creds both come from the repo-root .env.)
 """
 import argparse
 import datetime
@@ -138,7 +137,7 @@ class Auth:
                 body = json.load(r)
         except urllib.error.HTTPError as e:
             sys.exit(f"!! auth failed [{e.code}]: {e.read().decode()[:200]}\n"
-                     f"   check COPPHIL_USERNAME / COPPHIL_PASSWORD in .env.copphil")
+                     f"   check COPPHIL_USERNAME / COPPHIL_PASSWORD in .env")
         self._token = body["access_token"]
         self._expires_at = time.time() + int(body.get("expires_in", 600))
         return self._token
@@ -356,7 +355,7 @@ def make_r2(dry):
     bucket = os.environ.get("R2_BUCKET")
     if not bucket:
         sys.exit("!! R2_BUCKET is required — this script writes only to R2 "
-                 "(set R2_BUCKET in .env.r2)")
+                 "(set R2_BUCKET in .env)")
     prefix = os.environ.get("R2_PREFIX", DEFAULT_R2_PREFIX)
     public_base = os.environ.get("R2_PUBLIC_BASE")
     if dry:  # preview only — no creds needed to print the target keys
@@ -367,13 +366,13 @@ def make_r2(dry):
     missing = [n for n, v in [("R2_ACCOUNT_ID", acct), ("AWS_ACCESS_KEY_ID", ak),
                               ("AWS_SECRET_ACCESS_KEY", sk)] if not v]
     if missing:
-        sys.exit(f"!! R2 upload needs {', '.join(missing)} (set in .env.r2)")
+        sys.exit(f"!! R2 upload needs {', '.join(missing)} (set in .env)")
     return R2(acct, bucket, ak, sk, prefix, public_base)
 
 
 def main():
-    load_env_file(os.environ.get("COPPHIL_ENV_FILE", os.path.join(ROOT, ".env.copphil")))
-    load_env_file(os.environ.get("R2_ENV_FILE", os.path.join(ROOT, ".env.r2")))
+    # Single repo-root .env holds both CopPhil and R2 creds (override with ENV_FILE).
+    load_env_file(os.environ.get("ENV_FILE", os.path.join(ROOT, ".env")))
 
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -413,7 +412,7 @@ def main():
         user = os.environ.get("COPPHIL_USERNAME")
         pw = os.environ.get("COPPHIL_PASSWORD")
         if not user or not pw:
-            sys.exit("!! set COPPHIL_USERNAME and COPPHIL_PASSWORD (in .env.copphil)")
+            sys.exit("!! set COPPHIL_USERNAME and COPPHIL_PASSWORD (in .env)")
         auth = Auth(user, pw, os.environ.get("COPPHIL_CLIENT_ID", "copphil-public"))
         os.makedirs(args.out, exist_ok=True)
 

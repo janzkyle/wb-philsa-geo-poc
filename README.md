@@ -62,7 +62,7 @@ All ingest scripts default to `http://localhost:8082` and accept a
 python3 pipelines/reference/philsa-catalog/mirror_philsa_catalog.py --dry-run  # preview PhilSA mirror
 python3 pipelines/reference/philsa-catalog/mirror_philsa_catalog.py            # mirror everything by reference
 YEAR=2025 bash pipelines/reference/esri-lulc/load_esri_lulc.sh                 # load ESRI 10 m LULC for a year
-# bronze: download latest raw Sentinel scenes from CopPhil (needs .env.copphil)
+# bronze: download latest raw Sentinel scenes from CopPhil (needs .env)
 python3 pipelines/01-bronze/copphil-sentinel/download_copphil_eodata.py --dry-run
 ```
 

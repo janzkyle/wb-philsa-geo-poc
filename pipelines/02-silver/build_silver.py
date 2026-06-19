@@ -10,7 +10,7 @@ Lists `01-bronze/copphil-sentinel/` in R2 (S3 ListObjectsV2, SigV4 via stdlib) a
 runs the matching builder for each `.SAFE.zip`, passing SCENE=. Each builder
 early-skips scenes whose output already exists, so re-runs only build what's new.
 
-Reads R2 creds from the repo-root `.env.r2`. Stdlib only. Usage (from repo root):
+Reads R2 creds from the repo-root `.env`. Stdlib only. Usage (from repo root):
     python3 pipelines/02-silver/build_silver.py
     python3 pipelines/02-silver/build_silver.py --dry-run
     python3 pipelines/02-silver/build_silver.py --only sentinel-2
@@ -64,14 +64,14 @@ def list_bronze(acct, bucket, ak, sk, prefix):
         return re.findall(r"<Key>([^<]+)</Key>", r.read().decode())
 
 def main():
-    load_env(os.environ.get("R2_ENV_FILE", os.path.join(ROOT, ".env.r2")))
+    load_env(os.environ.get("ENV_FILE", os.path.join(ROOT, ".env")))
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--only", choices=list(BUILDERS), help="only this sensor")
     ap.add_argument("--dry-run", action="store_true", help="list what would build, run nothing")
     args = ap.parse_args()
     acct, bucket = os.environ.get("R2_ACCOUNT_ID"), os.environ.get("R2_BUCKET")
     ak, sk = os.environ.get("AWS_ACCESS_KEY_ID"), os.environ.get("AWS_SECRET_ACCESS_KEY")
-    if not all([acct, bucket, ak, sk]): sys.exit("!! need R2_* / AWS_* in .env.r2")
+    if not all([acct, bucket, ak, sk]): sys.exit("!! need R2_* / AWS_* in .env")
 
     keys = [k for k in list_bronze(acct, bucket, ak, sk, BRONZE_PREFIX) if k.lower().endswith(".zip")]
     scenes = sorted(os.path.basename(k) for k in keys)

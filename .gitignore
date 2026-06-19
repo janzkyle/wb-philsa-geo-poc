@@ -2,6 +2,9 @@
 .env
 .env.*
 *.env
+# …but DO track the committed templates (no secrets in them)
+!.env.example
+!**/.env.example
 
 # generated PH admin boundary GeoParquet (rebuild via the ph-admin-geoparquet skill)
 phl_adm*.parquet

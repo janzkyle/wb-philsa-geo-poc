@@ -9,7 +9,7 @@ time via `gdalinfo -json` (over /vsis3). Idempotent: POST first, PUT on 409 — 
 pattern as the by-reference mirror loader.
 
 Discovers COGs by listing each silver prefix in R2 (S3 ListObjectsV2, SigV4 via
-stdlib). Reads R2 creds from the repo-root `.env.r2`; pgSTAC URL from STAC_API.
+stdlib). Reads R2 creds from the repo-root `.env`; pgSTAC URL from STAC_API.
 
 Stdlib only. Usage (from repo root, with pgSTAC up on :8082):
     python3 pipelines/03-gold/catalog_silver.py
@@ -244,7 +244,7 @@ def upsert(kind, post_url, put_url, payload, dry):
 
 
 def main():
-    load_env_file(os.environ.get("R2_ENV_FILE", os.path.join(ROOT, ".env.r2")))
+    load_env_file(os.environ.get("ENV_FILE", os.path.join(ROOT, ".env")))
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--dry-run", action="store_true", help="build + list, no writes to pgSTAC")
     ap.add_argument("--only", nargs="*", help="only these collection ids")
@@ -254,7 +254,7 @@ def main():
     acct = os.environ.get("R2_ACCOUNT_ID")
     public = os.environ.get("R2_PUBLIC_BASE", "").rstrip("/")
     if not (bucket and acct and public):
-        sys.exit("!! need R2_BUCKET, R2_ACCOUNT_ID, R2_PUBLIC_BASE in .env.r2")
+        sys.exit("!! need R2_BUCKET, R2_ACCOUNT_ID, R2_PUBLIC_BASE in .env")
     r2 = R2(acct, bucket, os.environ.get("AWS_ACCESS_KEY_ID"), os.environ.get("AWS_SECRET_ACCESS_KEY"))
 
     print(f">> pgSTAC : {STAC_API}")

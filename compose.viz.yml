@@ -1,0 +1,37 @@
+# Visualization tier: a dynamic raster tiler (TiTiler) for the silver COGs.
+#
+# STAC Browser renders single-band Float32 rasters (NDVI, SAR backscatter) as a
+# black tile because its client-side renderer applies no contrast stretch. This
+# service serves styled XYZ tiles (rescale + colormap) on the fly instead; point
+# STAC Browser at it via `buildTileUrlTemplate` in stac-browser/config.js.
+#
+# Lives at the repo root (not in the stac-fastapi-pgstac submodule) on purpose.
+# It reads the COGs from R2 over the AUTHENTICATED S3 endpoint (reliable DNS),
+# not the public r2.dev host. Bring it up with the R2 creds available for
+# interpolation + injection:
+#
+#   docker compose --env-file .env -f compose.viz.yml up -d
+#
+# Then TiTiler is at http://localhost:8083 (docs at /api.html).
+services:
+  titiler:
+    image: ghcr.io/developmentseed/titiler:latest
+    # .env supplies AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY / R2_ACCOUNT_ID / R2_BUCKET
+    env_file:
+      - .env
+    environment:
+      # GDAL/rasterio S3 config -> Cloudflare R2 (path-style, region "auto")
+      AWS_S3_ENDPOINT: ${R2_ACCOUNT_ID}.r2.cloudflarestorage.com
+      AWS_VIRTUAL_HOSTING: "FALSE"
+      AWS_DEFAULT_REGION: auto
+      AWS_HTTPS: "YES"
+      # COG-friendly GDAL tuning
+      GDAL_DISABLE_READDIR_ON_OPEN: EMPTY_DIR
+      GDAL_HTTP_MERGE_CONSECUTIVE_RANGES: "YES"
+      CPL_VSIL_CURL_ALLOWED_EXTENSIONS: ".tif,.tiff"
+      VSI_CACHE: "TRUE"
+      # let the browser (served from :8080) call the tiler cross-origin
+      TITILER_API_CORS_ORIGINS: "*"
+    ports:
+      - "8083:80"
+    restart: unless-stopped

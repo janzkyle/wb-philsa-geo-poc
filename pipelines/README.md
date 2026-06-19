@@ -74,9 +74,11 @@ script. This table is just the map:
 | `reference/esri-lulc/load_esri_lulc.sh` | reference | shell | Register ESRI 10 m LULC COGs by reference | `YEAR=2025 bash <path>` |
 | `01-bronze/copphil-sentinel/download_copphil_eodata.py` | 01-bronze | Python | Download latest raw Sentinel scenes → R2 | `python3 <path>` |
 | `02-silver/ph-admin-boundaries/build_ph_admin_geoparquet.sh` | 02-silver | shell | OCHA COD-AB geodatabase → GeoParquet (local or R2) | `TOLERANCE_M=100 bash <path>` |
+| `02-silver/ph-admin-boundaries/build_ph_admin_pmtiles.sh` | 02-silver | shell | GeoParquet → PMTiles (adm0–adm2) for the webmap → R2 | `bash <path>` |
 | `02-silver/sentinel2-ndvi/build_ndvi.sh` | 02-silver | shell | Sentinel-2 L2A SAFE → NDVI COG → R2 | `bash <path>` |
 | `02-silver/sentinel2-truecolor/build_truecolor.sh` | 02-silver | shell | Sentinel-2 TCI → true-colour RGB COG → R2 | `bash <path>` |
 | `02-silver/sentinel1-sar/build_sar.sh` | 02-silver | shell | Sentinel-1 GRD VV → geocoded backscatter (dB) COG → R2 | `bash <path>` |
+| `02-silver/build_raster_mosaics.sh` | 02-silver | shell | Per-date MosaicJSON stitching same-day Sentinel COG granules (all 3 collections) → R2 | `bash <path>` |
 | `03-gold/catalog_silver.py` | 03-gold | Python | Register silver COGs in pgSTAC as STAC collections+items (by reference) | `python3 <path>` |
 
 ## R2 key layout (mirrors the tiers)
@@ -91,7 +93,8 @@ s3://<bucket>/
   02-silver/sentinel2-ndvi/      <scene>_NDVI.tif (COG)   (build_ndvi.sh)
   02-silver/sentinel2-truecolor/ <scene>_TCI.tif (COG)    (build_truecolor.sh)
   02-silver/sentinel1-sar/       <scene>_VV_dB.tif (COG)  (build_sar.sh)
-  02-silver/…                    (PMTiles … as built)
+  02-silver/ph-admin-boundaries/pmtiles/  phl_adm*.pmtiles        (build_ph_admin_pmtiles.sh)
+  02-silver/<coll>/mosaics/      <coll>_<date>.mosaicjson         (build_raster_mosaics.sh)
   03-gold/…                      (curated, served products … as built)
 ```
 
@@ -99,10 +102,12 @@ Conventions for R2-writing scripts:
 - The prefix is **hardcoded per script** (its tier + dataset), not read from the
   shared env file. `download_copphil_eodata.py` is **R2-only** (requires `R2_BUCKET`);
   `build_ph_admin_geoparquet.sh` writes locally unless `R2_BUCKET` is set.
-- **Shared R2 credentials live in the repo-root `.env.r2`** (gitignored):
+- **All credentials live in a single repo-root `.env`** (gitignored): R2 creds
   `R2_BUCKET`, `R2_ACCOUNT_ID`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`,
-  optional `R2_PUBLIC_BASE`. **Do not** put `R2_PREFIX` there — it would override
-  each script's per-tier prefix.
+  optional `R2_PUBLIC_BASE`, plus CopPhil `COPPHIL_USERNAME` / `COPPHIL_PASSWORD`.
+  Every script auto-loads it (override the path with `ENV_FILE=…`); see the
+  repo-root `.env.example` for the full key list. **Do not** put `R2_PREFIX` there —
+  it would override each script's per-tier prefix.
 - Uploads are **idempotent**: a script HEADs the object and skips if it already
   exists at the expected size.
 
@@ -155,6 +160,6 @@ in the header either way:
   re-hosts bytes (derived assets to R2).
 - **Idempotent upserts** into pgSTAC: POST, then PUT on `409 Conflict`.
 - **Skip-and-log**, don't fail, on missing / out-of-bbox / already-present items.
-- **Secrets via env** (`.env.copphil`, `.env.r2`), never committed.
-- Scripts resolve repo-relative paths (e.g. `.env.copphil`, `eodata/`) to the
-  **repo root**, so they run from any working directory.
+- **Secrets via env** (single repo-root `.env`), never committed.
+- Scripts resolve repo-relative paths (e.g. `.env`, `eodata/`) to the **repo
+  root**, so they run from any working directory.

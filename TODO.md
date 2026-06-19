@@ -51,18 +51,24 @@ version. Keep both honest.
 - [x] PhilSA-brand the catalog: STAC Browser (`config.js` — title, logo, favicon,
       blue accent) locked to our API only (`allowExternalAccess: false`); STAC API
       landing/docs branded via `STAC_FASTAPI_*` env in `compose.yml`
-- [ ] MapLibre webmap: open layers (public) + restricted (authenticated)
-- [ ] TiTiler for raster tiling (fetch COGs from R2 — open + restricted)
-- [ ] Serve PMTiles (open direct from public R2; restricted via presigned)
+- [~] MapLibre webmap (`webmap/`, React+TS+Vite + react-map-gl): **Tier 1 open
+      layers done** — adm0–adm2 PMTiles + Sentinel-2 true-colour & NDVI +
+      Sentinel-1 SAR (VV) via TiTiler, centred on Luzon. Rasters rendered as
+      **per-date seamless mosaics** (MosaicJSON,
+      `pipelines/02-silver/build_raster_mosaics.sh`) so a
+      day's granules stitch into one continuous layer; a **single-date selector**
+      (with a per-layer data-availability indicator) drives which day loads.
+      Still to do: restricted (authenticated) layers, more open layers (LULC,
+      footprint discovery).
+- [x] TiTiler for raster tiling (open COGs from R2 — `compose.viz.yml`, :8083).
+      Restricted COGs (presigned) still to do.
+- [~] Serve PMTiles — **open admin boundaries (adm0–adm2) live on public R2**
+      (`pipelines/02-silver/ph-admin-boundaries/build_ph_admin_pmtiles.sh`;
+      r2.dev serves them with CORS + range).
+      Still to do: adm3/adm4, other vector layers, restricted via presigned.
 
 ## Auth & governance
 
 - [ ] Identity provider + token issuance
 - [ ] RBAC / collection-level access control on the catalog API
 - [ ] Data-sharing policy: who sees open vs. restricted
-
-## Housekeeping / open questions
-
-- [ ] Commit the POC scaffold (submodule gitlinks, docs, skills, scripts)
-- [ ] Decide submodule push target: fork `main` vs. a dedicated `philsa` branch
-- [ ] Pin/document GDAL ≥ 3.8 install for contributors

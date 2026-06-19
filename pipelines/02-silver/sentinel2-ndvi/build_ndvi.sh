@@ -20,7 +20,7 @@
 #                 (default <repo>/eodata/_staging).
 #   FORCE         set to 1 to rebuild even if the R2 output already exists.
 #   R2_BUCKET / R2_ACCOUNT_ID / R2_PREFIX(=02-silver/sentinel2-ndvi) /
-#   R2_PUBLIC_BASE / AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY  — from .env.r2.
+#   R2_PUBLIC_BASE / AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY  — from .env.
 #
 # Requires GDAL >= 3.8 (gdal_calc.py + COG driver), curl, unzip.
 #
@@ -34,7 +34,7 @@ while [ "$REPO_ROOT" != "/" ]; do
 done
 
 # shared R2 creds (creds only — never R2_PREFIX). Search cwd, repo root, script dir.
-for _envf in "${ENV_FILE:-}" "${PWD}/.env.r2" "${REPO_ROOT}/.env.r2" "${SCRIPT_DIR}/.env.r2"; do
+for _envf in "${ENV_FILE:-}" "${PWD}/.env" "${REPO_ROOT}/.env" "${SCRIPT_DIR}/.env"; do
   if [ -n "$_envf" ] && [ -f "$_envf" ]; then
     echo ">> loading env from ${_envf}"; set -a; . "$_envf"; set +a; break
   fi

@@ -16,7 +16,7 @@
 # This COG is the base layer such processing would build on. See pipelines/README.md.
 #
 # Parameters (env): SCENE, SAFE, BRONZE_PREFIX, OUTPUT_DIR, STAGING, FORCE, POL
-#   (polarisation, default vv), and the R2_* / AWS_* set from .env.r2.
+#   (polarisation, default vv), and the R2_* / AWS_* set from .env.
 # Requires GDAL >= 3.8, curl, unzip.
 #
 set -euo pipefail
@@ -26,7 +26,7 @@ while [ "$REPO_ROOT" != "/" ]; do
   if [ -e "$REPO_ROOT/.git" ] || [ -e "$REPO_ROOT/AGENTS.md" ]; then break; fi
   REPO_ROOT="$(dirname "$REPO_ROOT")"
 done
-for _envf in "${ENV_FILE:-}" "${PWD}/.env.r2" "${REPO_ROOT}/.env.r2" "${SCRIPT_DIR}/.env.r2"; do
+for _envf in "${ENV_FILE:-}" "${PWD}/.env" "${REPO_ROOT}/.env" "${SCRIPT_DIR}/.env"; do
   if [ -n "$_envf" ] && [ -f "$_envf" ]; then
     echo ">> loading env from ${_envf}"; set -a; . "$_envf"; set +a; break
   fi

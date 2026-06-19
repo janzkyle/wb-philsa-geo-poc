@@ -32,7 +32,7 @@ R2_BUCKET=philsa-geo R2_ACCOUNT_ID=abc123def456 \
   TOLERANCE_M=100 bash "$S"                                 # -> Cloudflare R2
 ```
 
-Credentials: the script auto-loads the shared repo-root `.env.r2` (gitignored), so
+Credentials: the script auto-loads the shared repo-root `.env` (gitignored), so
 R2 runs usually need no inline `AWS_*` / `R2_ACCOUNT_ID`. See `pipelines/README.md`.
 
 ## Behavior / instructions for the assistant
