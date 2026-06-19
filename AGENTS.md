@@ -48,13 +48,17 @@ env/config over code. Full detail + script index:
 ## Secrets & credentials
 
 - **Never hard-code or echo secrets.** R2 / S3 credentials come from the
-  environment (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `R2_ACCOUNT_ID`).
-- Put them in **`.env.r2`** (gitignored). `.gitignore` ignores all `.env*`, the
-  generated `phl_adm*.parquet`, and the `*.gdb.zip` download cache — keep it that
-  way; don't commit generated data or geodatabases.
+  environment (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `R2_ACCOUNT_ID`);
+  CopPhil from `COPPHIL_USERNAME` / `COPPHIL_PASSWORD`.
+- Put them all in a **single repo-root `.env`** (gitignored); see `.env.example`
+  for the key list. Every backend script auto-loads it (override the path with
+  `ENV_FILE=…`). `.gitignore` ignores all `.env*`, the generated
+  `phl_adm*.parquet`, and the `*.gdb.zip` download cache — keep it that way; don't
+  commit generated data or geodatabases. (The webmap's `webmap/.env` is separate —
+  it's Vite build-time `VITE_*` config, not secrets.)
 - **R2 layout mirrors the tiers:** objects use a medallion-tiered key prefix
   `<tier>/<dataset>/<file>`. Each script hardcodes its own prefix; the shared
-  `.env.r2` holds creds only — **never `R2_PREFIX`** (it would override every
+  `.env` holds creds only — **never `R2_PREFIX`** (it would override every
   script). Uploads are idempotent (HEAD, then skip if already present at full size).
 
 ## Submodule guardrails
@@ -70,12 +74,12 @@ submodule push *and* a parent-repo commit are required) is in
 1. Reference assets by `href`; never re-host pixels.
 1. Idempotent POST→PUT-on-409 upserts.
 1. Skip-and-log rather than fail on missing / out-of-bbox data.
-1. Secrets via env / `.env.r2`; never committed, never echoed.
+1. Secrets via env / the single repo-root `.env`; never committed, never echoed.
 1. POC logic in `pipelines/` (and `.claude/skills/`), by medallion tier
    (`01-bronze`/`02-silver`/`03-gold`; `reference/` for by-reference loaders).
 1. Scripts self-document in their header (`--help` / comment block) — no
    per-script READMEs; `pipelines/README.md` is the index.
-1. R2 objects under tiered keys `<tier>/<dataset>/…`; shared creds in `.env.r2`
+1. R2 objects under tiered keys `<tier>/<dataset>/…`; shared creds in `.env`
    (never `R2_PREFIX`).
 1. Tag asset sensitivity (open vs. restricted) as the platform grows — it drives
    which R2 bucket and access path an asset gets.

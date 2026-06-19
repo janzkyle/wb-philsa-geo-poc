@@ -1,0 +1,161 @@
+.app {
+  position: fixed;
+  inset: 0;
+}
+
+.panel {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 10;
+  width: 250px;
+  padding: 14px 16px;
+  background: rgba(255, 255, 255, 0.94);
+  border-radius: 8px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.18);
+  color: #222;
+}
+
+.panel h1 {
+  margin: 0 0 10px;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.panel h2 {
+  margin: 14px 0 6px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #666;
+}
+
+.panel .row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 2px 0;
+  cursor: pointer;
+}
+
+.panel .swatch {
+  display: inline-block;
+  width: 12px;
+  height: 3px;
+  border-radius: 2px;
+}
+
+.panel .hint {
+  margin: 14px 0 0;
+  font-size: 11px;
+  color: #888;
+}
+
+.panel .daterow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 4px 0;
+}
+
+.panel .daterow label {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 11px;
+  color: #666;
+  flex: 1;
+}
+
+.panel .dateselect {
+  flex: 1;
+  font-size: 12px;
+  padding: 3px 4px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  color: #222;
+  background: #fff;
+}
+
+.panel .step {
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  font-size: 10px;
+  line-height: 1;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  background: #fff;
+  color: #3949ab;
+  cursor: pointer;
+}
+
+.panel .step:disabled {
+  color: #ccc;
+  cursor: default;
+}
+
+/* per-layer data-availability indicator */
+.panel .dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+}
+
+.panel .dot.on {
+  background: #2e7d32;
+}
+
+.panel .dot.off {
+  background: #cfcfcf;
+}
+
+.panel .muted {
+  color: #999;
+}
+
+.panel .nodata {
+  margin-left: auto;
+  font-size: 10px;
+  font-style: italic;
+  color: #b26a00;
+}
+
+/* "About the layers" guide — separate panel, bottom-right */
+.panel.guide {
+  top: auto;
+  left: auto;
+  bottom: 12px;
+  right: 12px;
+  width: 250px;
+}
+
+.panel.guide h2 {
+  margin: 0 0 8px;
+}
+
+.panel .guideitem {
+  padding: 6px 0;
+  border-top: 1px solid #eee;
+}
+
+.panel .guideitem:first-of-type {
+  border-top: none;
+  padding-top: 0;
+}
+
+.panel .guidename {
+  font-size: 12px;
+  font-weight: 600;
+  color: #222;
+}
+
+.panel .guidedesc {
+  margin-top: 2px;
+  font-size: 11px;
+  line-height: 1.35;
+  color: #666;
+}
