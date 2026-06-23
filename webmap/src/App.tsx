@@ -5,6 +5,7 @@ import { Protocol } from "pmtiles";
 import type { StyleSpecification } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { ADMIN_LAYERS, RASTER_LAYERS, INITIAL_VIEW, mosaicJsonUrl } from "./config";
+import type { Legend } from "./config";
 import { useStacRasters, mosaicTileUrl } from "./useStacRasters";
 import "./App.css";
 
@@ -36,6 +37,35 @@ const baseStyle: StyleSpecification = {
 // The YYYY-MM-DD portion of an item's RFC 3339 datetime (or "" if none).
 const dayOf = (dt?: string) => (dt ? dt.slice(0, 10) : "");
 
+// Colour key for a layer in the guide: a gradient bar for a continuous ramp,
+// or a swatch list for a categorical layer. Mirrors the layer's TiTiler styling.
+function LayerLegend({ legend }: { legend: Legend }) {
+  if (legend.kind === "ramp") {
+    return (
+      <div className="legend">
+        <div
+          className="rampbar"
+          style={{ background: `linear-gradient(to right, ${legend.stops.join(", ")})` }}
+        />
+        <div className="ramplabels">
+          <span>{legend.minLabel}</span>
+          <span>{legend.maxLabel}</span>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className="legend classlegend">
+      {legend.items.map((c) => (
+        <span className="classitem" key={c.label}>
+          <span className="classswatch" style={{ background: c.color }} />
+          {c.label}
+        </span>
+      ))}
+    </div>
+  );
+}
+
 // One STAC collection rendered as the single seamless mosaic for the selected
 // acquisition date. Each date is a hosted MosaicJSON served through TiTiler's
 // /mosaicjson tiler, so that day's overlapping/partial granules read as one
@@ -46,12 +76,14 @@ function RasterCollection({
   params,
   visible,
   date,
+  temporal,
   onDates,
 }: {
   collection: string;
   params: string;
   visible: boolean;
   date: string;
+  temporal: boolean;
   onDates: (collection: string, dates: string[]) => void;
 }) {
   const { items } = useStacRasters(collection, params);
@@ -66,10 +98,37 @@ function RasterCollection({
     return [...s].sort();
   }, [items]);
 
-  // Report dates up so the picker + indicators know real coverage.
+  // Report dates up so the picker + indicators know real coverage. A
+  // date-independent layer (e.g. annual LULC) must NOT feed the date filter.
   useEffect(() => {
-    onDates(collection, dates);
-  }, [collection, dates, onDates]);
+    if (temporal) onDates(collection, dates);
+  }, [temporal, collection, dates, onDates]);
+
+  // Date-independent layer: render each COG item directly (no per-date mosaic,
+  // no date gating). Visible whenever toggled on, regardless of selected date.
+  if (!temporal) {
+    return (
+      <>
+        {items.map((it) => (
+          <Source
+            key={`${collection}:${it.id}`}
+            id={`${collection}:${it.id}`}
+            type="raster"
+            tiles={[it.tileUrl]}
+            tileSize={256}
+          >
+            <Layer
+              id={`${collection}:${it.id}:layer`}
+              type="raster"
+              layout={{ visibility: visible ? "visible" : "none" }}
+              paint={{ "raster-opacity": 1 }}
+              beforeId="admin-anchor"
+            />
+          </Source>
+        ))}
+      </>
+    );
+  }
 
   if (!date || !dates.includes(date)) return null;
 
@@ -106,6 +165,9 @@ function App() {
 
   // Single selected acquisition date for the raster (COG) layers.
   const [selectedDate, setSelectedDate] = useState("");
+
+  // "About the layers" guide — collapsible, expanded by default.
+  const [guideOpen, setGuideOpen] = useState(true);
 
   // Acquisition dates available per raster collection (reported by each one).
   const [datesByColl, setDatesByColl] = useState<Record<string, string[]>>({});
@@ -158,6 +220,7 @@ function App() {
             params={r.titilerParams}
             visible={!!rasterOn[r.id]}
             date={selectedDate}
+            temporal={r.temporal !== false}
             onDates={onDates}
           />
         ))}
@@ -238,7 +301,10 @@ function App() {
 
         <h2>Raster (COG via TiTiler)</h2>
         {RASTER_LAYERS.map((r) => {
-          const has = hasDataOn(r.collection);
+          // Date-independent layers (annual LULC) are always available; only
+          // per-date layers show a "no data" indicator for the selected date.
+          const dateless = r.temporal === false;
+          const has = dateless || hasDataOn(r.collection);
           return (
             <label key={r.id} className="row">
               <input
@@ -250,7 +316,8 @@ function App() {
               />
               <span className={`dot ${has ? "on" : "off"}`} />
               <span className={has ? undefined : "muted"}>{r.label}</span>
-              {!has && <span className="nodata">no data</span>}
+              {dateless && <span className="nodata">annual</span>}
+              {!dateless && !has && <span className="nodata">no data</span>}
             </label>
           );
         })}
@@ -276,14 +343,24 @@ function App() {
         </p>
       </div>
 
-      <div className="panel guide">
-        <h2>About the layers</h2>
-        {RASTER_LAYERS.map((r) => (
-          <div key={r.id} className="guideitem">
-            <div className="guidename">{r.label}</div>
-            <div className="guidedesc">{r.description}</div>
-          </div>
-        ))}
+      <div className={`panel guide${guideOpen ? "" : " collapsed"}`}>
+        <button
+          type="button"
+          className="guidetoggle"
+          aria-expanded={guideOpen}
+          onClick={() => setGuideOpen((o) => !o)}
+        >
+          <span>About the layers</span>
+          <span className="chevron">{guideOpen ? "▾" : "▸"}</span>
+        </button>
+        {guideOpen &&
+          RASTER_LAYERS.map((r) => (
+            <div key={r.id} className="guideitem">
+              <div className="guidename">{r.label}</div>
+              <div className="guidedesc">{r.description}</div>
+              {r.legend && <LayerLegend legend={r.legend} />}
+            </div>
+          ))}
       </div>
     </div>
   );

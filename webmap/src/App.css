@@ -137,6 +137,37 @@
   margin: 0 0 8px;
 }
 
+/* collapsible guide header (button styled like the section heading) */
+.panel.guide.collapsed {
+  padding-bottom: 14px;
+}
+
+.panel .guidetoggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #666;
+}
+
+.panel.guide:not(.collapsed) .guidetoggle {
+  margin-bottom: 8px;
+}
+
+.panel .guidetoggle .chevron {
+  font-size: 10px;
+  color: #999;
+}
+
 .panel .guideitem {
   padding: 6px 0;
   border-top: 1px solid #eee;
@@ -158,4 +189,45 @@
   font-size: 11px;
   line-height: 1.35;
   color: #666;
+}
+
+/* per-layer colour key (gradient ramp or class swatches) */
+.panel .legend {
+  margin-top: 6px;
+}
+
+.panel .rampbar {
+  height: 10px;
+  border-radius: 3px;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+}
+
+.panel .ramplabels {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 3px;
+  font-size: 10px;
+  color: #777;
+}
+
+.panel .classlegend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+}
+
+.panel .classitem {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10px;
+  color: #555;
+}
+
+.panel .classswatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  flex: 0 0 auto;
 }
