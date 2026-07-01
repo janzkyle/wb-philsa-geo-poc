@@ -81,6 +81,17 @@
     "searchBarConfig": {},
     "searchProviders": [
       {
+        "id": "search-provider/philsa-admin",
+        "type": "philsa-admin-search-provider",
+        "name": "PH admin areas (region / province / city)",
+        "url": "https://pub-17ab60a2ca7142a48ae8e2685cd853f7.r2.dev/02-silver/ph-admin-boundaries/ph_admin_index.json",
+        "geomBaseUrl": "https://pub-17ab60a2ca7142a48ae8e2685cd853f7.r2.dev/02-silver/ph-admin-boundaries",
+        "flightDurationSeconds": 1.5,
+        "minCharacters": 2,
+        "recommendedListLength": 8,
+        "maxResults": 10
+      },
+      {
         "id": "search-provider/cesium-ion",
         "type": "cesium-ion-search-provider",
         "name": "translate#viewModels.searchLocations",

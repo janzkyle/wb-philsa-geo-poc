@@ -61,12 +61,64 @@ Generated groups under **PhilSA POC — STAC Catalog**:
   Sentinel-2 True Colour, and **Diwata-2 SMI** true colour (by-reference public
   COG on GCS; capped to the 12 most recent scenes — raise `sample` in the
   generator to show more).
+- **Administrative boundaries** (`Administrative Boundaries (PH)`): adm0 (country),
+  adm1 (regions), adm2 (provinces), adm3 (cities/municipalities) and adm4
+  (barangays) as `mvt` outlines, off by default — **all five levels are open data,
+  none restricted**. These stream the **same PMTiles the webmap uses**, straight
+  from R2 (`02-silver/ph-admin-boundaries/pmtiles/phl_adm{0..4}.pmtiles`): Terria's
+  `mvt` item feeds the `.pmtiles` URL to its Protomaps imagery provider, which
+  range-reads the archive — so there's no separate GeoJSON and no duplicated data
+  in the repo. Vector tiles also mean adm4's ~42,000 barangays stream tile-by-tile
+  (only what's in view) instead of a single multi-MB download, and dense levels
+  (adm3/adm4) appear only as you zoom in (their tiles start at z4/z6). Click any
+  feature for its attributes (name, P-code, area). The canonical full-resolution
+  geometry stays in the admin-boundary GeoParquet (silver tier).
 - **Info-only groups**: `skysat` and `planetscope` expose only thumbnails +
   cloud-hosted metadata (no public COG), so they're listed as labelled
   by-reference groups rather than map layers.
 
+### Provenance / metadata in the workbench
+
+The generator maps each STAC collection's metadata into Terria so users can see
+what they're looking at without leaving the dashboard — **only fields that are
+actually present are shown** (no empty rows, no raw JSON):
+
+- **Group `info` sections**: *About this dataset* (STAC description), *Coverage*
+  (time span + bounding area), *Source & licence* (providers, licence, keywords),
+  plus a `metadataUrls` link to the live STAC collection JSON.
+- **Per-item description**: acquisition date, platform / instrument, GSD / cloud
+  cover where available, granule count for combined per-date layers, and a
+  thumbnail preview for collections that publish one (Diwata-2, SkySat,
+  PlanetScope).
+
+Re-run `build_catalog_from_stac.py` to refresh all of this from STAC.
+
 Branding (brand bar + disclaimer) uses PhilSA colours; the initial view frames
 Luzon.
+
+## Admin-area search ("fly to a region / province / city")
+
+The search bar includes a custom **PH admin areas** provider: type a region,
+province, or city/municipality name and pick a result to fly the camera straight
+to that unit. It's a local lookup — no geocoder calls — over a small generated
+index (`wwwroot/data/ph_admin_index.json`, ~1,700 adm0–adm3 units with
+name + bbox), produced by [`build_admin_search_index.py`](./build_admin_search_index.py)
+from the canonical admin GeoParquet (barangays/adm4 are excluded to keep the list
+usable). The provider is `lib/Models/PhilSAAdminSearchProvider.ts`, registered in
+`index.js` and configured under `searchProviders` in `wwwroot/config.json`. To
+refresh after a boundary update, re-run the index script (it reads the parquet
+from R2, or a local `SRC_DIR`).
+
+Picking a result also drops a **spotlight focus mask**: everything outside the
+selected unit is dimmed so the other (raster) layers read only inside that admin
+area. It's a client-side overlay — `applyAdminFocusMask`
+(`lib/Models/philsaAdminFocusMask.ts`) builds a polygon of a PH-region rectangle
+*minus* the unit's shape (the unit becomes a hole) and adds it as a **"Focus area"**
+item in the workbench, so you can lower its opacity or remove it to clear. The
+unit geometry comes from small per-level files
+(`wwwroot/data/ph_admin_geom_adm{0..3}.json`, loaded on demand), also produced by
+`build_admin_search_index.py`. Note it's a *visual* focus (a dim overlay), not a
+true server-side raster clip — pixels outside are dimmed, not removed.
 
 ## Temporal: comparing acquisition dates
 
@@ -85,5 +137,13 @@ dashboard doesn't use):
 - **No animated time-slider.** Deliberate — a true slider would need a custom
   time-aware service (WMS/WMTS facade) over the date stack; out of scope for the
   POC. Date comparison is covered by split-screen above.
-- **No click-to-read pixel values.** Raster feature-info needs WMS `GetFeatureInfo`
-  or a TiTiler `/cog/point` hook; legends convey the value ranges instead.
+- **No click-to-read pixel values for rasters.** Vector layers (admin boundaries)
+  are click-readable, but raster pixel read-out needs WMS `GetFeatureInfo` or a
+  TiTiler `/cog/point` hook; legends convey the value ranges instead.
+- **Admin boundaries are generalised for display.** The PMTiles are tippecanoe-
+  generalised per zoom for fast rendering — the canonical, full-resolution geometry
+  stays in the admin GeoParquet (silver tier).
+- **Admin-area focus is a visual mask, not a raster clip.** Picking an admin area
+  flies the camera there and dims everything outside it (spotlight overlay); the
+  raster pixels outside are dimmed, not actually clipped/removed. A true clip would
+  need server-side masking in TiTiler.

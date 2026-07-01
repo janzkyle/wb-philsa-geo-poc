@@ -3,7 +3,7 @@
 A proof-of-concept geospatial data platform for the Philippine Space Agency
 (PhilSA) / World Bank: a STAC-based catalog that **references** Earth-
 observation assets in place rather than re-hosting them, fronted by a STAC
-Browser and (planned) a webmap with vector tiling.
+Browser, a MapLibre webmap, and a TerriaJS dashboard.
 
 The end-to-end target architecture is in **`poc-architecture.mmd`** (render the
 Mermaid diagram to see how the pieces connect). Contributing or working in this
@@ -14,8 +14,7 @@ just *what it is* and *how to run it*.
 
 | Path                                  | What it is                                                                                                                                                                                                                     |
 | ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `pipelines/`                          | All data pipeline scripts, organized by medallion tier (`01-bronze` / `02-silver` / `03-gold`) plus a `reference/` lane for by-reference loaders: PhilSA mirror, ESRI LULC, CopPhil raw-Sentinel download, and (planned) NDVI / SAR-flood derivation. See `pipelines/README.md`. |
-| `.claude/skills/ph-admin-geoparquet/` | **Thin skill** that points at `pipelines/02-silver/ph-admin-boundaries/` so the agent can auto-invoke the PH admin-boundary build. The script there runs standalone without the skill.                                          |
+| `pipelines/`                          | All data pipeline scripts, organized by medallion tier (`01-bronze` / `02-silver` / `03-gold`) plus a `reference/` lane for by-reference loaders: PhilSA mirror, ESRI LULC, CopPhil raw-Sentinel download, and the Sentinel silver derivatives (NDVI, true-colour, SAR backscatter, flood). See `pipelines/README.md`. |
 | `poc-architecture.mmd`                | Mermaid diagram of the target architecture.                                                                                                                                                                                    |
 | `stac-fastapi-pgstac/`                | **Git submodule** — the catalog API (brings up API + Postgres/pgSTAC locally). Points at our fork `janzkyle/wb-philsa-geo-stac-fastapi-pgstac`.                                                                                |
 | `stac-browser/`                       | **Git submodule** — the catalog explorer UI. Points at our fork `janzkyle/wb-philsa-geo-stac-browser`.                                                                                                                         |
@@ -68,9 +67,7 @@ python3 pipelines/01-bronze/copphil-sentinel/download_copphil_eodata.py --dry-ru
 
 **PH admin boundaries** are built by
 `pipelines/02-silver/ph-admin-boundaries/build_ph_admin_geoparquet.sh` (key knob
-`TOLERANCE_M`, can write to R2 — see that folder's `README.md`). It runs
-standalone; the `ph-admin-geoparquet` skill is just a thin pointer at it for
-agent auto-invocation.
+`TOLERANCE_M`, can write to R2 — see that folder's `README.md`).
 
 ## Explore the catalog (STAC Browser)
 
@@ -119,13 +116,16 @@ inside the submodule, push to `origin`, then record the new gitlink as above.
 
 ## Status & what's next
 
-- 🔜 **Ingest.** PhilSA catalog mirror, ESRI 10 m LULC, and PH admin
-  boundaries all load into pgSTAC today. Ingesting CopPhil S3 raw Sentinel/EODATA, Copernicus EMS vectors, OSM/synthetic vectors, and Earth Search Sentinel-2 L2A assets is next.
-- 🔜 **Storage (Cloudflare R2).** Wire the public (open COGs + PMTiles) and
-  private (sensitive/licensed imagery) buckets, with presigned URLs for
-  restricted assets. The admin-boundary skill already supports R2 output.
-- 🔜 **Frontend.** Stand up the STAC Browser end-to-end and the MapLibre webmap
-  with TiTiler raster tiling.
+- ✅ **Ingest (partial).** PhilSA catalog mirror, ESRI 10 m LULC, and PH admin
+  boundaries load into pgSTAC; CopPhil raw Sentinel-1/2 is downloaded and its
+  silver derivatives (NDVI, true-colour, SAR backscatter, and a first Sentinel-1
+  flood proxy) are built and cataloged. Next: Copernicus EMS/GFM flood,
+  OSM/synthetic vectors, and Earth Search Sentinel-2 L2A.
+- ◐ **Storage (Cloudflare R2).** Public bucket live (open COGs + PMTiles). Next:
+  the private bucket for sensitive/licensed imagery, plus presigned URLs for
+  restricted assets.
+- ◐ **Frontend.** STAC Browser is up; the MapLibre webmap and TerriaJS dashboard
+  render the open layers via TiTiler. Next: restricted/authenticated layers.
 - 🔜 **Auth & governance.** Identity provider + RBAC, collection-level access
   control, and the open/restricted data-sharing policy.
 

@@ -17,7 +17,7 @@ flowchart LR
 
     subgraph UIP["End user layer"]
         BROW["STAC Browser<br/>catalog explorer<br/><i>audience: analysts / data engineers</i>"]
-        MAP["MapLibre webmap<br/>open: public · restricted: authenticated<br/><i>audience: partner agencies</i>"]
+        DASH["TerriaJS dashboard<br/>open: public · restricted: authenticated<br/><i>audience: partner agencies</i>"]
     end
 
     subgraph GATE["Access &amp; Governance"]
@@ -36,15 +36,15 @@ flowchart LR
     JUP -- "write restricted assets" --> R2PRIV
 
     BROW -- "authenticate" --> AUTH
-    MAP -- "authenticate" --> AUTH
+    DASH -- "authenticate" --> AUTH
     AUTH -- "authorized discovery" --> API
     AUTH -- "authorized tiles" --> TIT
     API <--> DB
 
     TIT -- "fetch open COGs" --> R2PUB
     TIT -- "fetch restricted COGs" --> R2PRIV
-    MAP -- "open PMTiles (direct)" --> R2PUB
-    MAP -- "restricted PMTiles (presigned)" --> R2PRIV
+    DASH -- "open PMTiles (direct)" --> R2PUB
+    DASH -- "restricted PMTiles (presigned)" --> R2PRIV
     JUP -- "load collections + items<br/>pypgstac (hrefs to R2)" --> DB
 
     classDef src fill:#e0f2f1,stroke:#00897b,color:#004d40;
@@ -59,4 +59,4 @@ flowchart LR
     class DB,R2PUB,R2PRIV store;
     class API,TIT serve;
     class AUTH gate;
-    class MAP,BROW ui;
+    class DASH,BROW ui;

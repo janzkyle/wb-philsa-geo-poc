@@ -52,7 +52,8 @@ COG_TYPE = "image/tiff; application=geotiff; profile=cloud-optimized"
 # Silver products to catalogue: one Collection per family.
 PRODUCTS = [
     {"collection": "sentinel2-ndvi", "prefix": "02-silver/sentinel2-ndvi",
-     "title": "Sentinel-2 NDVI — Philippines",
+     "title": "Vegetation Health (NDVI) — Philippines",
+     "source_product": "sentinel2-ndvi", "extra_keywords": ["NDVI", "vegetation"],
      "description": "Per-scene NDVI = (B08-B04)/(B08+B04) from Sentinel-2 L2A over the "
                     "Philippines, as Cloud-Optimized GeoTIFF (silver tier).",
      "platform": "sentinel-2", "instruments": ["msi"], "gsd": 10,
@@ -61,7 +62,8 @@ PRODUCTS = [
                           "rescale": [[-0.2, 0.8]], "colormap_name": "rdylgn",
                           "resampling": "bilinear"}}},
     {"collection": "sentinel2-truecolor", "prefix": "02-silver/sentinel2-truecolor",
-     "title": "Sentinel-2 True-Colour — Philippines",
+     "title": "Natural-Colour Satellite Imagery — Philippines",
+     "source_product": "sentinel2-truecolor", "extra_keywords": ["true-colour", "TCI", "RGB"],
      "description": "Sentinel-2 L2A true-colour (TCI, 10 m) over the Philippines, as an "
                     "8-bit RGB Cloud-Optimized GeoTIFF (silver tier).",
      "platform": "sentinel-2", "instruments": ["msi"], "gsd": 10,
@@ -69,7 +71,8 @@ PRODUCTS = [
      "renders": {"true-color": {"title": "True colour", "assets": ["data"],
                                 "resampling": "nearest"}}},
     {"collection": "sentinel1-sar", "prefix": "02-silver/sentinel1-sar",
-     "title": "Sentinel-1 VV Backscatter (dB) — Philippines",
+     "title": "All-Weather Radar Imagery — Philippines",
+     "source_product": "sentinel1-sar", "extra_keywords": ["SAR", "radar", "VV backscatter"],
      "description": "Geocoded Sentinel-1 IW GRD VV backscatter in dB over the Philippines, "
                     "as Cloud-Optimized GeoTIFF (silver tier). Backscatter base layer — "
                     "not a validated flood product.",
@@ -78,6 +81,19 @@ PRODUCTS = [
      "renders": {"backscatter": {"title": "VV backscatter (dB)", "assets": ["data"],
                                  "rescale": [[15, 55]], "colormap_name": "gray",
                                  "resampling": "bilinear"}}},
+    {"collection": "sentinel1-flood", "prefix": "02-silver/sentinel1-flood",
+     "title": "Flood Extent (radar-derived) — Philippines",
+     "source_product": "sentinel1-flood", "extra_keywords": ["flood", "water", "SAR", "otsu"],
+     "description": "Open-water / flood mask derived from Sentinel-1 VV backscatter (dB) by "
+                    "Otsu thresholding (silver tier): 1 = water, 0 = land, 2 = permanent "
+                    "water, 255 = nodata. POC flood proxy — NOT a validated product (no "
+                    "calibration / speckle / terrain correction); complements the "
+                    "authoritative Copernicus EMS / GFM reference layer.",
+     "platform": "sentinel-1", "instruments": ["c-sar"], "gsd": 10,
+     "asset_title": "Flood / water mask (Byte COG)",
+     "renders": {"flood": {"title": "Flood extent (water)", "assets": ["data"],
+                           "colormap": {"1": [33, 102, 204, 255], "2": [120, 170, 230, 255]},
+                           "resampling": "nearest"}}},
 ]
 
 
@@ -202,12 +218,19 @@ def build_item(prod, key, info, href):
 
 def build_collection(prod, bbox, dts):
     interval = [min(dts) if dts else None, max(dts) if dts else None]
+    # Layman-friendly `title` is what users see; the underlying silver product name
+    # is preserved as a queryable property + keyword so the technical lineage is
+    # never lost. `source_product` defaults to the collection id (display-only rename).
+    source_product = prod.get("source_product", prod["collection"])
+    keywords = ["sentinel", "philippines", "silver", prod["platform"],
+                source_product, *prod.get("extra_keywords", [])]
     col = {
         "type": "Collection", "stac_version": "1.0.0", "stac_extensions": [],
         "id": prod["collection"], "title": prod["title"], "description": prod["description"],
         "license": "CC-BY-4.0",
         "extent": {"spatial": {"bbox": [bbox]}, "temporal": {"interval": [interval]}},
-        "keywords": ["sentinel", "philippines", "silver", prod["platform"]],
+        "keywords": keywords,
+        "philsa:source_product": source_product,
         "links": [],
     }
     # Render extension: tell viewers how to display these COGs (rescale + colormap),
@@ -255,10 +278,24 @@ def main():
     public = os.environ.get("R2_PUBLIC_BASE", "").rstrip("/")
     if not (bucket and acct and public):
         sys.exit("!! need R2_BUCKET, R2_ACCOUNT_ID, R2_PUBLIC_BASE in .env")
-    r2 = R2(acct, bucket, os.environ.get("AWS_ACCESS_KEY_ID"), os.environ.get("AWS_SECRET_ACCESS_KEY"))
+    ak, sk = os.environ.get("AWS_ACCESS_KEY_ID"), os.environ.get("AWS_SECRET_ACCESS_KEY")
+    r2 = R2(acct, bucket, ak, sk)
+
+    # Read COG metadata over the authenticated /vsis3 endpoint when creds are present:
+    # the public r2.dev host has flaky DNS (see TODO "Tile-serving robustness"), while
+    # <account>.r2.cloudflarestorage.com resolves reliably. Asset hrefs stay public.
+    use_vsis3 = bool(ak and sk)
+    if use_vsis3:
+        os.environ["AWS_S3_ENDPOINT"] = f"{acct}.r2.cloudflarestorage.com"
+        os.environ["AWS_VIRTUAL_HOSTING"] = "FALSE"
+        os.environ["AWS_DEFAULT_REGION"] = "auto"
+
+    def read_path(key):
+        return f"/vsis3/{bucket}/{key}" if use_vsis3 else f"/vsicurl/{public}/{key}"
 
     print(f">> pgSTAC : {STAC_API}")
     print(f">> bucket : {bucket}")
+    print(f">> read   : {'vsis3 (authenticated)' if use_vsis3 else 'vsicurl (public r2.dev)'}")
     if args.dry_run:
         print(">> DRY RUN — no writes")
 
@@ -272,7 +309,7 @@ def main():
             continue
         items, bbox, dts = [], None, []
         for key in keys:
-            info = gdalinfo_json(f"/vsicurl/{public}/{key}")
+            info = gdalinfo_json(read_path(key))
             if not info or "wgs84Extent" not in info:
                 print(f"  !! skip (no metadata): {key}", file=sys.stderr)
                 continue

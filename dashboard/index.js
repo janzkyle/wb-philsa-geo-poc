@@ -2,6 +2,8 @@ import ConsoleAnalytics from "terriajs/lib/Core/Analytics/ConsoleAnalytics";
 import GoogleAnalytics from "terriajs/lib/Core/Analytics/GoogleAnalytics";
 import registerCatalogMembers from "terriajs/lib/Models/Catalog/registerCatalogMembers";
 import registerSearchProviders from "terriajs/lib/Models/SearchProviders/registerSearchProviders";
+import SearchProviderFactory from "terriajs/lib/Models/SearchProviders/SearchProviderFactory";
+import PhilSAAdminSearchProvider from "./lib/Models/PhilSAAdminSearchProvider";
 import ShareDataService from "terriajs/lib/Models/ShareDataService";
 import Terria from "terriajs/lib/Models/Terria";
 import ViewState from "terriajs/lib/ReactViewModels/ViewState";
@@ -39,6 +41,15 @@ registerCatalogMembers();
 // Register custom search providers in the core TerriaJS. If you only want to register a subset of them, or to add your own,
 // insert your custom version of the code in the registerSearchProviders function here instead.
 registerSearchProviders();
+
+// PhilSA: custom admin-area search ("fly to a region/province/city"), backed by
+// a name->bbox index (ph_admin_index.json) served from R2. The index url and the
+// spotlight geometry base (geomBaseUrl) are configured in config.json under
+// searchProviders; generated + uploaded by build_admin_search_index.py.
+SearchProviderFactory.register(
+  PhilSAAdminSearchProvider.type,
+  PhilSAAdminSearchProvider
+);
 
 // Register custom components in the core TerriaJS.  If you only want to register a subset of them, or to add your own,
 // insert your custom version of the code in the registerCustomComponentTypes function here instead.
