@@ -1,0 +1,23 @@
+# Dagster instance config — used when DAGSTER_HOME points at this directory
+# (the compose services will; a bare local `dagster dev` ignores it and uses
+# ephemeral storage, so no Postgres is needed just to validate/develop).
+#
+# Run / event-log / schedule storage lives in a dedicated `dagster` database
+# on the EXISTING pgSTAC Postgres instance (stac-fastapi-pgstac/compose.yml,
+# service `database` on the `stac-fastapi-network`, host port 5439). Username
+# mirrors the dev credentials already committed in that compose file; the
+# password comes from the repo-root .env (DAGSTER_PG_PASSWORD).
+#
+# The `dagster` database must exist once:
+#   docker compose -f stac-fastapi-pgstac/compose.yml exec database \
+#     psql -U username -d postgis -c 'CREATE DATABASE dagster'
+storage:
+  postgres:
+    postgres_db:
+      hostname:
+        env: DAGSTER_PG_HOST
+      port: 5432
+      username: username
+      password:
+        env: DAGSTER_PG_PASSWORD
+      db_name: dagster

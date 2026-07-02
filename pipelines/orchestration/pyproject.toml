@@ -1,0 +1,26 @@
+# Dagster orchestration layer for the PhilSA POC pipelines.
+#
+# This package only *wraps* the existing pipelines/ scripts as Dagster assets
+# (via Pipes subprocesses) — the scripts stay standalone and unmodified.
+#
+# Local dev (from this directory):
+#   uv venv && uv pip install -e .
+#   .venv/bin/dagster dev          # UI on :3000, ephemeral storage
+# Validate without a server:
+#   .venv/bin/dagster definitions validate
+
+[project]
+name = "philsa-orchestration"
+version = "0.1.0"
+description = "Dagster asset definitions wrapping the PhilSA POC pipeline scripts"
+requires-python = ">=3.10"
+dependencies = [
+    "dagster>=1.8",
+    "dagster-webserver>=1.8",
+    "dagster-postgres",
+    "dagster-pipes",
+]
+
+[tool.dagster]
+module_name = "definitions"
+code_location_name = "philsa-pipelines"

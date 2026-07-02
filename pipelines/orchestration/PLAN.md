@@ -30,10 +30,17 @@ one-line note, commit.
 
 ## Checklist
 
-- [ ] 1. Scaffold `pipelines/orchestration/` — `pyproject.toml` (dagster,
+- [x] 1. Scaffold `pipelines/orchestration/` — `pyproject.toml` (dagster,
   dagster-webserver, dagster-postgres, dagster-pipes), empty `definitions.py`
   that loads, and a `dagster.yaml` pointing run/event storage at a `dagster`
   database on the existing pgSTAC Postgres instance.
+  *Done: scaffolded with dagster 1.13.11 (uv venv in `.venv/`, gitignored);
+  `dagster.yaml` reads `DAGSTER_PG_HOST`/`DAGSTER_PG_PASSWORD` (added to
+  `.env.example`), pgSTAC Postgres = submodule compose svc `database`, host
+  port 5439, needs one-time `CREATE DATABASE dagster`. Verify recipe:
+  `DAGSTER_HOME=<empty tmp dir> .venv/bin/dagster definitions validate` from
+  `pipelines/orchestration/` — cwd dagster.yaml otherwise triggers a live PG
+  connection.*
 - [ ] 2. Bronze asset: wrap `01-bronze/copphil-sentinel/download_copphil_eodata.py`
   via `PipesSubprocessClient`. Do NOT modify the script.
 - [ ] 3. Silver raster assets: `build_ndvi.sh`, `build_truecolor.sh`,

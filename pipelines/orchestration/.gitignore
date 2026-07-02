@@ -1,0 +1,9 @@
+.venv/
+__pycache__/
+uv.lock
+# dagster local instance artifacts (if DAGSTER_HOME is pointed here)
+history/
+logs/
+schedules/
+storage/
+.telemetry/
