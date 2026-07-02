@@ -71,8 +71,12 @@ one-line note, commit.
   *Done: `assets_gold.py` → `gold/stac_catalog` (group `gold`), deps on all
   four silver rasters + mosaics; config `dry_run`/`only`/`stac_api`. Validated
   + lineage confirmed.*
-- [ ] 6. Reference assets: `mirror_philsa_catalog.py` and `load_esri_lulc.sh`
+- [x] 6. Reference assets: `mirror_philsa_catalog.py` and `load_esri_lulc.sh`
   as standalone manual-run assets.
+  *Done: `assets_reference.py` → `reference/philsa_catalog` (config:
+  `dry_run`/`only`/`max_items`/`collections_only`) and `reference/esri_lulc`
+  (config: `year`/`tiles`), group `reference`, no upstream deps. Validated —
+  11 assets total in the graph.*
 - [ ] 7. Daily automation: sensor polling the CopPhil OData endpoint for new
   scenes (reuse the query logic from `download_copphil_eodata.py` by reading
   it) that triggers the bronze→silver→gold chain; plus a daily cron schedule

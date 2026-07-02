@@ -13,9 +13,12 @@ import dagster as dg
 
 import assets_bronze
 import assets_gold
+import assets_reference
 import assets_silver
 
 defs = dg.Definitions(
-    assets=dg.load_assets_from_modules([assets_bronze, assets_silver, assets_gold]),
+    assets=dg.load_assets_from_modules(
+        [assets_bronze, assets_silver, assets_gold, assets_reference]
+    ),
     resources={"pipes_subprocess_client": dg.PipesSubprocessClient()},
 )
