@@ -66,8 +66,11 @@ one-line note, commit.
   `silver/ph_admin_pmtiles` (config: `levels`, `dry_run`; depends on
   geoparquet) added to `assets_silver.py`. Validated; lineage confirmed
   (geoparquet has no parents, pmtiles ← geoparquet).*
-- [ ] 5. Gold asset: `03-gold/catalog_silver.py` depending on the silver raster
+- [x] 5. Gold asset: `03-gold/catalog_silver.py` depending on the silver raster
   + mosaic assets.
+  *Done: `assets_gold.py` → `gold/stac_catalog` (group `gold`), deps on all
+  four silver rasters + mosaics; config `dry_run`/`only`/`stac_api`. Validated
+  + lineage confirmed.*
 - [ ] 6. Reference assets: `mirror_philsa_catalog.py` and `load_esri_lulc.sh`
   as standalone manual-run assets.
 - [ ] 7. Daily automation: sensor polling the CopPhil OData endpoint for new
