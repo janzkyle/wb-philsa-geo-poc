@@ -52,6 +52,29 @@ version. Keep both honest.
 - [ ] **Earth Search** (`PUB`): query Sentinel-2 L2A asset URLs and mirror into
       pgSTAC by reference (ETL-only, mirror the Planetary Computer pattern)
 
+## Orchestration — Dagster
+
+- [x] **Dagster layer over `pipelines/`** (`pipelines/orchestration/`): every
+      ingest/transform/catalog script wrapped as a software-defined **asset** via
+      Pipes subprocesses (scripts stay standalone + unmodified; their env/CLI
+      params surface as run config). The medallion tiers form the asset graph —
+      11 assets, bronze → silver → gold lineage — giving run history, backfills,
+      and a manual-run/trigger UI. Covers both asks: **one-time/manual** runs
+      (UI "Materialize" or `dagster asset materialize`) and a **daily update
+      check** (`copphil_new_scene_sensor` polls CopPhil OData hourly and only
+      fires the bronze→silver→gold `copphil_chain_refresh` job on new scenes;
+      `copphil_daily_schedule` 06:00 Asia/Manila is the idempotent fallback —
+      **both ship OFF**, enable in the UI). Run/event storage = a `dagster` DB on
+      the existing pgSTAC Postgres; `compose.orchestration.yml` runs the
+      webserver (UI :3030) + daemon on the pgSTAC network. See
+      `pipelines/README.md` → *Orchestration (Dagster)*.
+  - [ ] Add `tippecanoe` + `aws` CLI to the Dagster image so
+        `silver/ph_admin_pmtiles` and `silver/raster_mosaics` run in-container
+        (today they run best from the host).
+  - [ ] Fold the dashboard's `build_catalog_from_stac.py` daily refresh (see
+        Frontend → *Daily catalog refresh*) into a Dagster asset/schedule instead
+        of a separate cron — one orchestrator for the whole POC.
+
 ## Storage — Cloudflare R2
 
 - [x] Create the public bucket (open COGs + PMTiles) and confirm public read

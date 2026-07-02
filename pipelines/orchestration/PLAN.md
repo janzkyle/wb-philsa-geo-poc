@@ -1,6 +1,40 @@
 # Dagster orchestration — implementation plan (loop state file)
 
-This file is the single source of truth for the /loop implementing Dagster
+## ✅ COMPLETE — all 10 checklist items landed (2026-07-03)
+
+Dagster orchestration for `pipelines/` is fully built, verified end-to-end, and
+committed. **11 assets** wrap the existing scripts (unmodified) as Pipes
+subprocesses along the medallion graph: `bronze/copphil_sentinel` →
+`silver/{sentinel2_ndvi,sentinel2_truecolor,sentinel1_sar,sentinel1_flood,
+raster_mosaics}` → `gold/stac_catalog`, plus manual-run
+`silver/ph_admin_{geoparquet,pmtiles}` and `reference/{philsa_catalog,esri_lulc}`.
+
+- **Both run modes delivered:** one-time/manual (UI Materialize or
+  `dagster asset materialize`, params as run config) and daily update check
+  (`copphil_new_scene_sensor` hourly OData poll with cursor + idempotent
+  `copphil_daily_schedule`, both **OFF** by default).
+- **Deployed:** `compose.orchestration.yml` runs webserver (UI **:3030**) +
+  daemon on the pgSTAC network; run/event storage in a `dagster` DB on the
+  existing pgSTAC Postgres.
+- **Verified end-to-end:** containerized webserver serves all 11 assets with
+  correct lineage (GraphQL), Postgres storage live (22 tables), sensor+schedule
+  STOPPED. One real bug found & fixed (missing `DAGSTER_PG_PASSWORD` in compose).
+- **Docs:** `pipelines/README.md` → *Orchestration (Dagster)*; `TODO.md` →
+  *Orchestration — Dagster*.
+- **Files added:** `orchestration/{pyproject.toml,definitions.py,dagster.yaml,
+  assets_bronze.py,assets_silver.py,assets_gold.py,assets_reference.py,
+  automation.py,Dockerfile,.gitignore}` + repo-root `compose.orchestration.yml`;
+  `.env.example` gained `DAGSTER_PG_HOST`/`DAGSTER_PG_PASSWORD`.
+- **Open follow-ups** (in `TODO.md`, not blockers): containerize
+  tippecanoe/aws for the two host-run assets; fold the dashboard's catalog
+  refresh into Dagster.
+
+Verify recipe: from `orchestration/`,
+`DAGSTER_HOME=<empty dir> .venv/bin/dagster definitions validate`.
+
+---
+
+This file was the single source of truth for the /loop implementing Dagster
 orchestration. Each iteration: pick the FIRST unchecked item, implement only
 that, verify (Dagster definitions must import cleanly), check it off with a
 one-line note, commit.
@@ -111,5 +145,10 @@ one-line note, commit.
   11 assets via GraphQL with correct lineage, daemon runs all 6 sub-daemons,
   Postgres storage auto-created 22 tables in the `dagster` DB, and both the
   sensor and schedule report STOPPED. Stack left running (UI :3030).*
-- [ ] 10. Docs: orchestration section in `pipelines/README.md` (manual runs via
+- [x] 10. Docs: orchestration section in `pipelines/README.md` (manual runs via
   UI/CLI, enabling the sensor/schedule) and update `TODO.md`.
+  *Done: added "## Orchestration (Dagster)" to `pipelines/README.md` (asset
+  graph diagram, both run modes, local `dagster dev` + full compose recipe
+  incl. the one-time `CREATE DATABASE dagster`, host-run caveats). Added
+  "## Orchestration — Dagster" to `TODO.md` (done + two follow-ups: containerize
+  tippecanoe/aws, fold the dashboard refresh into Dagster).*
