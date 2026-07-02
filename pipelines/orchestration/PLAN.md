@@ -77,10 +77,15 @@ one-line note, commit.
   `dry_run`/`only`/`max_items`/`collections_only`) and `reference/esri_lulc`
   (config: `year`/`tiles`), group `reference`, no upstream deps. Validated —
   11 assets total in the graph.*
-- [ ] 7. Daily automation: sensor polling the CopPhil OData endpoint for new
+- [x] 7. Daily automation: sensor polling the CopPhil OData endpoint for new
   scenes (reuse the query logic from `download_copphil_eodata.py` by reading
   it) that triggers the bronze→silver→gold chain; plus a daily cron schedule
   as fallback. Both OFF by default.
+  *Done: `automation.py` → job `copphil_chain_refresh` (bronze + downstream =
+  7 assets), `copphil_new_scene_sensor` (hourly OData poll per collection,
+  JSON cursor on ContentDate/Start, SkipReason when nothing new) and
+  `copphil_daily_schedule` (06:00 Asia/Manila) — both default STOPPED.
+  Verified: validate OK + live poll returned real latest-scene timestamps.*
 - [ ] 8. Compose: dagster-webserver + dagster-daemon services (new
   `compose.orchestration.yml` or extend `compose.viz.yml`, whichever fits
   better), loading the repo-root `.env`, code mounted, UI on a free port.

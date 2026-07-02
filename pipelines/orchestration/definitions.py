@@ -16,9 +16,14 @@ import assets_gold
 import assets_reference
 import assets_silver
 
+import automation
+
 defs = dg.Definitions(
     assets=dg.load_assets_from_modules(
         [assets_bronze, assets_silver, assets_gold, assets_reference]
     ),
+    jobs=[automation.copphil_chain_job],
+    sensors=[automation.copphil_new_scene_sensor],
+    schedules=[automation.copphil_daily_schedule],
     resources={"pipes_subprocess_client": dg.PipesSubprocessClient()},
 )
