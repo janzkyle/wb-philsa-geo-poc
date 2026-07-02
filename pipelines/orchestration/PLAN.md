@@ -86,9 +86,19 @@ one-line note, commit.
   JSON cursor on ContentDate/Start, SkipReason when nothing new) and
   `copphil_daily_schedule` (06:00 Asia/Manila) — both default STOPPED.
   Verified: validate OK + live poll returned real latest-scene timestamps.*
-- [ ] 8. Compose: dagster-webserver + dagster-daemon services (new
+- [x] 8. Compose: dagster-webserver + dagster-daemon services (new
   `compose.orchestration.yml` or extend `compose.viz.yml`, whichever fits
   better), loading the repo-root `.env`, code mounted, UI on a free port.
+  *Done: new repo-root `compose.orchestration.yml` (separate tier, mirrors
+  the viz pattern) + `pipelines/orchestration/Dockerfile` (python:3.12-slim,
+  gdal-bin/curl/unzip, dagster 1.13). Whole repo bind-mounted at /opt/philsa
+  (scripts need the AGENTS.md root marker); joins external
+  stac-fastapi-network (Postgres=`database`, STAC API=`app:8082`); UI on
+  host :3030 (3000 busy). Known gaps noted in Dockerfile: pmtiles
+  (tippecanoe) + mosaics (docker exec) assets run from host. `docker compose
+  config` OK. Watch item 9: a `.env` secret contains a literal `$` →
+  compose "QfJ" warnings (pre-existing, also hits compose.viz.yml); verify
+  the value survives env_file passthrough into the container.*
 - [ ] 9. Verify end-to-end: `dagster definitions validate` (or `dagster dev`
   smoke test) passes, compose services start, asset graph renders with correct
   lineage. Fix anything broken.

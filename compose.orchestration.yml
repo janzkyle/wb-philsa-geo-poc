@@ -1,0 +1,49 @@
+# Orchestration tier: Dagster webserver (UI) + daemon (sensors/schedules) for
+# the pipelines/ asset graph. See pipelines/orchestration/ for the definitions.
+#
+# Joins the pgSTAC compose network (stac-fastapi-network) so it reaches:
+#   - Postgres as `database:5432` (run/event storage in a `dagster` DB —
+#     create it once, see pipelines/orchestration/dagster.yaml)
+#   - the STAC API as `app:8082` (gold cataloging step)
+# Start the stac-fastapi-pgstac compose first, then:
+#
+#   docker compose -f compose.orchestration.yml up -d --build
+#
+# (No --env-file needed: this file interpolates nothing; the containers load
+# .env themselves via env_file. Host port 3000 is often busy, hence 3030.)
+# UI at http://localhost:3030. The repo is bind-mounted (scripts resolve the
+# repo root via the AGENTS.md marker); code edits only need a container restart.
+# The CopPhil sensor + daily schedule ship OFF — enable them in the UI.
+services:
+  dagster-webserver:
+    build: pipelines/orchestration
+    env_file:
+      - .env
+    environment:
+      DAGSTER_HOME: /opt/philsa/pipelines/orchestration
+      DAGSTER_PG_HOST: database
+      STAC_API: http://app:8082
+    volumes:
+      - .:/opt/philsa
+    ports:
+      - "3030:3000"
+    command: dagster-webserver -h 0.0.0.0 -p 3000 -m definitions
+    restart: unless-stopped
+
+  dagster-daemon:
+    build: pipelines/orchestration
+    env_file:
+      - .env
+    environment:
+      DAGSTER_HOME: /opt/philsa/pipelines/orchestration
+      DAGSTER_PG_HOST: database
+      STAC_API: http://app:8082
+    volumes:
+      - .:/opt/philsa
+    command: dagster-daemon run -m definitions
+    restart: unless-stopped
+
+networks:
+  default:
+    name: stac-fastapi-network
+    external: true
