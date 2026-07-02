@@ -41,8 +41,13 @@ one-line note, commit.
   `DAGSTER_HOME=<empty tmp dir> .venv/bin/dagster definitions validate` from
   `pipelines/orchestration/` — cwd dagster.yaml otherwise triggers a live PG
   connection.*
-- [ ] 2. Bronze asset: wrap `01-bronze/copphil-sentinel/download_copphil_eodata.py`
+- [x] 2. Bronze asset: wrap `01-bronze/copphil-sentinel/download_copphil_eodata.py`
   via `PipesSubprocessClient`. Do NOT modify the script.
+  *Done: `assets_bronze.py` → asset `bronze/copphil_sentinel` (group `bronze`),
+  config mirrors the CLI flags (`limit`/`days`/`max_cloud`/`dry_run`); script
+  isn't Pipes-aware so a clean exit = success and the asset returns its own
+  MaterializeResult. Verified with a real `--dry-run` materialization
+  (CopPhil auth + search OK, RUN_SUCCESS, no downloads).*
 - [ ] 3. Silver raster assets: `build_ndvi.sh`, `build_truecolor.sh`,
   `build_sar.sh`, `build_flood.sh` as assets depending on the bronze asset;
   `build_raster_mosaics.sh` depending on all four. Scripts wrapped as
