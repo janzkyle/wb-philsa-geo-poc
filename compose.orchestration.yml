@@ -9,10 +9,15 @@
 #
 #   docker compose -f compose.orchestration.yml up -d --build
 #
-# (No --env-file needed: this file interpolates nothing; the containers load
-# .env themselves via env_file. Host port 3000 is often busy, hence 3030.)
-# UI at http://localhost:3030. The repo is bind-mounted (scripts resolve the
-# repo root via the AGENTS.md marker); code edits only need a container restart.
+# Secrets (R2 / CopPhil) reach the containers via env_file: .env. The one value
+# env_file can't supply is the Dagster storage DB password: dagster.yaml needs
+# DAGSTER_PG_PASSWORD resolvable at config-load time, so it's set below via
+# ${DAGSTER_PG_PASSWORD:-password} — Compose auto-reads the repo-root .env for
+# interpolation and falls back to `password`, the pgSTAC dev credential already
+# committed in stac-fastapi-pgstac/compose.yml (not a real secret).
+# Host port 3000 is often busy, hence 3030 -> UI at http://localhost:3030.
+# The repo is bind-mounted (scripts resolve the repo root via the AGENTS.md
+# marker); code edits only need a container restart.
 # The CopPhil sensor + daily schedule ship OFF — enable them in the UI.
 services:
   dagster-webserver:
@@ -22,6 +27,7 @@ services:
     environment:
       DAGSTER_HOME: /opt/philsa/pipelines/orchestration
       DAGSTER_PG_HOST: database
+      DAGSTER_PG_PASSWORD: "${DAGSTER_PG_PASSWORD:-password}"
       STAC_API: http://app:8082
     volumes:
       - .:/opt/philsa
@@ -37,6 +43,7 @@ services:
     environment:
       DAGSTER_HOME: /opt/philsa/pipelines/orchestration
       DAGSTER_PG_HOST: database
+      DAGSTER_PG_PASSWORD: "${DAGSTER_PG_PASSWORD:-password}"
       STAC_API: http://app:8082
     volumes:
       - .:/opt/philsa

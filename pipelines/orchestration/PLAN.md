@@ -99,8 +99,17 @@ one-line note, commit.
   config` OK. Watch item 9: a `.env` secret contains a literal `$` →
   compose "QfJ" warnings (pre-existing, also hits compose.viz.yml); verify
   the value survives env_file passthrough into the container.*
-- [ ] 9. Verify end-to-end: `dagster definitions validate` (or `dagster dev`
+- [x] 9. Verify end-to-end: `dagster definitions validate` (or `dagster dev`
   smoke test) passes, compose services start, asset graph renders with correct
   lineage. Fix anything broken.
+  *Done: created the `dagster` DB on pgSTAC Postgres, built + brought up both
+  compose services. FIXED a real bug: containers crash-looped because
+  `DAGSTER_PG_PASSWORD` wasn't in the real repo `.env` (only in `.env.example`)
+  and env_file can't feed dagster.yaml's config-load-time env lookup — added
+  `DAGSTER_PG_PASSWORD: "${DAGSTER_PG_PASSWORD:-password}"` to both services
+  (default = committed pgSTAC dev cred). After the fix: webserver serves all
+  11 assets via GraphQL with correct lineage, daemon runs all 6 sub-daemons,
+  Postgres storage auto-created 22 tables in the `dagster` DB, and both the
+  sensor and schedule report STOPPED. Stack left running (UI :3030).*
 - [ ] 10. Docs: orchestration section in `pipelines/README.md` (manual runs via
   UI/CLI, enabling the sensor/schedule) and update `TODO.md`.
