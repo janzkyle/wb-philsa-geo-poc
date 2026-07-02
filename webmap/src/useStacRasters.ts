@@ -4,7 +4,6 @@ import { STAC_API, TITILER } from "./config";
 export interface RasterItem {
   id: string;
   tileUrl: string; // XYZ template with {z}/{x}/{y}
-  bbox?: [number, number, number, number];
   datetime?: string; // RFC 3339 acquisition time, if the item carries one
 }
 
@@ -27,7 +26,6 @@ export function mosaicTileUrl(mosaicUrl: string, params: string): string {
 // area of interest (Tier 1 has only ~9 items per collection).
 export function useStacRasters(collection: string, params: string) {
   const [items, setItems] = useState<RasterItem[]>([]);
-  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -45,14 +43,14 @@ export function useStacRasters(collection: string, params: string) {
           out.push({
             id: f.id,
             tileUrl: titilerTileUrl(href, params),
-            bbox: f.bbox,
             // STAC items use `datetime`, or start/end for a range item.
             datetime: f.properties?.datetime ?? f.properties?.start_datetime,
           });
         }
         if (!cancelled) setItems(out);
       } catch (e) {
-        if (!cancelled) setError(String(e));
+        // POC: a failed collection just renders nothing; log so it's not silent.
+        if (!cancelled) console.error(`useStacRasters(${collection}):`, e);
       }
     })();
     return () => {
@@ -60,5 +58,5 @@ export function useStacRasters(collection: string, params: string) {
     };
   }, [collection, params]);
 
-  return { items, error };
+  return { items };
 }

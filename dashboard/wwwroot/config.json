@@ -41,7 +41,7 @@
     // See comments in lib/Views/global.scss for further information about customising colors, logos, fonts etc.
     "brandBarElements": [
       "",
-      "<div style=\"display:flex;align-items:center;height:52px;padding:0 14px;font-family:'Segoe UI',Roboto,Helvetica,sans-serif;color:#1d5285;font-weight:700;font-size:16px;letter-spacing:0.02em\" title=\"Version: {{version}}\">PhilSA POC<span style=\"font-weight:400;color:#5a84aa;margin-left:8px\">Space Data Dashboard</span></div>",
+      "<div style=\"display:flex;align-items:center;height:52px;padding:0 14px;font-family:'Segoe UI',Roboto,Helvetica,sans-serif;color:#1d5285;font-weight:700;font-size:16px;letter-spacing:0.02em\" title=\"Version: {{version}}\">PhilSA POC<span style=\"font-weight:400;color:#5a84aa;margin-left:8px\">Geo Data Dashboard</span></div>",
       ""
     ],
     // Shown when things go wrong.

@@ -15,7 +15,7 @@ const API_KEY = process.env.OPENROUTER_API_KEY;
 const OPENROUTER_URL =
   process.env.OPENROUTER_URL || "https://openrouter.ai/api/v1/chat/completions";
 
-// Keep in sync with lib/Models/genai/openrouterConfig.ts (OPENROUTER_MODELS).
+// This is the single source of truth for the model fall-through order.
 // NOTE: OpenRouter caps this array at 3 items — more is a hard 400.
 const MODELS = [
   "nvidia/nemotron-3-super-120b-a12b:free",
@@ -24,7 +24,7 @@ const MODELS = [
 ];
 
 const SYSTEM_PROMPT = [
-  "You are the assistant for the PhilSA POC Space Data Dashboard, a TerriaJS map",
+  "You are the assistant for the PhilSA POC Geo Data Dashboard, a TerriaJS map",
   "of Philippine Earth-observation layers (Sentinel-2 NDVI, Sentinel-1 SAR,",
   "ESRI land cover, true-colour imagery, Diwata-2, and administrative boundaries).",
   "",
