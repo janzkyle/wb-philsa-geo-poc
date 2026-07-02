@@ -48,10 +48,17 @@ one-line note, commit.
   isn't Pipes-aware so a clean exit = success and the asset returns its own
   MaterializeResult. Verified with a real `--dry-run` materialization
   (CopPhil auth + search OK, RUN_SUCCESS, no downloads).*
-- [ ] 3. Silver raster assets: `build_ndvi.sh`, `build_truecolor.sh`,
+- [x] 3. Silver raster assets: `build_ndvi.sh`, `build_truecolor.sh`,
   `build_sar.sh`, `build_flood.sh` as assets depending on the bronze asset;
   `build_raster_mosaics.sh` depending on all four. Scripts wrapped as
   subprocesses, unmodified.
+  *Done: `assets_silver.py` → `silver/{sentinel2_ndvi,sentinel2_truecolor,
+  sentinel1_sar,sentinel1_flood,raster_mosaics}` (group `silver`); env-var
+  params exposed as run config (SCENE/FORCE/POL/SAR_NAME/METHOD/COLLECTIONS,
+  empty = script default). Deviation from checklist wording: flood depends on
+  `silver/sentinel1_sar` (the script reads the silver VV-dB COG, not bronze) —
+  truer lineage. Verified: definitions validate + parent-key graph printed
+  correct. No materialization (guardrail: big downloads).*
 - [ ] 4. Silver vector assets: `build_ph_admin_geoparquet.sh` and
   `build_ph_admin_pmtiles.sh` (pmtiles depends on geoparquet). No upstream
   dependency — manual-run.

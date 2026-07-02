@@ -12,8 +12,9 @@ Load locally with ``dagster dev`` from this directory, or validate with
 import dagster as dg
 
 import assets_bronze
+import assets_silver
 
 defs = dg.Definitions(
-    assets=dg.load_assets_from_modules([assets_bronze]),
+    assets=dg.load_assets_from_modules([assets_bronze, assets_silver]),
     resources={"pipes_subprocess_client": dg.PipesSubprocessClient()},
 )
