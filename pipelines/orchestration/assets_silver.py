@@ -46,6 +46,16 @@ class FloodBuildConfig(dg.Config):
     force: bool = False
 
 
+class AdminGeoparquetConfig(dg.Config):
+    tolerance_m: int = 0  # simplification tolerance in meters; 0 = full resolution
+    levels: str = ""  # space-separated admin levels; empty = script default (0 1 2 3 4)
+
+
+class AdminPmtilesConfig(dg.Config):
+    levels: str = ""  # space-separated admin levels; empty = script default (0 1 2)
+    dry_run: bool = False  # build PMTiles but skip the R2 upload
+
+
 class MosaicsConfig(dg.Config):
     collections: str = ""  # space-separated; empty = script default (all three)
     stac_api: str = ""  # empty = script default (http://localhost:8082)
@@ -135,6 +145,57 @@ def sentinel1_flood(
             "METHOD": config.method,
             "FORCE": "1" if config.force else "",
         },
+    )
+
+
+@dg.asset(
+    key=dg.AssetKey(["silver", "ph_admin_geoparquet"]),
+    group_name="silver",
+    kinds={"bash"},
+    description=(
+        "PH admin boundary GeoParquet (adm0–adm4) from the OCHA COD-AB "
+        "geodatabase on HDX → R2 02-silver/ph-admin-boundaries/ "
+        "(build_ph_admin_geoparquet.sh). Manual-run: source is external, "
+        "no upstream asset."
+    ),
+)
+def ph_admin_geoparquet(
+    context: dg.AssetExecutionContext,
+    config: AdminGeoparquetConfig,
+    pipes_subprocess_client: dg.PipesSubprocessClient,
+) -> dg.MaterializeResult:
+    return _run_silver_script(
+        context,
+        pipes_subprocess_client,
+        SILVER_DIR / "ph-admin-boundaries" / "build_ph_admin_geoparquet.sh",
+        {
+            "TOLERANCE_M": str(config.tolerance_m) if config.tolerance_m else "",
+            "LEVELS": config.levels,
+        },
+    )
+
+
+@dg.asset(
+    key=dg.AssetKey(["silver", "ph_admin_pmtiles"]),
+    group_name="silver",
+    kinds={"bash"},
+    deps=[ph_admin_geoparquet],
+    description=(
+        "PH admin boundary PMTiles (adm0–adm2) for the webmap, tiled from the "
+        "GeoParquet already on R2 → 02-silver/ph-admin-boundaries/pmtiles/ "
+        "(build_ph_admin_pmtiles.sh; needs tippecanoe + aws CLI)."
+    ),
+)
+def ph_admin_pmtiles(
+    context: dg.AssetExecutionContext,
+    config: AdminPmtilesConfig,
+    pipes_subprocess_client: dg.PipesSubprocessClient,
+) -> dg.MaterializeResult:
+    return _run_silver_script(
+        context,
+        pipes_subprocess_client,
+        SILVER_DIR / "ph-admin-boundaries" / "build_ph_admin_pmtiles.sh",
+        {"LEVELS": config.levels, "DRY_RUN": "1" if config.dry_run else ""},
     )
 
 

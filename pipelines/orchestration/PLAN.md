@@ -59,9 +59,13 @@ one-line note, commit.
   `silver/sentinel1_sar` (the script reads the silver VV-dB COG, not bronze) —
   truer lineage. Verified: definitions validate + parent-key graph printed
   correct. No materialization (guardrail: big downloads).*
-- [ ] 4. Silver vector assets: `build_ph_admin_geoparquet.sh` and
+- [x] 4. Silver vector assets: `build_ph_admin_geoparquet.sh` and
   `build_ph_admin_pmtiles.sh` (pmtiles depends on geoparquet). No upstream
   dependency — manual-run.
+  *Done: `silver/ph_admin_geoparquet` (config: `tolerance_m`, `levels`) and
+  `silver/ph_admin_pmtiles` (config: `levels`, `dry_run`; depends on
+  geoparquet) added to `assets_silver.py`. Validated; lineage confirmed
+  (geoparquet has no parents, pmtiles ← geoparquet).*
 - [ ] 5. Gold asset: `03-gold/catalog_silver.py` depending on the silver raster
   + mosaic assets.
 - [ ] 6. Reference assets: `mirror_philsa_catalog.py` and `load_esri_lulc.sh`
