@@ -22,6 +22,11 @@ from pathlib import Path
 
 STAC_API = os.environ.get("STAC_API", "http://localhost:8082").rstrip("/")
 TITILER = os.environ.get("TITILER", "http://localhost:8083").rstrip("/")
+# STAC Browser (human-facing UI over the same catalog). Info-only collections
+# link here first — a rendered view of thumbnails/footprints/metadata beats raw
+# JSON for dashboard users. Route scheme is `/collections/{id}` (STAC Browser
+# `toBrowserPath`, with catalogUrl == STAC_API).
+STAC_BROWSER = os.environ.get("STAC_BROWSER", "http://localhost:8080").rstrip("/")
 R2_PUBLIC_BASE = os.environ.get(
     "R2_PUBLIC_BASE", "https://pub-17ab60a2ca7142a48ae8e2685cd853f7.r2.dev"
 ).rstrip("/")
@@ -229,10 +234,18 @@ def coll_info_sections(coll_id):
 
 
 def coll_metadata_urls(coll_id):
-    return [{
-        "title": "STAC collection (JSON)",
-        "url": f"{STAC_API}/collections/{coll_id}",
-    }]
+    # Lead with the human-facing STAC Browser; keep the raw API JSON as a
+    # secondary developer link.
+    return [
+        {
+            "title": "Browse in STAC Browser",
+            "url": f"{STAC_BROWSER}/collections/{coll_id}",
+        },
+        {
+            "title": "STAC collection (raw JSON)",
+            "url": f"{STAC_API}/collections/{coll_id}",
+        },
+    ]
 
 
 def plat_instr(props):
@@ -447,8 +460,8 @@ def build_info_group(coll_id, label):
         "description": (
             f"The `{coll_id}` STAC collection ({len(feats)} item(s)) is catalogued "
             "**by reference** — only thumbnails and cloud-hosted metadata are public, "
-            "so there is no map-tileable COG to render here. Browse the items via the "
-            f"STAC API: {STAC_API}/collections/{coll_id}/items" + thumb
+            "so there is no map-tileable COG to render here. Browse the scenes in the "
+            f"[STAC Browser]({STAC_BROWSER}/collections/{coll_id})." + thumb
         ),
         "info": coll_info_sections(coll_id),
         "metadataUrls": coll_metadata_urls(coll_id),

@@ -85,7 +85,8 @@ actually present are shown** (no empty rows, no raw JSON):
 
 - **Group `info` sections**: *About this dataset* (STAC description), *Coverage*
   (time span + bounding area), *Source & licence* (providers, licence, keywords),
-  plus a `metadataUrls` link to the live STAC collection JSON.
+  plus `metadataUrls` links — first to the human-facing **STAC Browser**
+  (`:8080`, override with `STAC_BROWSER`), then the raw STAC collection JSON.
 - **Per-item description**: acquisition date, platform / instrument, GSD / cloud
   cover where available, granule count for combined per-date layers, and a
   thumbnail preview for collections that publish one (Diwata-2, SkySat,
@@ -131,6 +132,64 @@ dashboard doesn't use):
 1. Add two dated items from the same collection to the workbench.
 2. On one item's `⋮` menu choose **Compare** (Split Screen).
 3. Put a different date on each side and drag the slider to swipe.
+
+## AI dashboard assistant (GenAI helper)
+
+A floating **"✦ Ask AI"** button (bottom-right) opens a chat panel that
+**interprets what's currently on the map**. Click **"Explain this view"** for a
+plain-language summary of the active layers, or ask free-form follow-up
+questions — the answer is grounded in the metadata of whatever you have
+displayed, not generic knowledge.
+
+How it works:
+
+- **State snapshot (client).** On every send, `captureDashboardContext`
+  (`lib/Models/genai/dashboardContext.ts`) reads Terria's live model state — the
+  workbench items with the STAC metadata the generator injected (platform,
+  instrument, date, GSD, cloud cover, licence, providers), each layer's `info`
+  sections, and the current camera extent — into a compact JSON object. It reads
+  the model, **not the DOM**, so answers reflect exactly what's enabled.
+- **Proxy (server, holds the key).** The browser never sees the API key. It POSTs
+  `{context, messages}` to a tiny zero-dependency proxy
+  (`genai-proxy/server.js`) that holds `OPENROUTER_API_KEY`, calls **OpenRouter**
+  with our free-model fall-through list, and streams the reply straight back
+  (SSE). The panel (`lib/Views/GenAIAssistant/GenAIAssistant.tsx`) renders the
+  stream token-by-token.
+- **Models (free tier, with fallback).** OpenRouter is sent a `models` array so a
+  down / rate-limited model auto-falls-through to the next. **OpenRouter caps this
+  array at 3 items** (more is a hard 400). Order (edit in
+  `lib/Models/genai/openrouterConfig.ts` **and** the mirror in `server.js`):
+  `nvidia/nemotron-3-super-120b-a12b:free` → `qwen/qwen3-next-80b-a3b-instruct:free`
+  → `openai/gpt-oss-120b:free`. All `:free`; ranked for reasoning over structured
+  EO metadata + open chat. (`meta-llama/llama-3.3-70b-instruct:free` is a good 4th
+  choice but doesn't fit the 3-item cap.)
+
+  Note: the top model (nemotron) is a *reasoning* model — it streams internal
+  reasoning tokens first, so the panel may show "…" for a moment before visible
+  text appears.
+
+Run it (in addition to `yarn gulp dev`):
+
+```bash
+cd genai-proxy
+cp .env.example .env          # then paste your key from https://openrouter.ai/keys
+set -a && source .env && set +a
+node server.js                # listens on http://localhost:8084
+```
+
+The client defaults to `http://localhost:8084/api/chat`; override without a
+rebuild via `window.GENAI_PROXY_URL`. If the proxy is down or the key is missing,
+the panel shows a friendly error instead of crashing. `.env` is git-ignored so
+the key can't be committed.
+
+The streaming path (context injection, retained follow-up history, SSE
+passthrough, model-fallback order) is covered by an integration test that mocks
+the upstream, so it runs without a real key: `cd genai-proxy && npm test`.
+
+**Future (nice-to-have):** feed **TiTiler `/cog/point` / `/statistics`** values
+for the current view into the context so the assistant can interpret *actual
+pixel values* — which would also close the "no click-to-read pixel values" gap
+below.
 
 ## Known gaps (POC)
 

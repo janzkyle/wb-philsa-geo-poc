@@ -1,0 +1,14 @@
+{
+  "name": "philsa-genai-proxy",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Zero-dependency proxy that keeps the OpenRouter API key server-side for the PhilSA POC GenAI assistant.",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node test/mock-upstream-test.mjs"
+  },
+  "engines": {
+    "node": ">= 20.0.0"
+  }
+}

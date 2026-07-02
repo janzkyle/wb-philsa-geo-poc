@@ -46,7 +46,11 @@
           ],
           "metadataUrls": [
             {
-              "title": "STAC collection (JSON)",
+              "title": "Browse in STAC Browser",
+              "url": "http://localhost:8080/collections/mula"
+            },
+            {
+              "title": "STAC collection (raw JSON)",
               "url": "http://localhost:8082/collections/mula"
             }
           ],
@@ -144,7 +148,11 @@
           ],
           "metadataUrls": [
             {
-              "title": "STAC collection (JSON)",
+              "title": "Browse in STAC Browser",
+              "url": "http://localhost:8080/collections/sentinel2-ndvi"
+            },
+            {
+              "title": "STAC collection (raw JSON)",
               "url": "http://localhost:8082/collections/sentinel2-ndvi"
             }
           ],
@@ -532,7 +540,11 @@
           ],
           "metadataUrls": [
             {
-              "title": "STAC collection (JSON)",
+              "title": "Browse in STAC Browser",
+              "url": "http://localhost:8080/collections/sentinel1-sar"
+            },
+            {
+              "title": "STAC collection (raw JSON)",
               "url": "http://localhost:8082/collections/sentinel1-sar"
             }
           ],
@@ -856,7 +868,11 @@
           ],
           "metadataUrls": [
             {
-              "title": "STAC collection (JSON)",
+              "title": "Browse in STAC Browser",
+              "url": "http://localhost:8080/collections/esri-10m-lulc"
+            },
+            {
+              "title": "STAC collection (raw JSON)",
               "url": "http://localhost:8082/collections/esri-10m-lulc"
             }
           ],
@@ -941,7 +957,11 @@
           ],
           "metadataUrls": [
             {
-              "title": "STAC collection (JSON)",
+              "title": "Browse in STAC Browser",
+              "url": "http://localhost:8080/collections/sentinel2-truecolor"
+            },
+            {
+              "title": "STAC collection (raw JSON)",
               "url": "http://localhost:8082/collections/sentinel2-truecolor"
             }
           ],
@@ -1081,7 +1101,11 @@
           ],
           "metadataUrls": [
             {
-              "title": "STAC collection (JSON)",
+              "title": "Browse in STAC Browser",
+              "url": "http://localhost:8080/collections/diwata-2"
+            },
+            {
+              "title": "STAC collection (raw JSON)",
               "url": "http://localhost:8082/collections/diwata-2"
             }
           ],
@@ -1453,7 +1477,7 @@
           "type": "group",
           "id": "philsa-skysat",
           "name": "SkySat (Planet) \u2014 high-res optical (by reference, not tiled)",
-          "description": "The `skysat` STAC collection (45 item(s)) is catalogued **by reference** \u2014 only thumbnails and cloud-hosted metadata are public, so there is no map-tileable COG to render here. Browse the items via the STAC API: http://localhost:8082/collections/skysat/items\n\n![preview](https://storage.googleapis.com/dpad-bucket/SS/Scene/20230616_222848_ssc15d3_0013/20230616_222848_ssc15d3_0013_pansharpened_thumbnail.png)",
+          "description": "The `skysat` STAC collection (45 item(s)) is catalogued **by reference** \u2014 only thumbnails and cloud-hosted metadata are public, so there is no map-tileable COG to render here. Browse the scenes in the [STAC Browser](http://localhost:8080/collections/skysat).\n\n![preview](https://storage.googleapis.com/dpad-bucket/SS/Scene/20230616_222848_ssc15d3_0013/20230616_222848_ssc15d3_0013_pansharpened_thumbnail.png)",
           "info": [
             {
               "name": "About this dataset",
@@ -1470,7 +1494,11 @@
           ],
           "metadataUrls": [
             {
-              "title": "STAC collection (JSON)",
+              "title": "Browse in STAC Browser",
+              "url": "http://localhost:8080/collections/skysat"
+            },
+            {
+              "title": "STAC collection (raw JSON)",
               "url": "http://localhost:8082/collections/skysat"
             }
           ],
@@ -1480,7 +1508,7 @@
           "type": "group",
           "id": "philsa-planetscope",
           "name": "PlanetScope (Planet) \u2014 daily optical (by reference, not tiled)",
-          "description": "The `planetscope` STAC collection (98 item(s)) is catalogued **by reference** \u2014 only thumbnails and cloud-hosted metadata are public, so there is no map-tileable COG to render here. Browse the items via the STAC API: http://localhost:8082/collections/planetscope/items\n\n![preview](https://storage.googleapis.com/dpad-bucket/PS/Scene/20230510_011527_88_24b4/20230510_011527_88_24b4_3B_AnalyticMS_SR_8b_harmonized_clip_thumbnail.png)",
+          "description": "The `planetscope` STAC collection (98 item(s)) is catalogued **by reference** \u2014 only thumbnails and cloud-hosted metadata are public, so there is no map-tileable COG to render here. Browse the scenes in the [STAC Browser](http://localhost:8080/collections/planetscope).\n\n![preview](https://storage.googleapis.com/dpad-bucket/PS/Scene/20230510_011527_88_24b4/20230510_011527_88_24b4_3B_AnalyticMS_SR_8b_harmonized_clip_thumbnail.png)",
           "info": [
             {
               "name": "About this dataset",
@@ -1497,7 +1525,11 @@
           ],
           "metadataUrls": [
             {
-              "title": "STAC collection (JSON)",
+              "title": "Browse in STAC Browser",
+              "url": "http://localhost:8080/collections/planetscope"
+            },
+            {
+              "title": "STAC collection (raw JSON)",
               "url": "http://localhost:8082/collections/planetscope"
             }
           ],
