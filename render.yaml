@@ -1,0 +1,142 @@
+# PhilSA POC — Render Blueprint (Infrastructure as Code).
+#
+# One file deploys the whole app surface on Render's FREE tier:
+#   • philsa-stac-api  — STAC FastAPI (Docker, from the stac-fastapi-pgstac submodule)
+#   • philsa-titiler   — dynamic raster tiler for the R2 COGs (Docker)
+#   • philsa-browser   — STAC Browser explorer UI (static site)
+#   • philsa-webmap    — MapLibre webmap (static site)
+#
+# The database is NOT here — it lives on Neon (see deploy/DEPLOYMENT.md).
+# Deploy: push this repo to GitHub, then Render ▸ New ▸ Blueprint ▸ pick the repo.
+# Secrets (Neon creds, R2 keys) are marked `sync: false` — Render prompts for
+# them at deploy time and never stores them in git.
+#
+# NOTE on URLs: the frontend build vars below assume Render gives each service
+# its `https://<name>.onrender.com` URL. If a name is already taken in your
+# account Render appends a suffix — then update the *_API / SB_catalogUrl vars to
+# the real URLs and redeploy the two static sites. See DEPLOYMENT.md §5.
+
+services:
+  # ---------------------------------------------------------------- STAC API --
+  - type: web
+    name: philsa-stac-api
+    runtime: docker
+    plan: free
+    region: singapore                       # closest free region to the Philippines
+    dockerfilePath: ./stac-fastapi-pgstac/Dockerfile
+    dockerContext: ./stac-fastapi-pgstac
+    dockerCommand: uvicorn stac_fastapi.pgstac.app:app --host 0.0.0.0 --port $PORT
+    autoDeploy: false
+    healthCheckPath: /_mgmt/ping
+    envVars:
+      - key: ENVIRONMENT
+        value: production
+      # --- Neon connection (fill in at deploy time from prod.env) ---
+      - key: PGHOST
+        sync: false
+      - key: PGPORT
+        value: "5432"
+      - key: PGUSER
+        sync: false
+      - key: PGPASSWORD
+        sync: false
+      - key: PGDATABASE
+        value: neondb
+      - key: PGSSLMODE       # Neon requires TLS
+        value: require
+      # --- pgSTAC / server tuning (free tier = 512 MB, keep the pool tiny) ---
+      - key: DB_MIN_CONN_SIZE
+        value: "1"
+      - key: DB_MAX_CONN_SIZE
+        value: "1"
+      - key: WEB_CONCURRENCY
+        value: "1"
+      - key: USE_API_HYDRATE
+        value: "false"
+      - key: ENABLE_TRANSACTIONS_EXTENSIONS   # ingest scripts write over HTTP
+        value: "true"
+      - key: VSI_CACHE
+        value: "TRUE"
+      - key: GDAL_HTTP_MERGE_CONSECUTIVE_RANGES
+        value: "YES"
+      - key: GDAL_DISABLE_READDIR_ON_OPEN
+        value: EMPTY_DIR
+      # --- PhilSA branding (landing page / OpenAPI docs) ---
+      - key: STAC_FASTAPI_TITLE
+        value: PhilSA Geospatial STAC API
+      - key: STAC_FASTAPI_LANDING_ID
+        value: philsa-geo-stac
+
+  # ----------------------------------------------------------------- TiTiler --
+  - type: web
+    name: philsa-titiler
+    runtime: docker
+    plan: free
+    region: singapore
+    dockerfilePath: ./deploy/titiler/Dockerfile
+    dockerContext: ./deploy/titiler
+    autoDeploy: false
+    envVars:
+      # R2 (S3-compatible) creds — same values as the repo-root .env.
+      - key: AWS_ACCESS_KEY_ID
+        sync: false
+      - key: AWS_SECRET_ACCESS_KEY
+        sync: false
+      - key: AWS_S3_ENDPOINT                  # <R2_ACCOUNT_ID>.r2.cloudflarestorage.com
+        sync: false
+      - key: AWS_VIRTUAL_HOSTING
+        value: "FALSE"
+      - key: AWS_DEFAULT_REGION
+        value: auto
+      - key: AWS_HTTPS
+        value: "YES"
+      - key: GDAL_DISABLE_READDIR_ON_OPEN
+        value: EMPTY_DIR
+      - key: GDAL_HTTP_MERGE_CONSECUTIVE_RANGES
+        value: "YES"
+      - key: CPL_VSIL_CURL_ALLOWED_EXTENSIONS
+        value: ".tif,.tiff"
+      - key: VSI_CACHE
+        value: "TRUE"
+      - key: TITILER_API_CORS_ORIGINS
+        value: "*"
+
+  # ------------------------------------------------------------ STAC Browser --
+  # Static site: type=web + runtime=static. staticPublishPath is relative to the
+  # repo root, so we `cd` into the submodule in the build command rather than
+  # relying on rootDir (which does not rebase the publish path).
+  - type: web
+    runtime: static
+    name: philsa-browser
+    buildCommand: cd stac-browser && npm ci && npm run build
+    staticPublishPath: stac-browser/dist
+    autoDeploy: false
+    pullRequestPreviewsEnabled: false
+    envVars:
+      # The Browser is locked to this one catalog (allowExternalAccess:false).
+      - key: SB_catalogUrl
+        value: https://wb-philsa-stac-api.onrender.com
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+
+  # ----------------------------------------------------------------- Webmap ---
+  - type: web
+    runtime: static
+    name: philsa-webmap
+    buildCommand: cd webmap && npm ci && npm run build
+    staticPublishPath: webmap/dist
+    autoDeploy: false
+    pullRequestPreviewsEnabled: false
+    envVars:
+      - key: VITE_STAC_API
+        value: https://wb-philsa-stac-api.onrender.com
+      - key: VITE_TITILER
+        value: https://wb-philsa-titiler.onrender.com
+      - key: VITE_R2_PUBLIC_BASE
+        value: https://pub-17ab60a2ca7142a48ae8e2685cd853f7.r2.dev
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html

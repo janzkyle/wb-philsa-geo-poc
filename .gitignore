@@ -6,6 +6,12 @@
 !.env.example
 !**/.env.example
 
+# deployment: real per-environment env files hold secrets; templates stay tracked
+deploy/environments/*.env
+!deploy/environments/*.env.example
+# local venv the deploy scripts build for pypgstac
+deploy/.venv/
+
 # generated PH admin boundary GeoParquet (rebuild via the ph-admin-geoparquet skill)
 phl_adm*.parquet
 

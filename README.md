@@ -10,6 +10,11 @@ Mermaid diagram to see how the pieces connect). Contributing or working in this
 repo? Read **`AGENTS.md`** for the conventions and guardrails — this README is
 just *what it is* and *how to run it*.
 
+**Deploying it for free?** See **`deploy/DEPLOYMENT.md`** — the prod database on
+Neon, the app tier on Render (one `render.yaml` Blueprint), plus scripts in
+`deploy/scripts/` to make it repeatable across the `local` and `prod`
+environments.
+
 ## Repository layout
 
 | Path                                  | What it is                                                                                                                                                                                                                     |
@@ -124,8 +129,10 @@ inside the submodule, push to `origin`, then record the new gitlink as above.
 - ◐ **Storage (Cloudflare R2).** Public bucket live (open COGs + PMTiles). Next:
   the private bucket for sensitive/licensed imagery, plus presigned URLs for
   restricted assets.
-- ◐ **Frontend.** STAC Browser is up; the MapLibre webmap and TerriaJS dashboard
-  render the open layers via TiTiler. Next: restricted/authenticated layers.
+- ◐ **Frontend.** STAC Browser is up; the MapLibre webmap (rebuilt **AI-first**:
+  a chat assistant drives the same layer store as the manual panel via STAC
+  tools — see `webmap/README.md`) and TerriaJS dashboard render the open layers
+  via TiTiler. Next: restricted/authenticated layers.
 - 🔜 **Auth & governance.** Identity provider + RBAC, collection-level access
   control, and the open/restricted data-sharing policy.
 
