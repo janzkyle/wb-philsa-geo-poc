@@ -4,15 +4,17 @@
 # Silver step: extract the Sentinel-2 L2A true-colour image (TCI, 10 m) and
 # write it as a Cloud-Optimized GeoTIFF to Cloudflare R2.
 #
-#   Input  : a raw S2 L2A .SAFE.zip — staged from R2 bronze, or a local file.
+#   Input  : a raw S2 L2A .SAFE.zip — resolved local-first (local bronze dir ->
+#            R2-download cache -> R2).
 #   Output : <scene>_TCI.tif (8-bit RGB COG) under 02-silver/sentinel2-truecolor/
 #            in R2 (or a local dir if R2_BUCKET is unset).
 #
 # This is the "clip/extract" silver product: a ready-to-view RGB basemap COG.
 # Cataloguing in pgSTAC is the later (gold) step. See pipelines/README.md.
 #
-# Parameters (env): SCENE, SAFE, BRONZE_PREFIX, OUTPUT_DIR, STAGING, FORCE,
-#   and the R2_* / AWS_* set from .env. Requires GDAL >= 3.8, curl, unzip.
+# Parameters (env): SCENE, SAFE, BRONZE_DIR, BRONZE_PREFIX, OUTPUT_DIR, STAGING,
+#   FORCE, and the R2_* / AWS_* set from .env. Requires GDAL >= 3.8, curl, unzip.
+#   BRONZE_DIR = local dir of raw scenes (default <repo>/eodata; checked before R2).
 #
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -21,15 +23,17 @@ while [ "$REPO_ROOT" != "/" ]; do
   if [ -e "$REPO_ROOT/.git" ] || [ -e "$REPO_ROOT/AGENTS.md" ]; then break; fi
   REPO_ROOT="$(dirname "$REPO_ROOT")"
 done
+. "${REPO_ROOT}/pipelines/lib/load_env.sh"
 for _envf in "${ENV_FILE:-}" "${PWD}/.env" "${REPO_ROOT}/.env" "${SCRIPT_DIR}/.env"; do
   if [ -n "$_envf" ] && [ -f "$_envf" ]; then
-    echo ">> loading env from ${_envf}"; set -a; . "$_envf"; set +a; break
+    echo ">> loading env from ${_envf}"; load_env "$_envf"; break
   fi
 done
 
 BRONZE_PREFIX="${BRONZE_PREFIX:-01-bronze/copphil-sentinel}"
 SCENE="${SCENE:-S2C_MSIL2A_20260615T021531_N0512_R003_T51QWA_20260615T054156.SAFE.zip}"
-STAGING="${STAGING:-${REPO_ROOT}/eodata/_staging}"
+BRONZE_DIR="${BRONZE_DIR:-${REPO_ROOT}/eodata}"        # local bronze scenes (download_copphil_eodata.py --out)
+STAGING="${STAGING:-${REPO_ROOT}/eodata/_staging}"     # cache for scenes pulled from R2
 OUTPUT_DIR="${OUTPUT_DIR:-${REPO_ROOT}/eodata}"
 R2_BUCKET="${R2_BUCKET:-}"; R2_PREFIX="${R2_PREFIX:-02-silver/sentinel2-truecolor}"
 R2_PUBLIC_BASE="${R2_PUBLIC_BASE:-}"
@@ -45,8 +49,9 @@ if [ -n "$R2_BUCKET" ] && [ "${FORCE:-0}" != "1" ] && [ -n "${R2_ACCOUNT_ID:-}" 
   fi
 fi
 
-# 1) get the SAFE zip locally (cache)
+# 1) get the SAFE zip — local first (bronze dir, then cache), R2 last
 if [ -n "${SAFE:-}" ] && [ -f "${SAFE}" ]; then ZIP="$SAFE"; echo ">> input: local ${ZIP}"
+elif [ -s "${BRONZE_DIR}/${SCENE}" ]; then ZIP="${BRONZE_DIR}/${SCENE}"; echo ">> input: local bronze ${ZIP}"
 else
   ZIP="${STAGING}/${SCENE}"
   if [ -s "$ZIP" ]; then echo ">> input: cached ${ZIP}"

@@ -29,6 +29,16 @@ services:
       DAGSTER_PG_HOST: database
       DAGSTER_PG_PASSWORD: "${DAGSTER_PG_PASSWORD:-password}"
       STAC_API: http://app:8082
+      # GDAL/rasterio S3 config so the in-container mosaic build (cogeo-mosaic)
+      # reads silver COGs from R2 the same way TiTiler does (mirrors compose.viz.yml).
+      AWS_S3_ENDPOINT: "${R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
+      AWS_VIRTUAL_HOSTING: "FALSE"
+      AWS_DEFAULT_REGION: auto
+      AWS_HTTPS: "YES"
+      GDAL_DISABLE_READDIR_ON_OPEN: EMPTY_DIR
+      GDAL_HTTP_MERGE_CONSECUTIVE_RANGES: "YES"
+      CPL_VSIL_CURL_ALLOWED_EXTENSIONS: ".tif,.tiff"
+      VSI_CACHE: "TRUE"
     volumes:
       - .:/opt/philsa
     ports:
@@ -45,6 +55,16 @@ services:
       DAGSTER_PG_HOST: database
       DAGSTER_PG_PASSWORD: "${DAGSTER_PG_PASSWORD:-password}"
       STAC_API: http://app:8082
+      # GDAL/rasterio S3 config so the in-container mosaic build (cogeo-mosaic)
+      # reads silver COGs from R2 the same way TiTiler does (mirrors compose.viz.yml).
+      AWS_S3_ENDPOINT: "${R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
+      AWS_VIRTUAL_HOSTING: "FALSE"
+      AWS_DEFAULT_REGION: auto
+      AWS_HTTPS: "YES"
+      GDAL_DISABLE_READDIR_ON_OPEN: EMPTY_DIR
+      GDAL_HTTP_MERGE_CONSECUTIVE_RANGES: "YES"
+      CPL_VSIL_CURL_ALLOWED_EXTENSIONS: ".tif,.tiff"
+      VSI_CACHE: "TRUE"
     volumes:
       - .:/opt/philsa
     command: dagster-daemon run -m definitions

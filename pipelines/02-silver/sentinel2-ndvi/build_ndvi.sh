@@ -4,7 +4,8 @@
 # Silver step: Sentinel-2 L2A SAFE -> NDVI Cloud-Optimized GeoTIFF -> Cloudflare R2.
 #
 #   NDVI = (B08 - B04) / (B08 + B04)   at 10 m (NIR / Red).
-#   Input  : a raw S2 L2A .SAFE.zip — staged from R2 bronze, or a local file.
+#   Input  : a raw S2 L2A .SAFE.zip — resolved local-first (local bronze dir ->
+#            R2-download cache -> R2).
 #   Output : <scene>_NDVI.tif (COG, Float32) under the medallion-tiered prefix
 #            02-silver/sentinel2-ndvi/ in R2 (or a local dir if R2_BUCKET is unset).
 #
@@ -13,7 +14,8 @@
 #
 # Parameters (all via environment):
 #   SCENE         bronze S2 .SAFE.zip filename to process (default: latest known).
-#   SAFE          local path to an S2 L2A .SAFE.zip (skips the R2 download).
+#   SAFE          local path to an S2 L2A .SAFE.zip (skips all lookup).
+#   BRONZE_DIR    local dir of raw scenes, checked before R2 (default <repo>/eodata).
 #   BRONZE_PREFIX R2 key prefix of the raw scenes (default 01-bronze/copphil-sentinel).
 #   OUTPUT_DIR    local dir for the COG (used only when R2_BUCKET is unset).
 #   STAGING       local staging/cache dir for the downloaded zip + temps
@@ -34,15 +36,17 @@ while [ "$REPO_ROOT" != "/" ]; do
 done
 
 # shared R2 creds (creds only — never R2_PREFIX). Search cwd, repo root, script dir.
+. "${REPO_ROOT}/pipelines/lib/load_env.sh"
 for _envf in "${ENV_FILE:-}" "${PWD}/.env" "${REPO_ROOT}/.env" "${SCRIPT_DIR}/.env"; do
   if [ -n "$_envf" ] && [ -f "$_envf" ]; then
-    echo ">> loading env from ${_envf}"; set -a; . "$_envf"; set +a; break
+    echo ">> loading env from ${_envf}"; load_env "$_envf"; break
   fi
 done
 
 BRONZE_PREFIX="${BRONZE_PREFIX:-01-bronze/copphil-sentinel}"
 SCENE="${SCENE:-S2C_MSIL2A_20260615T021531_N0512_R003_T51QWA_20260615T054156.SAFE.zip}"
-STAGING="${STAGING:-${REPO_ROOT}/eodata/_staging}"
+BRONZE_DIR="${BRONZE_DIR:-${REPO_ROOT}/eodata}"        # local bronze scenes (download_copphil_eodata.py --out)
+STAGING="${STAGING:-${REPO_ROOT}/eodata/_staging}"     # cache for scenes pulled from R2
 OUTPUT_DIR="${OUTPUT_DIR:-${REPO_ROOT}/eodata}"
 R2_BUCKET="${R2_BUCKET:-}"
 R2_PREFIX="${R2_PREFIX:-02-silver/sentinel2-ndvi}"
@@ -59,10 +63,13 @@ if [ -n "$R2_BUCKET" ] && [ "${FORCE:-0}" != "1" ] && [ -n "${R2_ACCOUNT_ID:-}" 
   fi
 fi
 
-# ---- 1) get the SAFE zip locally (cache) ------------------------------------
+# ---- 1) get the SAFE zip — local first (bronze dir, then cache), R2 last -----
 if [ -n "${SAFE:-}" ] && [ -f "${SAFE}" ]; then
   ZIP="$SAFE"
   echo ">> input: local ${ZIP}"
+elif [ -s "${BRONZE_DIR}/${SCENE}" ]; then
+  ZIP="${BRONZE_DIR}/${SCENE}"
+  echo ">> input: local bronze ${ZIP}"
 else
   ZIP="${STAGING}/${SCENE}"
   if [ -s "$ZIP" ]; then

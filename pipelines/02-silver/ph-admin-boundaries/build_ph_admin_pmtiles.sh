@@ -42,8 +42,9 @@ DST_PREFIX="${DST_PREFIX:-02-silver/ph-admin-boundaries/pmtiles}"
 
 # --- credentials / R2 endpoint ------------------------------------------------
 # Shared R2 creds live in the repo-root .env (search: $ENV_FILE, cwd, repo, script dir).
+. "${REPO_ROOT}/pipelines/lib/load_env.sh"
 for _envf in "${ENV_FILE:-}" "${PWD}/.env" "${REPO_ROOT}/.env" "${SCRIPT_DIR}/.env"; do
-  if [ -n "$_envf" ] && [ -f "$_envf" ]; then set -a; . "$_envf"; set +a; break; fi
+  if [ -n "$_envf" ] && [ -f "$_envf" ]; then load_env "$_envf"; break; fi
 done
 : "${R2_BUCKET:?set R2_BUCKET (or provide .env)}"
 : "${R2_ACCOUNT_ID:?set R2_ACCOUNT_ID (or provide .env)}"

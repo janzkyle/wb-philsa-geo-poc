@@ -1,21 +1,26 @@
 #!/usr/bin/env python3
 """
-build_silver.py — batch driver: turn every raw scene in R2 bronze into its silver
+build_silver.py — batch driver: turn every raw bronze scene into its silver
 COG(s), by invoking the per-product builders.
 
   Sentinel-2 (MSIL2A)  -> sentinel2-ndvi/build_ndvi.sh  +  sentinel2-truecolor/build_truecolor.sh
   Sentinel-1 (GRDH)    -> sentinel1-sar/build_sar.sh
 
-Lists `01-bronze/copphil-sentinel/` in R2 (S3 ListObjectsV2, SigV4 via stdlib) and
-runs the matching builder for each `.SAFE.zip`, passing SCENE=. Each builder
-early-skips scenes whose output already exists, so re-runs only build what's new.
+Scene discovery is LOCAL-FIRST: it enumerates the local bronze dir
+(`eodata/`, where download_copphil_eodata.py stages scenes) and, if R2 creds are
+present, unions in any scenes that live only in `01-bronze/copphil-sentinel/` on
+R2. It then runs the matching builder for each `.SAFE.zip`, passing SCENE=; each
+builder itself resolves the bytes local-first (bronze dir → cache → R2), so a
+scene present locally is never re-downloaded. Builders early-skip scenes whose
+output already exists, so re-runs only build what's new.
 
-Reads R2 creds from the repo-root `.env`. Stdlib only. Usage (from repo root):
+R2 is optional (used only to discover/fetch scenes not present locally); creds
+come from the repo-root `.env`. Stdlib only. Usage (from repo root):
     python3 pipelines/02-silver/build_silver.py
     python3 pipelines/02-silver/build_silver.py --dry-run
     python3 pipelines/02-silver/build_silver.py --only sentinel-2
 """
-import argparse, datetime as dt, hashlib, hmac, os, re, subprocess, sys, urllib.error, urllib.parse, urllib.request
+import argparse, datetime as dt, glob, hashlib, hmac, os, re, subprocess, sys, urllib.error, urllib.parse, urllib.request
 
 def _repo_root():
     d = os.path.dirname(os.path.abspath(__file__))
@@ -26,6 +31,7 @@ def _repo_root():
     return os.getcwd()
 
 ROOT = _repo_root()
+BRONZE_DIR = os.environ.get("BRONZE_DIR", os.path.join(ROOT, "eodata"))  # local bronze scenes
 BRONZE_PREFIX = "01-bronze/copphil-sentinel"
 EMPTY = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
 # (sensor match, [builder scripts relative to ROOT])
@@ -69,13 +75,29 @@ def main():
     ap.add_argument("--only", choices=list(BUILDERS), help="only this sensor")
     ap.add_argument("--dry-run", action="store_true", help="list what would build, run nothing")
     args = ap.parse_args()
+    # local-first discovery: the local bronze dir, then (if creds present) R2.
+    local = sorted(os.path.basename(p) for p in glob.glob(os.path.join(BRONZE_DIR, "*.zip"))
+                   if p.lower().endswith(".zip"))
+    print(f">> {len(local)} local bronze scene(s) in {BRONZE_DIR}")
+
     acct, bucket = os.environ.get("R2_ACCOUNT_ID"), os.environ.get("R2_BUCKET")
     ak, sk = os.environ.get("AWS_ACCESS_KEY_ID"), os.environ.get("AWS_SECRET_ACCESS_KEY")
-    if not all([acct, bucket, ak, sk]): sys.exit("!! need R2_* / AWS_* in .env")
+    r2_only = []
+    if all([acct, bucket, ak, sk]):
+        try:
+            keys = [k for k in list_bronze(acct, bucket, ak, sk, BRONZE_PREFIX) if k.lower().endswith(".zip")]
+            local_set = set(local)
+            r2_only = sorted(b for b in (os.path.basename(k) for k in keys) if b not in local_set)
+            print(f">> {len(r2_only)} additional scene(s) only in R2 {BRONZE_PREFIX}")
+        except (urllib.error.URLError, OSError) as e:
+            print(f">> R2 listing skipped ({e}); using local only")
+    else:
+        print(">> no R2 creds; using local only")
 
-    keys = [k for k in list_bronze(acct, bucket, ak, sk, BRONZE_PREFIX) if k.lower().endswith(".zip")]
-    scenes = sorted(os.path.basename(k) for k in keys)
-    print(f">> {len(scenes)} bronze scene(s)")
+    scenes = local + r2_only  # local first, R2-only scenes appended
+    if not scenes:
+        sys.exit(f"!! no bronze scenes found (local {BRONZE_DIR} empty and no R2 scenes)")
+    print(f">> {len(scenes)} bronze scene(s) total")
     sensors = [args.only] if args.only else list(BUILDERS)
     totals = {"ok": 0, "skip/err": 0}
     for scene in scenes:
@@ -85,7 +107,7 @@ def main():
             for b in builders:
                 print(f"\n>> {scene}  ->  {os.path.basename(b)}")
                 if args.dry_run: continue
-                env = {**os.environ, "SCENE": scene}
+                env = {**os.environ, "SCENE": scene, "BRONZE_DIR": BRONZE_DIR}
                 rc = subprocess.run(["bash", os.path.join(ROOT, b)], env=env).returncode
                 totals["ok" if rc == 0 else "skip/err"] += 1
     print(f"\n>> TOTAL builder runs: {totals}")

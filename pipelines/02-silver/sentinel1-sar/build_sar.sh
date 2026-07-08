@@ -5,7 +5,7 @@
 # GeoTIFF on Cloudflare R2.
 #
 #   Input  : a raw S1 IW GRD .SAFE.zip (CopPhil stores measurement bands as COG),
-#            staged from R2 bronze or a local file.
+#            resolved local-first: local bronze dir -> R2-download cache -> R2.
 #   Steps  : extract VV (ground-range, GCP-geolocated) -> gdalwarp to EPSG:4326
 #            -> VV in dB = 10*log10(DN^2) -> COG under 02-silver/sentinel1-sar/.
 #
@@ -15,8 +15,9 @@
 # pyroSAR pipeline) — or use authoritative Copernicus EMS / GFM flood products.
 # This COG is the base layer such processing would build on. See pipelines/README.md.
 #
-# Parameters (env): SCENE, SAFE, BRONZE_PREFIX, OUTPUT_DIR, STAGING, FORCE, POL
-#   (polarisation, default vv), and the R2_* / AWS_* set from .env.
+# Parameters (env): SCENE, SAFE, BRONZE_DIR, BRONZE_PREFIX, OUTPUT_DIR, STAGING,
+#   FORCE, POL (polarisation, default vv), and the R2_* / AWS_* set from .env.
+#   BRONZE_DIR = local dir of raw scenes (default <repo>/eodata; checked before R2).
 # Requires GDAL >= 3.8, curl, unzip.
 #
 set -euo pipefail
@@ -26,16 +27,18 @@ while [ "$REPO_ROOT" != "/" ]; do
   if [ -e "$REPO_ROOT/.git" ] || [ -e "$REPO_ROOT/AGENTS.md" ]; then break; fi
   REPO_ROOT="$(dirname "$REPO_ROOT")"
 done
+. "${REPO_ROOT}/pipelines/lib/load_env.sh"
 for _envf in "${ENV_FILE:-}" "${PWD}/.env" "${REPO_ROOT}/.env" "${SCRIPT_DIR}/.env"; do
   if [ -n "$_envf" ] && [ -f "$_envf" ]; then
-    echo ">> loading env from ${_envf}"; set -a; . "$_envf"; set +a; break
+    echo ">> loading env from ${_envf}"; load_env "$_envf"; break
   fi
 done
 
 BRONZE_PREFIX="${BRONZE_PREFIX:-01-bronze/copphil-sentinel}"
 SCENE="${SCENE:-S1D_IW_GRDH_1SDV_20260613T214635_20260613T214706_003223_0059FF_B12E_COG.SAFE.zip}"
 POL="${POL:-vv}"
-STAGING="${STAGING:-${REPO_ROOT}/eodata/_staging}"
+BRONZE_DIR="${BRONZE_DIR:-${REPO_ROOT}/eodata}"        # local bronze scenes (download_copphil_eodata.py --out)
+STAGING="${STAGING:-${REPO_ROOT}/eodata/_staging}"     # cache for scenes pulled from R2
 OUTPUT_DIR="${OUTPUT_DIR:-${REPO_ROOT}/eodata}"
 R2_BUCKET="${R2_BUCKET:-}"; R2_PREFIX="${R2_PREFIX:-02-silver/sentinel1-sar}"
 R2_PUBLIC_BASE="${R2_PUBLIC_BASE:-}"
@@ -51,8 +54,9 @@ if [ -n "$R2_BUCKET" ] && [ "${FORCE:-0}" != "1" ] && [ -n "${R2_ACCOUNT_ID:-}" 
   fi
 fi
 
-# 1) stage the SAFE zip
+# 1) stage the SAFE zip — local first (bronze dir, then R2-download cache), R2 last
 if [ -n "${SAFE:-}" ] && [ -f "${SAFE}" ]; then ZIP="$SAFE"; echo ">> input: local ${ZIP}"
+elif [ -s "${BRONZE_DIR}/${SCENE}" ]; then ZIP="${BRONZE_DIR}/${SCENE}"; echo ">> input: local bronze ${ZIP}"
 else
   ZIP="${STAGING}/${SCENE}"
   if [ -s "$ZIP" ]; then echo ">> input: cached ${ZIP}"

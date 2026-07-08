@@ -1,20 +1,26 @@
 {
   "name": "webmap",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "chat": "node server/chat.mjs",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview"
   },
   "dependencies": {
+    "@ai-sdk/openai-compatible": "^1.0.0",
+    "@ai-sdk/react": "^2.0.0",
+    "ai": "^5.0.0",
     "maplibre-gl": "^5.24.0",
     "pmtiles": "^4.4.1",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
-    "react-map-gl": "^8.1.1"
+    "react-map-gl": "^8.1.1",
+    "zod": "^3.25.0",
+    "zustand": "^5.0.0"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

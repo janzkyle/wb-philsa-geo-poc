@@ -35,7 +35,7 @@ This is an Earth-observation STAC POC, so the medallion tiers map to asset state
 
 | Tier | Meaning | Storage | Example scripts |
 | --- | --- | --- | --- |
-| **01-bronze** | Raw scenes pulled in verbatim, no transformation. | R2 `01-bronze/copphil-sentinel/` (R2-only) | `download_copphil_eodata.py` (raw Sentinel-1/2 SAFE zips from CopPhil) |
+| **01-bronze** | Raw scenes pulled in verbatim, no transformation. | Local `eodata/` (default); optional R2 `01-bronze/copphil-sentinel/` via `--r2` | `download_copphil_eodata.py` (raw Sentinel-1/2 SAFE zips from CopPhil) |
 | **02-silver** | Cleaned, clipped, reprojected, or derived products (NDVI, SAR flood masks, conformed vectors → GeoParquet/PMTiles). | R2 (public/private COGs, GeoParquet, PMTiles) | `build_ph_admin_geoparquet.sh`, `sentinel2-ndvi/build_ndvi.sh`, `sentinel2-truecolor/build_truecolor.sh`, `sentinel1-sar/build_sar.sh`, `sentinel1-flood/build_flood.sh`; *planned:* `vector_to_pmtiles.py` (VEC path) |
 | **03-gold** | Serving-ready catalog entries — what end users discover and consume. | pgSTAC Items (hrefs → R2) | `catalog_silver.py` (registers silver COGs as STAC items); *planned:* open/restricted tagging |
 
@@ -49,13 +49,13 @@ The full CopPhil path is the clean medallion example:
 | --- | --- | --- | --- |
 | **PhilSA satellite catalog** *(reference)* | PhilSA's public STAC API | Mirrored **by reference** — STAC metadata copied into our pgSTAC, pixels left at source | Discovery of PhilSA imagery (Diwata-2, SkySat, PlanetScope) in one catalog |
 | **ESRI 10 m LULC** *(reference)* | Esri / Impact Observatory *Living Atlas* (public COGs) | Registered **by reference** (no download/re-host) | Land-cover context layer in the catalog |
-| **CopPhil Sentinel-1/2** *(bronze)* | CopPhil / CloudFerro OData catalog + token download (Keycloak auth) | Raw `.SAFE.zip` streamed to R2 verbatim, byte-count verified | Input to every silver Sentinel derivative below |
+| **CopPhil Sentinel-1/2** *(bronze)* | CopPhil / CloudFerro OData catalog + token download (Keycloak auth) | Raw `.SAFE.zip` downloaded to local `eodata/`, byte-count verified (default: Central Luzon, S2 ≤20% cloud, latest 3 dates; `--r2` also uploads as bronze) | Input to every silver Sentinel derivative below |
 | **PH admin boundaries** *(silver)* | OCHA COD-AB geodatabase on HDX | `ogr2ogr` → GeoParquet (adm0–adm4, optional simplify tolerance) | AOI selection / overlay reference vector |
 | **Sentinel-2 NDVI** *(silver)* | Bronze S2 L2A — 10 m B04 (red) + B08 (NIR) | `(B08−B04)/(B08+B04)` → Float32 COG; edge-granule fill masked to `-9999` NoData | Vegetation index; served as colorized tiles (`rdylgn`, −0.2…0.8) |
 | **Sentinel-2 true-colour** *(silver)* | Bronze S2 L2A — 10 m TCI band | Extract TCI → 8-bit RGB COG; fill (`0`) flagged NoData | Visual reference imagery / basemap |
 | **Sentinel-1 SAR** *(silver)* | Bronze S1 IW GRD, VV polarization | GCP warp → EPSG:4326, amplitude → dB → Float32 COG | Backscatter base layer (**not** a validated flood product); served grayscale (15…55 dB) |
 | **Sentinel-1 flood** *(silver)* | Silver S1 VV backscatter (dB) COG | Dark-water threshold (`sigma` = mean−k·std default; `otsu`/`fixed` options), block-wise → Byte mask (1=water, 0=land, 2=perm-water, 255=nodata) | POC flood **proxy** (**not** validated; uncalibrated dB); pairs with Copernicus EMS/GFM; served via flood colormap |
-| **STAC catalog** *(gold)* | All silver COGs already in R2 | `catalog_silver.py` registers collections + items **by reference** (reading COG metadata over the authenticated R2 endpoint), with render-extension hints (rescale + colormap) | What users discover/consume via the STAC API |
+| **STAC catalog** *(gold)* | All silver COGs already in R2 | `catalog_silver.py` registers collections + items **by reference** (reading COG metadata over the authenticated R2 endpoint), with render-extension hints (rescale + colormap); **requires the STAC API's transactions extension enabled** (`ENABLE_TRANSACTIONS_EXTENSIONS=true`) or POST/PUT return 405 | What users discover/consume via the STAC API |
 
 The four silver Sentinel products are **single-/multi-band COGs in R2**; they're
 visualized through **TiTiler** (repo-root [`compose.viz.yml`](../compose.viz.yml),
@@ -75,7 +75,7 @@ script. This table is just the map:
 | --- | --- | --- | --- | --- |
 | `reference/philsa-catalog/mirror_philsa_catalog.py` | reference | Python | Mirror the PhilSA STAC catalog by reference | `python3 <path> --dry-run` |
 | `reference/esri-lulc/load_esri_lulc.sh` | reference | shell | Register ESRI 10 m LULC COGs by reference | `YEAR=2025 bash <path>` |
-| `01-bronze/copphil-sentinel/download_copphil_eodata.py` | 01-bronze | Python | Download latest raw Sentinel scenes → R2 | `python3 <path>` |
+| `01-bronze/copphil-sentinel/download_copphil_eodata.py` | 01-bronze | Python | Download raw Sentinel scenes (Central Luzon, cloud-free, latest N dates) → local `eodata/` (`--r2` also uploads as bronze) | `python3 <path>` |
 | `02-silver/ph-admin-boundaries/build_ph_admin_geoparquet.sh` | 02-silver | shell | OCHA COD-AB geodatabase → GeoParquet (local or R2) | `TOLERANCE_M=100 bash <path>` |
 | `02-silver/ph-admin-boundaries/build_ph_admin_pmtiles.sh` | 02-silver | shell | GeoParquet → PMTiles (adm0–adm2) for the webmap → R2 | `bash <path>` |
 | `02-silver/sentinel2-ndvi/build_ndvi.sh` | 02-silver | shell | Sentinel-2 L2A SAFE → NDVI COG → R2 | `bash <path>` |
@@ -140,9 +140,7 @@ UI at **http://localhost:3030**. The webserver+daemon join the pgSTAC compose
 network (reaching Postgres as `database`, the STAC API as `app:8082`) and
 bind-mount the repo. Two assets still run best from the **host**, not the
 container image: `silver/ph_admin_pmtiles` (needs `tippecanoe` + the `aws` CLI)
-and `silver/raster_mosaics` (execs into the TiTiler container). See
-[`orchestration/PLAN.md`](./orchestration/PLAN.md) for the build log and the
-per-asset notes.
+and `silver/raster_mosaics` (execs into the TiTiler container).
 
 ## R2 key layout (mirrors the tiers)
 

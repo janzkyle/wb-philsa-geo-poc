@@ -30,11 +30,10 @@ while [ "$REPO_ROOT" != "/" ]; do
   if [ -e "$REPO_ROOT/.git" ] || [ -e "$REPO_ROOT/AGENTS.md" ]; then break; fi
   REPO_ROOT="$(dirname "$REPO_ROOT")"
 done
+. "${REPO_ROOT}/pipelines/lib/load_env.sh"
 for _envf in "${ENV_FILE:-}" "${PWD}/.env" "${REPO_ROOT}/.env" "${SCRIPT_DIR}/.env"; do
   if [ -n "$_envf" ] && [ -f "$_envf" ]; then
-    # disable -u while sourcing: unrelated values may contain a literal '$'
-    # (e.g. a password) that would otherwise abort on "unbound variable".
-    echo ">> loading env from ${_envf}"; set +u; set -a; . "$_envf"; set +a; set -u; break
+    echo ">> loading env from ${_envf}"; load_env "$_envf"; break
   fi
 done
 

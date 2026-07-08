@@ -22,9 +22,12 @@ BRONZE_SCRIPT = (
 class CopphilDownloadConfig(dg.Config):
     """Mirrors the script's CLI flags (see its --help for semantics)."""
 
-    limit: int = 1
+    region: str = "central-luzon"  # AOI preset (philippines | central-luzon)
+    dates: int = 3  # fetch every scene from the N most recent acquisition dates over the AOI
+    limit: int = 0  # cap scenes per collection (0 = no cap)
     days: int = 0
-    max_cloud: float = 100.0
+    max_cloud: float = 20.0  # Sentinel-2 cloudCover ceiling (100 = no filter)
+    to_r2: bool = False  # also upload as bronze to R2 (default: local only)
     dry_run: bool = False
 
 
@@ -33,8 +36,11 @@ class CopphilDownloadConfig(dg.Config):
     group_name="bronze",
     kinds={"python"},
     description=(
-        "Raw Sentinel-1/2 SAFE zips from the CopPhil OData mirror, uploaded to "
-        "R2 under 01-bronze/copphil-sentinel/ (download_copphil_eodata.py)."
+        "Raw Sentinel-1/2 SAFE zips from the CopPhil OData mirror — the latest "
+        "N cloud-free acquisition dates over the AOI (default: Central Luzon, "
+        "S2 cloud ≤ 20%%), downloaded to local eodata/ for the downstream silver "
+        "step (download_copphil_eodata.py; pass to_r2 to also upload them as "
+        "bronze under 01-bronze/copphil-sentinel/)."
     ),
 )
 def copphil_sentinel(
@@ -45,10 +51,14 @@ def copphil_sentinel(
     cmd = [
         sys.executable,
         str(BRONZE_SCRIPT),
+        "--region", config.region,
+        "--dates", str(config.dates),
         "--limit", str(config.limit),
         "--days", str(config.days),
         "--max-cloud", str(config.max_cloud),
     ]
+    if config.to_r2:
+        cmd.append("--r2")
     if config.dry_run:
         cmd.append("--dry-run")
 
@@ -58,6 +68,7 @@ def copphil_sentinel(
         metadata={
             "command": " ".join(cmd),
             "dry_run": config.dry_run,
-            "r2_prefix": "01-bronze/copphil-sentinel",
+            "to_r2": config.to_r2,
+            "dest": "01-bronze/copphil-sentinel (R2)" if config.to_r2 else "local eodata/",
         }
     )

@@ -41,6 +41,19 @@ version. Keep both honest.
         `pipelines/03-gold/catalog_silver.py`): S2 NDVI, S2 true-colour, S1 VV
         backscatter as STAC collections + items (asset hrefs → public R2)
     - [ ] also catalog ph-admin-boundaries GeoParquet (vector item) — follow-on
+- [ ] **CopPhil S3 — Sentinel-3 drought / heat-stress** (`COP`): the PCIC-facing
+      complement to the S1 flood + S2 NDVI layers. Ingest SLSTR LST
+      (`SL_2_LST`, land-surface temperature → drought/heat-stress index) and
+      OLCI land (`OL_2_LFR`, ~300 m near-daily vegetation — fills S2's monsoon
+      cloud gaps) → derive LST/OTCI COGs (silver) → catalog in pgSTAC (gold).
+      Nationwide daily coverage is cheap (~1 GB/day raw, checked 2026-07-07),
+      so a rolling latest-N-dates retention works as-is — unlike raw S1/S2.
+- [ ] **Copernicus DEM — GLO-30** (`PUB`): elevation layer the S1 flood path
+      already wants (slope masking + terrain correction, above) plus
+      flood/landslide hazard context. Source the AWS Open Data GLO-30 tiles by
+      reference (or clip a PH mosaic COG into R2) — **not** from CopPhil: its
+      `COP-DEM` collection is an empty shell (0 products via both STAC and
+      OData, checked 2026-07-07).
 - [ ] **Copernicus EMS / GFM — flood** (`VEC`/`PUB`): the POC's **authoritative**
       flood layer (free, no partnership needed), paired with our own derived
       Sentinel-1 flood layer above. EMS Rapid Mapping delineation vectors (flood
@@ -51,6 +64,32 @@ version. Keep both honest.
       and/or synthetic test vectors → PMTiles
 - [ ] **Earth Search** (`PUB`): query Sentinel-2 L2A asset URLs and mirror into
       pgSTAC by reference (ETL-only, mirror the Planetary Computer pattern)
+
+## Geospatial AI
+
+Two distinct tracks. **Pipeline models** generate data products (this section);
+the **webmap chat assistant** only *drives the display* (see Frontend) and stays
+a general tool-calling LLM — geospatial smarts belong in the pipeline + STAC
+tools, not in the chat model's weights.
+
+- [ ] **Foundation-model flood upgrade** (silver): augment `otsu_flood.py`'s
+      sigma/otsu proxy with a geospatial foundation-model fine-tune run as a
+      Dagster asset over the existing silver VV COGs → same Byte-mask COG output
+      → same `sentinel1-flood` gold cataloging (webmap needs no changes).
+      Candidates (flood benchmark, arXiv:2511.01990): **Prithvi-EO-2.0** — best
+      on Sentinel-1 (0.57 mIoU), off-the-shelf Sen1Floods11 flood fine-tune;
+      **Clay** — 26M params (~3× faster than Prithvi's 650M), best few-shot
+      (0.64 mIoU from 5 optical images). Harness: **TerraTorch** (or TorchGeo).
+      Expectation-setting: cross-region S1 flood mIoU ≈ 0.5 — this
+      *complements*, never replaces, the authoritative Copernicus EMS/GFM layer.
+- [ ] **TerraMind S1→S2 synthesis** (exploratory): generate optical-like views
+      from SAR for cloud-covered typhoon scenes (any-to-any generation, S1→S2
+      MAE ≈ 0.07) — high demo value for PH monsoon season, but label outputs
+      clearly as *synthetic imagery*.
+- [ ] **Clay embeddings for catalog discovery** (later): per-scene embeddings →
+      "find scenes like this" / semantic search over pgSTAC.
+- [x] **AI chat control of the webmap** — general LLM + tool calling over STAC;
+      see Frontend → *MapLibre webmap (AI-first rebuild)*.
 
 ## Orchestration — Dagster
 
@@ -89,16 +128,28 @@ version. Keep both honest.
 - [x] PhilSA-brand the catalog: STAC Browser (`config.js` — title, logo, favicon,
       blue accent) locked to our API only (`allowExternalAccess: false`); STAC API
       landing/docs branded via `STAC_FASTAPI_*` env in `compose.yml`
-- [~] MapLibre webmap (`webmap/`, React+TS+Vite + react-map-gl): **Tier 1 open
-      layers done** — adm0–adm2 PMTiles + Sentinel-2 true-colour & NDVI +
-      Sentinel-1 SAR (VV) + **ESRI 10 m LULC** (discrete colormap, excluded from
-      the date filter) via TiTiler, centred on Luzon. Rasters rendered as
-      **per-date seamless mosaics** (MosaicJSON,
-      `pipelines/02-silver/build_raster_mosaics.sh`) so a
-      day's granules stitch into one continuous layer; a **single-date selector**
-      (with a per-layer data-availability indicator) drives which day loads;
-      per-layer collapsible legends. Still to do: restricted (authenticated)
-      layers; footprint/discovery layer.
+- [~] **MapLibre webmap (`webmap/`, AI-first rebuild)** — React+TS+Vite +
+      react-map-gl/MapLibre + **Zustand + Vercel AI SDK**, replacing the Tier 1
+      webmap (old version preserved in git history). Architecture: **one
+      serializable layer store, two drivers** — a manual layer panel (browse
+      collections, pick an acquisition date, legends, opacity) and a **chat
+      assistant** whose client-side tools mutate the *same* store:
+      `list_collections` · `resolve_region` (name→bbox from the R2
+      `ph_admin_index.json` the dashboard search already uses) · `search_catalog`
+      (pgSTAC `/search`; on zero hits reports each collection's nearest available
+      dates) · `add_layers` / `remove_layers` / `update_layer` · `set_view`.
+      "Show flood data for Central Luzon, first week of June" → resolve → search
+      → add → zoom. Rasters via TiTiler — per-date **MosaicJSON when present**,
+      falling back to per-item COG tiles (flood has no mosaics yet); admin
+      outlines stream the same R2 PMTiles as before; per-layer legends kept.
+      Chat backend: `webmap/server/chat.mjs` (Node, OpenRouter via the AI SDK;
+      `OPENROUTER_API_KEY` in the repo-root `.env`). Models: free-first —
+      default `qwen/qwen3-coder:free` (`GENAI_MODEL` overrides), with automatic
+      fallback through tool-capable free models fetched live from the
+      OpenRouter catalog when a stream errors before producing output. Still
+      to do: **deck.gl overlay** (GPU date-range scrubbing via
+      `DataFilterExtension`, GeoArrow vector layers); restricted (authenticated)
+      layers; footprint/discovery layer; surface EMS/GFM flood once ingested.
 - [x] TiTiler for raster tiling (open COGs from R2 — `compose.viz.yml`, :8083).
       Restricted COGs (presigned) still to do.
 - [x] Serve PMTiles — **open admin boundaries adm0–adm4 live on public R2**

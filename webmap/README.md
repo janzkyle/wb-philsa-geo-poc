@@ -1,51 +1,66 @@
-# PhilSA POC — webmap
+# PhilSA POC — AI-first webmap
 
-Tier 1 map-first viewer (React + TypeScript + Vite + react-map-gl/MapLibre).
+MapLibre webmap for the PhilSA POC catalog with two ways to drive it:
 
-## What it shows
+- **Browse** — a layer panel listing the raster collections (pick an
+  acquisition date, add, toggle, restyle) and the admin-boundary overlays.
+- **Ask** — a chat assistant ("show flood data for Central Luzon in early
+  June") that resolves the region, searches the STAC catalog, adds the layers,
+  and flies the map there.
 
-- **Admin boundaries** (adm0 country, adm1 regions, adm2 provinces) — vector
-  outlines served as **PMTiles straight from public R2** via the `pmtiles://`
-  protocol (no tile server). Built by
-  `../pipelines/02-silver/ph-admin-boundaries/build_ph_admin_pmtiles.sh`.
-- **Sentinel-2 True Colour**, **Sentinel-2 NDVI**, and **Sentinel-1 SAR (VV)** —
-  silver COGs tiled on the fly by **TiTiler**. Each acquisition date is served as
-  a **per-date MosaicJSON** (`../pipelines/02-silver/build_raster_mosaics.sh`) so that day's
-  overlapping/partial granules stitch into one continuous, seamless layer instead
-  of separate tilted footprints. The webmap discovers the available dates from
-  the **STAC API** and builds the `/mosaicjson` tile URLs itself; NDVI gets a
-  server-side rescale + colormap and SAR a grayscale rescale (both are
-  single-band float32 and render black/flat otherwise).
+## Architecture: one store, two drivers
 
-Layer toggles and a **single-date selector** (dropdown + ◀ ▶ steppers over the
-available acquisition dates) are in the panel; the map shows that one day's
-mosaic per layer. Each raster layer carries a **data-availability indicator** —
-a green dot when that collection has imagery on the selected date, grey + "no
-data" when it doesn't. The map opens over Luzon where coverage overlaps.
+All map content lives in a single serializable Zustand store
+(`src/state/mapStore.ts`). The layer panel mutates it on click; the AI mutates
+it through **client-executed tools**. The chat server (`server/chat.mjs`)
+only declares tool schemas and streams the model (Vercel AI SDK) — every tool
+call is forwarded to the browser and executed in `src/ai/executeTool.ts`
+against the STAC API + the store. The map itself never leaves the client.
 
-> Note: the imagery still appears as separate patches where Sentinel-2 only made
-> partial overpasses — the mosaic removes seams between *adjacent* same-day
-> granules but can't invent pixels the satellite never captured.
+Tools: `list_collections` · `resolve_region` (name→bbox via the R2
+`ph_admin_index.json` the dashboard search uses) · `search_catalog` (pgSTAC
+`/search`; on zero hits returns each collection's available dates) ·
+`get_available_dates` · `add_layers` · `remove_layers` · `update_layer` ·
+`set_view`.
+
+Rendering: rasters via TiTiler — per-date **MosaicJSON** when
+`build_raster_mosaics.sh` has built one, falling back to per-item COG tiles
+(the flood collection has no mosaics yet); admin outlines stream PMTiles from
+public R2. Collection styling (rescales/colormaps/legends) is in
+`src/config.ts` and mirrors `pipelines/03-gold/catalog_silver.py`.
 
 ## Run
 
+Needs the local STAC API (:8082) and TiTiler (:8083) up — see the repo README.
+
 ```bash
-# 1. catalog API (item discovery) — from repo root
-cd ../stac-fastapi-pgstac && docker compose up -d      # :8082
-
-# 2. raster tiler (Sentinel COGs) — from repo root
-cd .. && docker compose --env-file .env -f compose.viz.yml up -d   # :8083
-
-# 3. the webmap
 npm install
-npm run dev            # http://localhost:5173
+npm run chat   # terminal 1 — chat backend on :8087
+npm run dev    # terminal 2 — Vite dev server (proxies /api → :8087)
 ```
 
-Admin boundaries load even if the API/TiTiler are down (they come from public
-R2). The raster layers need both `:8082` (discovery) and `:8083` (tiles).
+The chat backend reads `OPENROUTER_API_KEY` from the **repo-root `.env`**
+(same convention as the pipelines; never committed). Without a key, the map +
+manual browsing still work; only chat is disabled.
 
-## Config
+**Models — free by default, with automatic fallback.** The default is
+`qwen/qwen3-coder:free`; if a model's stream errors before producing anything
+(rate limit, offline, credit cap), the server transparently retries down a
+ranked list of **tool-capable free models fetched live from OpenRouter's
+catalog** (cached 10 min; hand-ranked favourites first, then by context
+length). This also means a key over its credit limit keeps working — free
+models cost nothing. `GENAI_MODEL` overrides the *first* model tried (e.g. a
+paid one when you have credit); the free fallbacks still apply behind it.
+`GET :8087/health` shows the current chain.
 
-Endpoints default to localhost; override via `.env` (see `.env.example`) or the
-`VITE_STAC_API` / `VITE_TITILER` / `VITE_R2_PUBLIC_BASE` env vars. Layer
-definitions live in `src/config.ts`.
+Frontend endpoints (STAC/TiTiler/R2/chat) are Vite build-time `VITE_*` vars —
+see `.env.example`.
+
+## Next
+
+- deck.gl overlay (`MapboxOverlay`) for GPU date-range scrubbing
+  (`DataFilterExtension`) and GeoArrow vector layers.
+- Restricted/authenticated layers once the private bucket + presigned flow
+  land.
+- Surface Copernicus EMS/GFM flood as the authoritative layer next to the
+  radar-derived proxy.

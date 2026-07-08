@@ -35,9 +35,31 @@ MINZOOM="${MINZOOM:-8}"
 MAXZOOM="${MAXZOOM:-14}"
 COMPOSE="docker compose --env-file ${REPO_ROOT}/.env -f ${REPO_ROOT}/compose.viz.yml"
 
+# The mosaic itself is one cogeo-mosaic call. Run it *locally* when cogeo-mosaic
+# is importable (e.g. inside the Dagster image, which pip-installs it) so no
+# TiTiler container / docker socket is needed; otherwise fall back to exec-ing
+# into the running TiTiler container (which ships cogeo-mosaic). Reading the COGs
+# from R2 needs the same GDAL/AWS S3 env TiTiler uses (AWS_S3_ENDPOINT, creds…);
+# the Dagster compose service sets those, mirroring compose.viz.yml.
+read -r -d '' MOSAIC_PY <<'PY' || true
+import os, sys, json
+from cogeo_mosaic.mosaic import MosaicJSON
+urls = [l.strip() for l in sys.stdin if l.strip()]
+m = MosaicJSON.from_urls(urls, minzoom=int(os.environ["MINZOOM"]), maxzoom=int(os.environ["MAXZOOM"]))
+sys.stdout.write(json.dumps(m.model_dump(exclude_none=True)))
+PY
+if python3 -c 'import cogeo_mosaic' 2>/dev/null; then
+  build_mosaic() { MINZOOM="$MINZOOM" MAXZOOM="$MAXZOOM" python3 -c "$MOSAIC_PY"; }
+  echo "mosaic builder: local cogeo-mosaic"
+else
+  build_mosaic() { $COMPOSE exec -T -e MINZOOM="$MINZOOM" -e MAXZOOM="$MAXZOOM" titiler python -c "$MOSAIC_PY"; }
+  echo "mosaic builder: TiTiler container ($COMPOSE exec titiler)"
+fi
+
 # R2 creds + S3 endpoint (path-style, region "auto"). Shared creds: repo-root .env.
+. "${REPO_ROOT}/pipelines/lib/load_env.sh"
 for _envf in "${ENV_FILE:-}" "${PWD}/.env" "${REPO_ROOT}/.env" "${SCRIPT_DIR}/.env"; do
-  if [ -n "$_envf" ] && [ -f "$_envf" ]; then set -a; . "$_envf"; set +a; break; fi
+  if [ -n "$_envf" ] && [ -f "$_envf" ]; then load_env "$_envf"; break; fi
 done
 S3_ENDPOINT="https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
 export AWS_DEFAULT_REGION=auto
@@ -63,14 +85,9 @@ for f in d.get('features', []):
     n=$(wc -l < "$WORKDIR/hrefs.txt" | tr -d ' ')
     out="$WORKDIR/${coll}_${date}.mosaicjson"
 
-    # Build the mosaic in the TiTiler container; hrefs over stdin (robust to spaces).
-    $COMPOSE exec -T titiler python -c "
-import sys, json
-from cogeo_mosaic.mosaic import MosaicJSON
-urls = [l.strip() for l in sys.stdin if l.strip()]
-m = MosaicJSON.from_urls(urls, minzoom=$MINZOOM, maxzoom=$MAXZOOM)
-sys.stdout.write(json.dumps(m.model_dump(exclude_none=True)))
-" < "$WORKDIR/hrefs.txt" > "$out"
+    # Build the mosaic (local cogeo-mosaic or TiTiler exec, decided above);
+    # hrefs over stdin (robust to spaces).
+    build_mosaic < "$WORKDIR/hrefs.txt" > "$out"
 
     key="${DST_PREFIX}/${coll}/mosaics/${coll}_${date}.mosaicjson"
     aws s3 cp "$out" "s3://${R2_BUCKET}/${key}" --endpoint-url "$S3_ENDPOINT" \
