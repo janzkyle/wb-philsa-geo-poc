@@ -115,7 +115,7 @@ services:
     envVars:
       # The Browser is locked to this one catalog (allowExternalAccess:false).
       - key: SB_catalogUrl
-        value: https://wb-philsa-stac-api.onrender.com
+        value: https://philsa-stac-api.onrender.com
     routes:
       - type: rewrite
         source: /*
@@ -131,9 +131,9 @@ services:
     pullRequestPreviewsEnabled: false
     envVars:
       - key: VITE_STAC_API
-        value: https://wb-philsa-stac-api.onrender.com
+        value: https://philsa-stac-api.onrender.com
       - key: VITE_TITILER
-        value: https://wb-philsa-titiler.onrender.com
+        value: https://philsa-titiler.onrender.com
       - key: VITE_R2_PUBLIC_BASE
         value: https://pub-17ab60a2ca7142a48ae8e2685cd853f7.r2.dev
     routes:

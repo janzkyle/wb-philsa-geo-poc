@@ -128,7 +128,7 @@ git push
 
 ### Step 4 — Confirm the URLs (one-time)
 The Blueprint pre-wires the frontends to the **predicted** URLs
-`https://wb-philsa-stac-api.onrender.com` and `https://wb-philsa-titiler.onrender.com`.
+`https://philsa-stac-api.onrender.com` and `https://philsa-titiler.onrender.com`.
 If your Render account already uses those names, Render appends a suffix. Check
 the actual URLs in the dashboard; if they differ, update these env vars and
 redeploy the two static sites:
