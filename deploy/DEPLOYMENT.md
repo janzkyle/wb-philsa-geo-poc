@@ -140,13 +140,27 @@ Verify the API is live: open `https://<your-api>.onrender.com/collections`
 
 ### Step 5 — Load the catalog into prod
 Point `STAC_API` in `prod.env` at the real API URL (default assumes the predicted
-one), then:
+one), then choose how much to load:
 
 ```bash
-deploy/scripts/load-reference-data.sh prod              # PhilSA mirror (by reference)
-YEAR=2023 deploy/scripts/load-reference-data.sh prod    # also load ESRI 10 m LULC (needs GDAL ≥ 3.8)
-deploy/scripts/db-check.sh prod                         # should now show collections > 0
+deploy/scripts/load-reference-data.sh prod                 # PhilSA mirror only: diwata-2 / planetscope / skysat
+deploy/scripts/load-reference-data.sh prod --with-silver   # + Sentinel silver: sentinel1-sar, sentinel1-flood, sentinel2-ndvi, sentinel2-truecolor
+YEAR=2023 deploy/scripts/load-reference-data.sh prod --with-esri   # + ESRI 10 m LULC
+deploy/scripts/load-reference-data.sh prod --all           # mirror + esri + silver (the full catalog)
+deploy/scripts/db-check.sh prod                            # verify collection/item counts
 ```
+
+Loaders and what they need:
+- **mirror** (always) — pure stdlib, no extra deps.
+- **`--with-silver`** — catalogs the R2 silver COGs by reference
+  (`pipelines/03-gold/catalog_silver.py`); needs **GDAL** and the **R2 creds in
+  the repo-root `.env`**. This is what creates `sentinel1-sar` et al.
+- **`--with-esri`** (or `YEAR=`) — ESRI 10 m LULC; needs **GDAL ≥ 3.8**.
+
+Timing: over the free-tier Render API each item is a network round-trip, so a
+full `--all` load is roughly **5–10 minutes** (mostly waiting on the API, not
+CPU). To (re)load only the silver derivatives without re-running the mirror:
+`STAC_API=<api-url> python3 pipelines/03-gold/catalog_silver.py`.
 
 Open the Browser (`https://philsa-browser.onrender.com`) — the collections appear.
 
