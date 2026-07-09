@@ -31,6 +31,12 @@ DO $$ BEGIN CREATE ROLE pgstac_ingest; EXCEPTION WHEN duplicate_object THEN NULL
 GRANT pgstac_admin  TO CURRENT_USER;
 GRANT pgstac_read   TO CURRENT_USER;
 GRANT pgstac_ingest TO CURRENT_USER;
+-- pgSTAC's functions live in the `pgstac` schema and the API calls them
+-- unqualified, relying on search_path. The app sets search_path via asyncpg
+-- server_settings, but managed proxies (Neon) drop that startup option — so
+-- pin it as a role default in the catalog, which every connection inherits
+-- regardless of direct vs pooled endpoint.
+ALTER ROLE CURRENT_USER SET search_path = pgstac, public;
 SQL
 else
   info "psql not found — skipping role pre-grant (fine on a superuser/local DB)."
