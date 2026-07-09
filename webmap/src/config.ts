@@ -82,6 +82,26 @@ export const ADMIN_LAYERS: AdminLayerDef[] = [
     minzoom: 5,
     defaultOn: true,
   },
+  {
+    id: "adm3",
+    label: "Municipalities (adm3)",
+    sourceLayer: "adm3",
+    pmtilesUrl: `pmtiles://${R2_PUBLIC_BASE}/${PMTILES_PREFIX}/phl_adm3.pmtiles`,
+    color: "#9fa8da",
+    width: 0.5,
+    minzoom: 7,
+    defaultOn: false,
+  },
+  {
+    id: "adm4",
+    label: "Barangays (adm4)",
+    sourceLayer: "adm4",
+    pmtilesUrl: `pmtiles://${R2_PUBLIC_BASE}/${PMTILES_PREFIX}/phl_adm4.pmtiles`,
+    color: "#c5cae9",
+    width: 0.4,
+    minzoom: 9,
+    defaultOn: false,
+  },
 ];
 
 // Raster (COG) collections served through TiTiler. Items are discovered from

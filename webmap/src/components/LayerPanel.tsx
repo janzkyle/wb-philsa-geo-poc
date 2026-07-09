@@ -2,10 +2,17 @@
 // layers. Everything goes through the same store + layer factory the AI's
 // tools use, so the two drivers can never drift apart.
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { RASTER_DEFS } from "../config";
 import { collectionDates } from "../lib/stac";
 import { buildRasterLayer, LayerBuildError } from "../lib/layers";
+import {
+  buildGeojsonLayer,
+  geojsonBbox,
+  GeoJsonError,
+  GEOJSON_COLORS,
+  parseGeoJson,
+} from "../lib/geojson";
 import { describePasses } from "../lib/passes";
 import { useMapStore } from "../state/mapStore";
 import LegendView from "./LegendView";
@@ -83,6 +90,55 @@ function AddRow({
         onClick={add}
       >
         {busy ? "…" : "Add"}
+      </button>
+    </div>
+  );
+}
+
+// Load a local GeoJSON file and render it client-side — no server round-trip,
+// mirroring TerriaJS' "Add data > upload". Reads the file in the browser, parses
+// it, drops it in the store as a geojson-local layer and flies to its extent.
+function UploadRow({ onError }: { onError: (msg: string) => void }) {
+  const addLayer = useMapStore((s) => s.addLayer);
+  const setViewBbox = useMapStore((s) => s.setViewBbox);
+  const layers = useMapStore((s) => s.layers);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const onPick = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    // Reset the input so picking the same file again re-fires onChange.
+    e.target.value = "";
+    if (!file) return;
+    try {
+      const fc = parseGeoJson(await file.text());
+      if (fc.features.length === 0) {
+        throw new GeoJsonError("No features in this GeoJSON.");
+      }
+      const color =
+        GEOJSON_COLORS[
+          layers.filter((l) => l.kind === "geojson-local").length %
+            GEOJSON_COLORS.length
+        ];
+      addLayer(buildGeojsonLayer(file.name.replace(/\.(geo)?json$/i, ""), fc, color));
+      const bbox = geojsonBbox(fc);
+      if (bbox) setViewBbox(bbox);
+    } catch (err) {
+      onError(err instanceof GeoJsonError ? err.message : String(err));
+    }
+  };
+
+  return (
+    <div className="addrow">
+      <span className="addlabel">Local GeoJSON file</span>
+      <input
+        ref={inputRef}
+        type="file"
+        accept=".geojson,.json,application/geo+json,application/json"
+        style={{ display: "none" }}
+        onChange={onPick}
+      />
+      <button type="button" onClick={() => inputRef.current?.click()}>
+        Upload
       </button>
     </div>
   );
@@ -189,6 +245,7 @@ export default function LayerPanel() {
           onError={setError}
         />
       ))}
+      <UploadRow onError={setError} />
 
       <h2>Boundaries</h2>
       {vectors.map((l) => (

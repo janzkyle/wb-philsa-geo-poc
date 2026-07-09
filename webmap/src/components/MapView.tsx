@@ -2,7 +2,7 @@
 // own. Rasters pin below the `vector-slot` anchor so admin outlines always
 // draw on top, regardless of when either driver adds a layer.
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Map, Source, Layer } from "react-map-gl/maplibre";
 import type { MapRef } from "react-map-gl/maplibre";
 import maplibregl from "maplibre-gl";
@@ -17,21 +17,41 @@ import type { MapLayer } from "../state/mapStore";
 const protocol = new Protocol();
 maplibregl.addProtocol("pmtiles", protocol.tile);
 
-// Light CARTO raster basemap + an empty anchor layer that separates the
-// raster stack (below) from vector outlines (above).
+// The two switchable basemaps. Both are rendered as ordinary raster layers
+// pinned below `vector-slot`; the toggle just flips which one is visible, so
+// switching never reloads the style (no flash, data/outline layers stay put).
+type Basemap = "light" | "satellite";
+
+const BASEMAPS: Record<
+  Basemap,
+  { label: string; tiles: string[]; attribution: string }
+> = {
+  light: {
+    label: "Map",
+    tiles: [
+      "https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png",
+      "https://b.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png",
+    ],
+    attribution:
+      '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>, © <a href="https://carto.com/attributions">CARTO</a>',
+  },
+  satellite: {
+    label: "Satellite",
+    // Esri World Imagery — free with attribution, no API key. Note z/y/x order.
+    tiles: [
+      "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+    ],
+    attribution:
+      "Imagery © Esri, Maxar, Earthstar Geographics, and the GIS User Community",
+  },
+};
+
+// Minimal base: a neutral background plus the empty `vector-slot` anchor that
+// separates the raster stack (below) from vector outlines (above). The basemaps
+// themselves are declarative children (see Basemaps) so they can toggle live.
 const baseStyle: StyleSpecification = {
   version: 8,
   sources: {
-    carto: {
-      type: "raster",
-      tiles: [
-        "https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png",
-        "https://b.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png",
-      ],
-      tileSize: 256,
-      attribution:
-        '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>, © <a href="https://carto.com/attributions">CARTO</a>',
-    },
     empty: {
       type: "geojson",
       data: { type: "FeatureCollection", features: [] },
@@ -39,10 +59,36 @@ const baseStyle: StyleSpecification = {
   },
   layers: [
     { id: "bg", type: "background", paint: { "background-color": "#e9e9e9" } },
-    { id: "carto", type: "raster", source: "carto" },
     { id: "vector-slot", type: "line", source: "empty" },
   ],
 };
+
+// Both basemaps mounted at once, below vector-slot (and thus below all data
+// rasters, which insert into the same slot after these mount). Only the active
+// one is visible.
+function Basemaps({ active }: { active: Basemap }) {
+  return (
+    <>
+      {(Object.keys(BASEMAPS) as Basemap[]).map((key) => (
+        <Source
+          key={key}
+          id={`basemap-${key}`}
+          type="raster"
+          tiles={BASEMAPS[key].tiles}
+          tileSize={256}
+          attribution={BASEMAPS[key].attribution}
+        >
+          <Layer
+            id={`basemap-${key}-r`}
+            type="raster"
+            beforeId="vector-slot"
+            layout={{ visibility: key === active ? "visible" : "none" }}
+          />
+        </Source>
+      ))}
+    </>
+  );
+}
 
 function RasterLayer({ layer }: { layer: MapLayer }) {
   return (
@@ -90,11 +136,62 @@ function VectorLayer({ layer }: { layer: MapLayer }) {
   );
 }
 
+// Locally-uploaded GeoJSON: one source feeding fill / line / circle layers so a
+// mixed collection (polygons, lines, points) all draws. Sits above vector-slot
+// so the user's data reads on top of the rasters. `data` is the parsed object —
+// MapLibre renders it inline, nothing is fetched.
+function GeojsonLayer({ layer }: { layer: MapLayer }) {
+  const color = layer.color ?? "#e6550d";
+  const vis = { visibility: layer.visible ? ("visible" as const) : ("none" as const) };
+  return (
+    <Source
+      id={`${layer.id}-src`}
+      type="geojson"
+      data={layer.geojson ?? { type: "FeatureCollection", features: [] }}
+    >
+      <Layer
+        id={`${layer.id}-fill`}
+        type="fill"
+        filter={["match", ["geometry-type"], ["Polygon", "MultiPolygon"], true, false]}
+        layout={vis}
+        paint={{ "fill-color": color, "fill-opacity": 0.25 * layer.opacity }}
+      />
+      <Layer
+        id={`${layer.id}-line`}
+        type="line"
+        filter={[
+          "match",
+          ["geometry-type"],
+          ["LineString", "MultiLineString", "Polygon", "MultiPolygon"],
+          true,
+          false,
+        ]}
+        layout={{ ...vis, "line-join": "round" }}
+        paint={{ "line-color": color, "line-width": 2, "line-opacity": layer.opacity }}
+      />
+      <Layer
+        id={`${layer.id}-circle`}
+        type="circle"
+        filter={["match", ["geometry-type"], ["Point", "MultiPoint"], true, false]}
+        layout={vis}
+        paint={{
+          "circle-radius": 5,
+          "circle-color": color,
+          "circle-opacity": layer.opacity,
+          "circle-stroke-width": 1,
+          "circle-stroke-color": "#fff",
+        }}
+      />
+    </Source>
+  );
+}
+
 export default function MapView() {
   const layers = useMapStore((s) => s.layers);
   const view = useMapStore((s) => s.view);
   const reportViewport = useMapStore((s) => s.reportViewport);
   const mapRef = useRef<MapRef>(null);
+  const [basemap, setBasemap] = useState<Basemap>("satellite");
 
   // fitBounds requests come through the store (set_view tool / region search).
   useEffect(() => {
@@ -109,8 +206,11 @@ export default function MapView() {
     );
   }, [view.nonce]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const rasters = layers.filter((l) => l.kind !== "vector-pmtiles");
+  const rasters = layers.filter(
+    (l) => l.kind === "raster-mosaic" || l.kind === "raster-cogs",
+  );
   const vectors = layers.filter((l) => l.kind === "vector-pmtiles");
+  const geojsons = layers.filter((l) => l.kind === "geojson-local");
 
   return (
     <Map
@@ -128,11 +228,29 @@ export default function MapView() {
         ]);
       }}
     >
+      <Basemaps active={basemap} />
+
+      <div className="basemap-switch">
+        {(Object.keys(BASEMAPS) as Basemap[]).map((key) => (
+          <button
+            key={key}
+            type="button"
+            className={key === basemap ? "active" : ""}
+            onClick={() => setBasemap(key)}
+          >
+            {BASEMAPS[key].label}
+          </button>
+        ))}
+      </div>
+
       {rasters.map((l) => (
         <RasterLayer key={l.id} layer={l} />
       ))}
       {vectors.map((l) => (
         <VectorLayer key={l.id} layer={l} />
+      ))}
+      {geojsons.map((l) => (
+        <GeojsonLayer key={l.id} layer={l} />
       ))}
     </Map>
   );

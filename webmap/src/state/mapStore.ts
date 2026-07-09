@@ -4,11 +4,16 @@
 // `snapshot()` is sent with each chat turn so the model sees the live state.
 
 import { create } from "zustand";
+import type { FeatureCollection } from "geojson";
 import type { Legend } from "../config";
 import { ADMIN_LAYERS } from "../config";
 import type { PassSummary } from "../lib/passes";
 
-export type LayerKind = "raster-mosaic" | "raster-cogs" | "vector-pmtiles";
+export type LayerKind =
+  | "raster-mosaic"
+  | "raster-cogs"
+  | "vector-pmtiles"
+  | "geojson-local";
 
 export interface MapLayer {
   id: string; // unique, e.g. "sentinel1-flood:2026-06-05"
@@ -19,7 +24,11 @@ export interface MapLayer {
   tiles: string[]; // XYZ templates — one per MapLibre source
   pmtilesUrl?: string; // vector-pmtiles only
   sourceLayer?: string; // vector-pmtiles only
-  color?: string; // vector line colour
+  // geojson-local only: inline features parsed from a file the user dropped in,
+  // rendered entirely client-side (nothing is uploaded). Kept off snapshot() so
+  // the raw geometry never gets shipped to the chat backend.
+  geojson?: FeatureCollection;
+  color?: string; // vector line / geojson stroke colour
   width?: number; // vector line width
   minzoom?: number;
   opacity: number; // 0..1 (rasters)
