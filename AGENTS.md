@@ -57,9 +57,11 @@ env/config over code. Full detail + script index:
   commit generated data or geodatabases. (The webmap's `webmap/.env` is separate —
   it's Vite build-time `VITE_*` config, not secrets.)
 - **R2 layout mirrors the tiers:** objects use a medallion-tiered key prefix
-  `<tier>/<dataset>/<file>`. Each script hardcodes its own prefix; the shared
-  `.env` holds creds only — **never `R2_PREFIX`** (it would override every
-  script). Uploads are idempotent (HEAD, then skip if already present at full size).
+  `<tier>/<dataset>/<file>`. Each script hardcodes its own prefix (not
+  env-configurable, so nothing can silently redirect a tier); the shared `.env`
+  holds creds only. Uploads are idempotent — HEAD-then-skip for the bronze
+  downloader and Sentinel builders, overwrite-in-place for the rest (see
+  `pipelines/README.md`).
 
 ## Submodule guardrails
 
@@ -79,7 +81,7 @@ submodule push *and* a parent-repo commit are required) is in
    (`01-bronze`/`02-silver`/`03-gold`; `reference/` for by-reference loaders).
 1. Scripts self-document in their header (`--help` / comment block) — no
    per-script READMEs; `pipelines/README.md` is the index.
-1. R2 objects under tiered keys `<tier>/<dataset>/…`; shared creds in `.env`
-   (never `R2_PREFIX`).
+1. R2 objects under tiered keys `<tier>/<dataset>/…` (hardcoded per script);
+   shared creds in the repo-root `.env`.
 1. Tag asset sensitivity (open vs. restricted) as the platform grows — it drives
    which R2 bucket and access path an asset gets.

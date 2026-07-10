@@ -17,9 +17,6 @@ Stdlib only. Usage (from repo root, with pgSTAC up on :8082):
     STAC_API=http://localhost:8082 python3 pipelines/03-gold/catalog_silver.py
 """
 import argparse
-import datetime as dt
-import hashlib
-import hmac
 import json
 import os
 import re
@@ -41,9 +38,11 @@ def _repo_root():
 
 
 ROOT = _repo_root()
+sys.path.insert(0, os.path.join(ROOT, "pipelines", "lib"))
+from r2 import R2, load_env_file  # noqa: E402 — shared stdlib SigV4 R2 client
+
 STAC_API = os.environ.get("STAC_API", os.environ.get("DST", "http://localhost:8082")).rstrip("/")
 TIMEOUT = 60
-EMPTY_SHA256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
 PROJ_EXT = "https://stac-extensions.github.io/projection/v1.1.0/schema.json"
 RASTER_EXT = "https://stac-extensions.github.io/raster/v1.1.0/schema.json"
 RENDER_EXT = "https://stac-extensions.github.io/render/v1.0.0/schema.json"
@@ -83,9 +82,10 @@ PRODUCTS = [
                                  "resampling": "bilinear"}}},
     {"collection": "sentinel1-flood", "prefix": "02-silver/sentinel1-flood",
      "title": "Flood Extent (radar-derived) — Philippines",
-     "source_product": "sentinel1-flood", "extra_keywords": ["flood", "water", "SAR", "otsu"],
+     "source_product": "sentinel1-flood", "extra_keywords": ["flood", "water", "SAR", "threshold"],
      "description": "Open-water / flood mask derived from Sentinel-1 VV backscatter (dB) by "
-                    "Otsu thresholding (silver tier): 1 = water, 0 = land, 2 = permanent "
+                    "dark-water thresholding (sigma default; otsu/fixed options) "
+                    "(silver tier): 1 = water, 0 = land, 2 = permanent "
                     "water, 255 = nodata. POC flood proxy — NOT a validated product (no "
                     "calibration / speckle / terrain correction); complements the "
                     "authoritative Copernicus EMS / GFM reference layer.",
@@ -95,70 +95,6 @@ PRODUCTS = [
                            "colormap": {"1": [33, 102, 204, 255], "2": [120, 170, 230, 255]},
                            "resampling": "nearest"}}},
 ]
-
-
-def load_env_file(path):
-    if not path or not os.path.exists(path):
-        return
-    with open(path) as f:
-        for line in f:
-            line = line.strip()
-            if not line or line.startswith("#") or "=" not in line:
-                continue
-            k, _, v = line.partition("=")
-            os.environ.setdefault(k.strip(), v.strip().strip('"').strip("'"))
-
-
-# ---------- R2 (S3) listing via SigV4 ----------------------------------------
-def _hmac(key, msg):
-    return hmac.new(key, msg.encode(), hashlib.sha256).digest()
-
-
-def _signing_key(secret, datestamp, region, service):
-    k = _hmac(("AWS4" + secret).encode(), datestamp)
-    for part in (region, service, "aws4_request"):
-        k = _hmac(k, part)
-    return k
-
-
-class R2:
-    def __init__(self, account_id, bucket, ak, sk, region="auto"):
-        self.bucket, self.ak, self.sk, self.region = bucket, ak, sk, region
-        self.host = f"{account_id}.r2.cloudflarestorage.com"
-
-    def _auth(self, method, uri, query, payload_hash):
-        now = dt.datetime.now(dt.timezone.utc)
-        amz, day = now.strftime("%Y%m%dT%H%M%SZ"), now.strftime("%Y%m%d")
-        hdr = {"host": self.host, "x-amz-content-sha256": payload_hash, "x-amz-date": amz}
-        signed = ";".join(sorted(hdr))
-        canon_h = "".join(f"{h}:{hdr[h]}\n" for h in sorted(hdr))
-        canon = "\n".join([method, uri, query, canon_h, signed, payload_hash])
-        scope = f"{day}/{self.region}/s3/aws4_request"
-        sts = "\n".join(["AWS4-HMAC-SHA256", amz, scope, hashlib.sha256(canon.encode()).hexdigest()])
-        sig = hmac.new(_signing_key(self.sk, day, self.region, "s3"), sts.encode(), hashlib.sha256).hexdigest()
-        hdr["Authorization"] = (f"AWS4-HMAC-SHA256 Credential={self.ak}/{scope}, "
-                                f"SignedHeaders={signed}, Signature={sig}")
-        return hdr
-
-    def list_keys(self, prefix, retries=3):
-        """List object keys under prefix (no pagination — POC scale)."""
-        params = {"list-type": "2", "prefix": prefix}
-        q = "&".join(f"{urllib.parse.quote(k, safe='')}={urllib.parse.quote(v, safe='')}"
-                     for k, v in sorted(params.items()))
-        uri = "/" + self.bucket
-        url = f"https://{self.host}{uri}?{q}"
-        for attempt in range(1, retries + 1):
-            try:
-                hdr = self._auth("GET", uri, q, EMPTY_SHA256)
-                with urllib.request.urlopen(urllib.request.Request(url, headers=hdr), timeout=TIMEOUT) as r:
-                    body = r.read().decode()
-                return [k for k in re.findall(r"<Key>([^<]+)</Key>", body)]
-            except (urllib.error.URLError, urllib.error.HTTPError) as e:
-                if attempt < retries:
-                    time.sleep(1.5 * attempt)
-                else:
-                    print(f"  !! R2 list failed for {prefix}: {e}", file=sys.stderr)
-                    return []
 
 
 # ---------- COG metadata via gdalinfo ----------------------------------------
@@ -276,26 +212,28 @@ def main():
     bucket = os.environ.get("R2_BUCKET")
     acct = os.environ.get("R2_ACCOUNT_ID")
     public = os.environ.get("R2_PUBLIC_BASE", "").rstrip("/")
-    if not (bucket and acct and public):
-        sys.exit("!! need R2_BUCKET, R2_ACCOUNT_ID, R2_PUBLIC_BASE in .env")
     ak, sk = os.environ.get("AWS_ACCESS_KEY_ID"), os.environ.get("AWS_SECRET_ACCESS_KEY")
+    missing = [n for n, v in [("R2_BUCKET", bucket), ("R2_ACCOUNT_ID", acct),
+                              ("R2_PUBLIC_BASE", public), ("AWS_ACCESS_KEY_ID", ak),
+                              ("AWS_SECRET_ACCESS_KEY", sk)] if not v]
+    if missing:
+        sys.exit(f"!! need {', '.join(missing)} in .env (listing the silver prefixes "
+                 "requires the R2 API-token creds)")
     r2 = R2(acct, bucket, ak, sk)
 
-    # Read COG metadata over the authenticated /vsis3 endpoint when creds are present:
-    # the public r2.dev host has flaky DNS (see TODO "Tile-serving robustness"), while
+    # Read COG metadata over the authenticated /vsis3 endpoint: the public r2.dev
+    # host has flaky DNS (see TODO "Tile-serving robustness"), while
     # <account>.r2.cloudflarestorage.com resolves reliably. Asset hrefs stay public.
-    use_vsis3 = bool(ak and sk)
-    if use_vsis3:
-        os.environ["AWS_S3_ENDPOINT"] = f"{acct}.r2.cloudflarestorage.com"
-        os.environ["AWS_VIRTUAL_HOSTING"] = "FALSE"
-        os.environ["AWS_DEFAULT_REGION"] = "auto"
+    os.environ["AWS_S3_ENDPOINT"] = f"{acct}.r2.cloudflarestorage.com"
+    os.environ["AWS_VIRTUAL_HOSTING"] = "FALSE"
+    os.environ["AWS_DEFAULT_REGION"] = "auto"
 
     def read_path(key):
-        return f"/vsis3/{bucket}/{key}" if use_vsis3 else f"/vsicurl/{public}/{key}"
+        return f"/vsis3/{bucket}/{key}"
 
     print(f">> pgSTAC : {STAC_API}")
     print(f">> bucket : {bucket}")
-    print(f">> read   : {'vsis3 (authenticated)' if use_vsis3 else 'vsicurl (public r2.dev)'}")
+    print(">> read   : vsis3 (authenticated)")
     if args.dry_run:
         print(">> DRY RUN — no writes")
 
@@ -303,7 +241,11 @@ def main():
     grand = {"created": 0, "updated": 0, "error": 0, "dry-run": 0}
     for prod in products:
         cid = prod["collection"]
-        keys = [k for k in r2.list_keys(prod["prefix"] + "/") if k.lower().endswith(".tif")]
+        try:
+            keys = [k for k in r2.list_keys(prod["prefix"] + "/") if k.lower().endswith(".tif")]
+        except (urllib.error.URLError, OSError) as e:
+            print(f"  !! skip {cid}: R2 list failed for {prod['prefix']} ({e})", file=sys.stderr)
+            continue
         print(f"\n>> {cid}: {len(keys)} COG(s) under {prod['prefix']}/")
         if not keys:
             continue

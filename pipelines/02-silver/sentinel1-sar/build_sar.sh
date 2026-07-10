@@ -15,10 +15,12 @@
 # pyroSAR pipeline) — or use authoritative Copernicus EMS / GFM flood products.
 # This COG is the base layer such processing would build on. See pipelines/README.md.
 #
-# Parameters (env): SCENE, SAFE, BRONZE_DIR, BRONZE_PREFIX, OUTPUT_DIR, STAGING,
-#   FORCE, POL (polarisation, default vv), and the R2_* / AWS_* set from .env.
+# Parameters (env): SCENE (default: newest *GRDH*.zip in BRONZE_DIR), SAFE,
+#   BRONZE_DIR, BRONZE_PREFIX, OUTPUT_DIR, STAGING, FORCE, POL (polarisation,
+#   default vv), and the R2_* / AWS_* creds from .env (output prefix hardcoded:
+#   02-silver/sentinel1-sar).
 #   BRONZE_DIR = local dir of raw scenes (default <repo>/eodata; checked before R2).
-# Requires GDAL >= 3.8, curl, unzip.
+# Requires GDAL >= 3.11 (`gdal vsi copy` for R2 staging), curl, unzip.
 #
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -27,22 +29,35 @@ while [ "$REPO_ROOT" != "/" ]; do
   if [ -e "$REPO_ROOT/.git" ] || [ -e "$REPO_ROOT/AGENTS.md" ]; then break; fi
   REPO_ROOT="$(dirname "$REPO_ROOT")"
 done
+# shared R2 creds — the single repo-root .env only (ENV_FILE overrides the path)
 . "${REPO_ROOT}/pipelines/lib/load_env.sh"
-for _envf in "${ENV_FILE:-}" "${PWD}/.env" "${REPO_ROOT}/.env" "${SCRIPT_DIR}/.env"; do
+for _envf in "${ENV_FILE:-}" "${REPO_ROOT}/.env"; do
   if [ -n "$_envf" ] && [ -f "$_envf" ]; then
     echo ">> loading env from ${_envf}"; load_env "$_envf"; break
   fi
 done
 
 BRONZE_PREFIX="${BRONZE_PREFIX:-01-bronze/copphil-sentinel}"
-SCENE="${SCENE:-S1D_IW_GRDH_1SDV_20260613T214635_20260613T214706_003223_0059FF_B12E_COG.SAFE.zip}"
+SCENE="${SCENE:-}"
 POL="${POL:-vv}"
 BRONZE_DIR="${BRONZE_DIR:-${REPO_ROOT}/eodata}"        # local bronze scenes (download_copphil_eodata.py --out)
 STAGING="${STAGING:-${REPO_ROOT}/eodata/_staging}"     # cache for scenes pulled from R2
 OUTPUT_DIR="${OUTPUT_DIR:-${REPO_ROOT}/eodata}"
-R2_BUCKET="${R2_BUCKET:-}"; R2_PREFIX="${R2_PREFIX:-02-silver/sentinel1-sar}"
+R2_BUCKET="${R2_BUCKET:-}"
+R2_PREFIX="02-silver/sentinel1-sar"   # hardcoded per tier/dataset — see pipelines/README.md
 R2_PUBLIC_BASE="${R2_PUBLIC_BASE:-}"
 mkdir -p "$STAGING"
+
+# no SCENE/SAFE given: default to the newest local bronze S1 scene
+if [ -z "$SCENE" ] && [ -z "${SAFE:-}" ]; then
+  _latest="$(ls -t "${BRONZE_DIR}"/*GRDH*.zip 2>/dev/null | head -1 || true)"
+  if [ -z "$_latest" ]; then
+    echo "!! set SCENE=<bronze .SAFE.zip> or SAFE=<local path> (no *GRDH*.zip in ${BRONZE_DIR})" >&2
+    exit 1
+  fi
+  SCENE="$(basename "$_latest")"
+  echo ">> SCENE not set — using newest local bronze scene: ${SCENE}"
+fi
 
 # early skip: if the R2 output already exists, do NOT download/stage anything
 if [ -n "$R2_BUCKET" ] && [ "${FORCE:-0}" != "1" ] && [ -n "${R2_ACCOUNT_ID:-}" ]; then

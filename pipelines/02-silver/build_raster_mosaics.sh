@@ -10,6 +10,12 @@
 #
 # How: read COG hrefs from the STAC API, build the mosaic *inside* the TiTiler
 # container (it already ships cogeo-mosaic + R2/GDAL access), upload with awscli.
+# NOTE: this reads item hrefs from the CATALOG, so it must run AFTER the gold
+# step (catalog_silver.py) has registered the scenes it should stitch.
+#
+# COLLECTIONS defaults to the three *scene* collections; sentinel1-flood is
+# deliberately excluded (categorical proxy mask, not a continuous layer) — pass
+# COLLECTIONS="... sentinel1-flood" to include it.
 #
 # Creds come from the gitignored .env (AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY
 # / R2_ACCOUNT_ID / R2_BUCKET). Never hard-coded here.
@@ -56,9 +62,10 @@ else
   echo "mosaic builder: TiTiler container ($COMPOSE exec titiler)"
 fi
 
-# R2 creds + S3 endpoint (path-style, region "auto"). Shared creds: repo-root .env.
+# R2 creds + S3 endpoint (path-style, region "auto"). Shared creds: the single
+# repo-root .env only (ENV_FILE overrides the path).
 . "${REPO_ROOT}/pipelines/lib/load_env.sh"
-for _envf in "${ENV_FILE:-}" "${PWD}/.env" "${REPO_ROOT}/.env" "${SCRIPT_DIR}/.env"; do
+for _envf in "${ENV_FILE:-}" "${REPO_ROOT}/.env"; do
   if [ -n "$_envf" ] && [ -f "$_envf" ]; then load_env "$_envf"; break; fi
 done
 S3_ENDPOINT="https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
@@ -69,10 +76,13 @@ WORKDIR="$(mktemp -d)"; trap 'rm -rf "$WORKDIR"' EXIT
 for coll in $COLLECTIONS; do
   echo ">>> $coll"
   # (date href) pairs for every item in the collection.
-  curl -s "${STAC_API}/collections/${coll}/items?limit=500" | python3 -c "
+  curl -s "${STAC_API}/collections/${coll}/items?limit=1000" | python3 -c "
 import sys, json
 d = json.load(sys.stdin)
-for f in d.get('features', []):
+feats = d.get('features', [])
+if len(feats) >= 1000:
+    print('WARN: hit the 1000-item page cap — add pagination or newer scenes will be missed', file=sys.stderr)
+for f in feats:
     p = f.get('properties', {})
     dt = (p.get('datetime') or p.get('start_datetime') or '')[:10]
     href = f.get('assets', {}).get('data', {}).get('href')

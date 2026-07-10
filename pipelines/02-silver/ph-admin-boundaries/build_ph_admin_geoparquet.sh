@@ -35,8 +35,9 @@
 #
 #   --- Cloudflare R2 upload (set R2_BUCKET to switch from local to R2) ---
 #   R2_BUCKET     R2 bucket name. When set, output goes to R2, not local disk.
+#                 The key prefix is hardcoded ("02-silver/ph-admin-boundaries"),
+#                 per the R2 conventions in pipelines/README.md.
 #   R2_ACCOUNT_ID Cloudflare account id (forms the S3 endpoint). REQUIRED for R2.
-#   R2_PREFIX     key prefix in the bucket (default "02-silver/ph-admin-boundaries").
 #   R2_PUBLIC_BASE  optional public base URL (your r2.dev subdomain or a custom
 #                   domain). If set, the summary prints each object's https URL.
 #   AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY
@@ -44,7 +45,7 @@
 #                 hard-code these — export them in your shell or a gitignored
 #                 env file. (These are the standard S3 vars; R2 honours them.)
 #   ENV_FILE      path to a KEY=VALUE env file to load before running. If unset,
-#                 auto-loads .env from cwd, the repo root, or this script's dir.
+#                 auto-loads the repo-root .env.
 #
 # Usage:
 #   ./build_ph_admin_geoparquet.sh                                 # local, full res
@@ -69,9 +70,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # ---- optional env file (so R2 creds aren't typed on every run) --------------
 # Loads KEY=VALUE lines (exported) BEFORE the parameters below are resolved.
-# Search order: $ENV_FILE (if set), ./.env (cwd), <repo-root>/.env,
-# <script-dir>/.env. The shared R2 creds live in the repo-root .env.
-# Keep this file OUT of git — it holds AWS_SECRET_ACCESS_KEY. See README.md.
+# Search order: $ENV_FILE (if set), then the single repo-root .env — the shared
+# R2 creds live there. Keep this file OUT of git — it holds
+# AWS_SECRET_ACCESS_KEY. See README.md.
 if [ -n "${ENV_FILE:-}" ] && [ ! -f "${ENV_FILE}" ]; then
   echo "ERROR: ENV_FILE=${ENV_FILE} not found"; exit 1
 fi
@@ -81,7 +82,7 @@ while [ "$REPO_ROOT" != "/" ]; do
   REPO_ROOT="$(dirname "$REPO_ROOT")"
 done
 . "${REPO_ROOT}/pipelines/lib/load_env.sh"
-for _envf in "${ENV_FILE:-}" "${PWD}/.env" "${REPO_ROOT}/.env" "${SCRIPT_DIR}/.env"; do
+for _envf in "${ENV_FILE:-}" "${REPO_ROOT}/.env"; do
   if [ -n "$_envf" ] && [ -f "$_envf" ]; then
     echo ">> loading env from ${_envf}"
     load_env "$_envf"
@@ -97,7 +98,7 @@ GDB_URL="https://data.humdata.org/dataset/caf116df-f984-4deb-85ca-41b349d3f313/r
 # Cloudflare R2 (S3-compatible) parameters
 R2_BUCKET="${R2_BUCKET:-}"
 R2_ACCOUNT_ID="${R2_ACCOUNT_ID:-}"
-R2_PREFIX="${R2_PREFIX:-02-silver/ph-admin-boundaries}"
+R2_PREFIX="02-silver/ph-admin-boundaries"   # hardcoded per tier/dataset — see pipelines/README.md
 R2_PUBLIC_BASE="${R2_PUBLIC_BASE:-}"
 
 # ---- sanity: drivers --------------------------------------------------------

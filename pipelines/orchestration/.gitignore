@@ -6,5 +6,6 @@ history/
 logs/
 schedules/
 storage/
+.logs_queue/
 .telemetry/
 .nux/

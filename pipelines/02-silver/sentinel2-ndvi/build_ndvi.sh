@@ -13,7 +13,8 @@
 # (gold) step. See pipelines/README.md for the tier model and R2 conventions.
 #
 # Parameters (all via environment):
-#   SCENE         bronze S2 .SAFE.zip filename to process (default: latest known).
+#   SCENE         bronze S2 .SAFE.zip filename to process (default: the newest
+#                 *MSIL2A*.zip in BRONZE_DIR; errors if there is none).
 #   SAFE          local path to an S2 L2A .SAFE.zip (skips all lookup).
 #   BRONZE_DIR    local dir of raw scenes, checked before R2 (default <repo>/eodata).
 #   BRONZE_PREFIX R2 key prefix of the raw scenes (default 01-bronze/copphil-sentinel).
@@ -21,10 +22,12 @@
 #   STAGING       local staging/cache dir for the downloaded zip + temps
 #                 (default <repo>/eodata/_staging).
 #   FORCE         set to 1 to rebuild even if the R2 output already exists.
-#   R2_BUCKET / R2_ACCOUNT_ID / R2_PREFIX(=02-silver/sentinel2-ndvi) /
-#   R2_PUBLIC_BASE / AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY  — from .env.
+#   R2_BUCKET / R2_ACCOUNT_ID / R2_PUBLIC_BASE / AWS_ACCESS_KEY_ID /
+#   AWS_SECRET_ACCESS_KEY  — from .env. The output key prefix is hardcoded
+#   (02-silver/sentinel2-ndvi), per the R2 conventions in pipelines/README.md.
 #
-# Requires GDAL >= 3.8 (gdal_calc.py + COG driver), curl, unzip.
+# Requires GDAL >= 3.11 (gdal_calc.py, COG driver, and the unified `gdal` CLI
+# used for `gdal vsi copy` R2 staging), curl, unzip.
 #
 set -euo pipefail
 
@@ -35,23 +38,34 @@ while [ "$REPO_ROOT" != "/" ]; do
   REPO_ROOT="$(dirname "$REPO_ROOT")"
 done
 
-# shared R2 creds (creds only — never R2_PREFIX). Search cwd, repo root, script dir.
+# shared R2 creds — the single repo-root .env only (ENV_FILE overrides the path)
 . "${REPO_ROOT}/pipelines/lib/load_env.sh"
-for _envf in "${ENV_FILE:-}" "${PWD}/.env" "${REPO_ROOT}/.env" "${SCRIPT_DIR}/.env"; do
+for _envf in "${ENV_FILE:-}" "${REPO_ROOT}/.env"; do
   if [ -n "$_envf" ] && [ -f "$_envf" ]; then
     echo ">> loading env from ${_envf}"; load_env "$_envf"; break
   fi
 done
 
 BRONZE_PREFIX="${BRONZE_PREFIX:-01-bronze/copphil-sentinel}"
-SCENE="${SCENE:-S2C_MSIL2A_20260615T021531_N0512_R003_T51QWA_20260615T054156.SAFE.zip}"
+SCENE="${SCENE:-}"
 BRONZE_DIR="${BRONZE_DIR:-${REPO_ROOT}/eodata}"        # local bronze scenes (download_copphil_eodata.py --out)
 STAGING="${STAGING:-${REPO_ROOT}/eodata/_staging}"     # cache for scenes pulled from R2
 OUTPUT_DIR="${OUTPUT_DIR:-${REPO_ROOT}/eodata}"
 R2_BUCKET="${R2_BUCKET:-}"
-R2_PREFIX="${R2_PREFIX:-02-silver/sentinel2-ndvi}"
+R2_PREFIX="02-silver/sentinel2-ndvi"   # hardcoded per tier/dataset — see pipelines/README.md
 R2_PUBLIC_BASE="${R2_PUBLIC_BASE:-}"
 mkdir -p "$STAGING"
+
+# no SCENE/SAFE given: default to the newest local bronze S2 scene
+if [ -z "$SCENE" ] && [ -z "${SAFE:-}" ]; then
+  _latest="$(ls -t "${BRONZE_DIR}"/*MSIL2A*.zip 2>/dev/null | head -1 || true)"
+  if [ -z "$_latest" ]; then
+    echo "!! set SCENE=<bronze .SAFE.zip> or SAFE=<local path> (no *MSIL2A*.zip in ${BRONZE_DIR})" >&2
+    exit 1
+  fi
+  SCENE="$(basename "$_latest")"
+  echo ">> SCENE not set — using newest local bronze scene: ${SCENE}"
+fi
 
 # early skip: if the R2 output already exists, do NOT download/stage anything
 if [ -n "$R2_BUCKET" ] && [ "${FORCE:-0}" != "1" ] && [ -n "${R2_ACCOUNT_ID:-}" ]; then

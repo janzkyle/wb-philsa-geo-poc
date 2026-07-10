@@ -24,6 +24,7 @@ import argparse
 import json
 import os
 import sys
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -33,10 +34,19 @@ DST = os.environ.get("DST", os.environ.get("STAC_API", "http://localhost:8082"))
 TIMEOUT = 60
 
 
-def get(url):
+def get(url, retries=3):
+    """GET JSON with retries — a transient network error must not kill a long
+    mirror run (the per-collection loop skip-and-logs if this still fails)."""
     req = urllib.request.Request(url, headers={"Accept": "application/json"})
-    with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
-        return json.load(r)
+    for attempt in range(1, retries + 1):
+        try:
+            with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
+                return json.load(r)
+        except (urllib.error.URLError, OSError, ValueError) as e:
+            if attempt == retries:
+                raise
+            print(f"  .. GET failed ({e}) — retry {attempt}/{retries - 1}", file=sys.stderr)
+            time.sleep(1.5 * attempt)
 
 
 def send(method, url, payload):
@@ -152,14 +162,20 @@ def main():
     grand = {"created": 0, "updated": 0, "error": 0, "dry-run": 0}
     for col in cols:
         cid = col["id"]
-        # fetch the full collection object (list view can be trimmed)
-        full = get(f"{SRC}/collections/{urllib.parse.quote(cid)}")
-        if not mirror_collection(full, args.dry_run):
-            print(f"  !! skipping items for {cid} (collection upsert failed)")
+        try:
+            # fetch the full collection object (list view can be trimmed)
+            full = get(f"{SRC}/collections/{urllib.parse.quote(cid)}")
+            if not mirror_collection(full, args.dry_run):
+                print(f"  !! skipping items for {cid} (collection upsert failed)")
+                continue
+            if args.collections_only:
+                continue
+            counts = mirror_items(cid, args.limit, args.max_items, args.dry_run)
+        except (urllib.error.URLError, OSError, ValueError) as e:
+            # skip-and-log: one bad collection must not abort the whole mirror
+            print(f"  !! {cid}: skipped after repeated errors ({e})", file=sys.stderr)
+            grand["error"] += 1
             continue
-        if args.collections_only:
-            continue
-        counts = mirror_items(cid, args.limit, args.max_items, args.dry_run)
         print(f"  items: {counts}\n")
         for k, v in counts.items():
             grand[k] = grand.get(k, 0) + v

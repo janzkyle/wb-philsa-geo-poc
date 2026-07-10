@@ -41,9 +41,9 @@ SRC_PREFIX="${SRC_PREFIX:-02-silver/ph-admin-boundaries}"
 DST_PREFIX="${DST_PREFIX:-02-silver/ph-admin-boundaries/pmtiles}"
 
 # --- credentials / R2 endpoint ------------------------------------------------
-# Shared R2 creds live in the repo-root .env (search: $ENV_FILE, cwd, repo, script dir).
+# Shared R2 creds live in the single repo-root .env ($ENV_FILE overrides the path).
 . "${REPO_ROOT}/pipelines/lib/load_env.sh"
-for _envf in "${ENV_FILE:-}" "${PWD}/.env" "${REPO_ROOT}/.env" "${SCRIPT_DIR}/.env"; do
+for _envf in "${ENV_FILE:-}" "${REPO_ROOT}/.env"; do
   if [ -n "$_envf" ] && [ -f "$_envf" ]; then load_env "$_envf"; break; fi
 done
 : "${R2_BUCKET:?set R2_BUCKET (or provide .env)}"

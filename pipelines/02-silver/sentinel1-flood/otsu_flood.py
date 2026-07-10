@@ -9,10 +9,13 @@ Physical basis: smooth open water specularly reflects the radar pulse away from 
 sensor, so it returns very low backscatter (dark) in VV dB. Flooded land therefore
 appears as an anomalously dark patch. We split dark-from-bright with a threshold:
 
-  --method otsu  (default)  global Otsu threshold over the valid-pixel histogram,
+  --method sigma (default)  cut at mean - k*std (k = --k, default 2.0). Robust on
+                            unimodal, mostly-land scenes where Otsu has no
+                            distinct water mode to find.
+  --method otsu             global Otsu threshold over the valid-pixel histogram,
                             clamped to a plausible water window so a mostly-land
                             scene doesn't push the split into the land mode.
-  --method fixed --threshold -17   a fixed dB cut (skip Otsu).
+  --method fixed --threshold -17   a fixed dB cut.
 
 This is the POC route. It is NOT a validated flood product — no radiometric
 calibration, speckle filtering or terrain correction, and SAR shadow / smooth dry

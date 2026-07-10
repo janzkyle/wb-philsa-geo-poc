@@ -12,9 +12,11 @@ config, notebook, or tests it grows later.
 
 ```
 pipelines/
+├── lib/                       # shared helpers: load_env.sh (shell), r2.py (Python SigV4 R2 client)
 ├── 01-bronze/                 # raw, as-acquired data — we own the bytes
 │   └── copphil-sentinel/
 ├── 02-silver/                 # cleaned / conformed / derived assets → Cloudflare R2
+│   ├── build_silver.py        # batch driver: every bronze scene → every silver product
 │   ├── ph-admin-boundaries/
 │   ├── sentinel2-ndvi/
 │   ├── sentinel2-truecolor/
@@ -26,7 +28,8 @@ pipelines/
 │       (open/restricted tagging … as built)
 └── reference/                 # by-reference loaders — NOT part of the medallion flow
     ├── philsa-catalog/
-    └── esri-lulc/
+    ├── esri-lulc/
+    └── mula-mock/             # SIMULATED MULA collection for demos (clearly flagged)
 ```
 
 ## What each tier means here
@@ -48,6 +51,7 @@ The full CopPhil path is the clean medallion example:
 | Dataset / product | Source (where from) | Processing (how) | Used for (where) |
 | --- | --- | --- | --- |
 | **PhilSA satellite catalog** *(reference)* | PhilSA's public STAC API | Mirrored **by reference** — STAC metadata copied into our pgSTAC, pixels left at source | Discovery of PhilSA imagery (Diwata-2, SkySat, PlanetScope) in one catalog |
+| **MULA mock** *(reference)* | Recent Diwata-2 scenes already in our catalog | **Simulated** MULA collection: same COG hrefs by reference, re-dated to the last N days; flagged `mula:simulated` + source item recorded | Demo of a near-real-time MULA feed (PhilSA's upcoming satellite — no real data exists yet) |
 | **ESRI 10 m LULC** *(reference)* | Esri / Impact Observatory *Living Atlas* (public COGs) | Registered **by reference** (no download/re-host) | Land-cover context layer in the catalog |
 | **CopPhil Sentinel-1/2** *(bronze)* | CopPhil / CloudFerro OData catalog + token download (Keycloak auth) | Raw `.SAFE.zip` downloaded to local `eodata/`, byte-count verified (default: Central Luzon, S2 ≤20% cloud, latest 3 dates; `--r2` also uploads as bronze) | Input to every silver Sentinel derivative below |
 | **PH admin boundaries** *(silver)* | OCHA COD-AB geodatabase on HDX | `ogr2ogr` → GeoParquet (adm0–adm4, optional simplify tolerance) | AOI selection / overlay reference vector |
@@ -75,6 +79,7 @@ script. This table is just the map:
 | --- | --- | --- | --- | --- |
 | `reference/philsa-catalog/mirror_philsa_catalog.py` | reference | Python | Mirror the PhilSA STAC catalog by reference | `python3 <path> --dry-run` |
 | `reference/esri-lulc/load_esri_lulc.sh` | reference | shell | Register ESRI 10 m LULC COGs by reference | `YEAR=2025 bash <path>` |
+| `reference/mula-mock/mock_mula_catalog.py` | reference | Python | Register the **simulated** MULA collection (re-dated Diwata-2 scenes, by reference) | `python3 <path> --dry-run` |
 | `01-bronze/copphil-sentinel/download_copphil_eodata.py` | 01-bronze | Python | Download raw Sentinel scenes (Central Luzon, cloud-free, latest N dates) → local `eodata/` (`--r2` also uploads as bronze) | `python3 <path>` |
 | `02-silver/ph-admin-boundaries/build_ph_admin_geoparquet.sh` | 02-silver | shell | OCHA COD-AB geodatabase → GeoParquet (local or R2) | `TOLERANCE_M=100 bash <path>` |
 | `02-silver/ph-admin-boundaries/build_ph_admin_pmtiles.sh` | 02-silver | shell | GeoParquet → PMTiles (adm0–adm2) for the webmap → R2 | `bash <path>` |
@@ -83,7 +88,8 @@ script. This table is just the map:
 | `02-silver/sentinel1-sar/build_sar.sh` | 02-silver | shell | Sentinel-1 GRD VV → geocoded backscatter (dB) COG → R2 | `bash <path>` |
 | `02-silver/sentinel1-flood/build_flood.sh` | 02-silver | shell | Silver VV-dB COG → flood/water Byte mask COG → R2 | `SAR_NAME=… bash <path>` |
 | `02-silver/sentinel1-flood/otsu_flood.py` | 02-silver | Python | Classify VV-dB → flood Byte mask (`sigma`/`otsu`/`fixed`); called by `build_flood.sh` | `python3 <path> --help` |
-| `02-silver/build_raster_mosaics.sh` | 02-silver | shell | Per-date MosaicJSON stitching same-day Sentinel COG granules (all 3 collections) → R2 | `bash <path>` |
+| `02-silver/build_silver.py` | 02-silver | Python | Batch driver: every bronze scene → every silver product (ndvi, truecolor, sar, flood) | `python3 <path> --dry-run` |
+| `02-silver/build_raster_mosaics.sh` | 02-silver | shell | Per-date MosaicJSON stitching same-day Sentinel COG granules (the 3 scene collections; flood excluded by default) → R2. Reads hrefs from the catalog, so run it **after** the gold step | `bash <path>` |
 | `03-gold/catalog_silver.py` | 03-gold | Python | Register silver COGs in pgSTAC as STAC collections+items (by reference) | `python3 <path>` |
 
 ## Orchestration (Dagster)
@@ -104,11 +110,19 @@ bronze/copphil_sentinel
    ├─ silver/sentinel2_truecolor ─┤
    ├─ silver/sentinel1_sar ─┬─────┤
    │      └─ silver/sentinel1_flood ─┤   (flood reads the silver VV-dB COG)
-   │                                 └─ silver/raster_mosaics ─ gold/stac_catalog
+   │                                 └─ gold/stac_catalog ─ silver/raster_mosaics
 silver/ph_admin_geoparquet ─ silver/ph_admin_pmtiles   (manual-run, no upstream)
 reference/philsa_catalog                                (by-reference loaders,
 reference/esri_lulc                                      standalone/manual-run)
 ```
+
+`raster_mosaics` sits **after** gold because the mosaic script reads item
+hrefs from the STAC API — it can only stitch scenes the gold step has already
+registered. The per-scene Sentinel silver assets run in **batch mode** when no
+`scene` is set in run config: they invoke `build_silver.py --only <product>`,
+which builds that product for every bronze scene (local + R2) — so a
+sensor-triggered chain run actually processes the newly downloaded scenes.
+Pin `scene` (or `sar_name` for flood) in run config to build a single scene.
 
 **Run modes — both from the checklist ask:**
 - **One-time / manual:** materialize any asset from the UI ("Materialize"), or
@@ -161,17 +175,20 @@ s3://<bucket>/
 ```
 
 Conventions for R2-writing scripts:
-- The prefix is **hardcoded per script** (its tier + dataset), not read from the
-  shared env file. `download_copphil_eodata.py` is **R2-only** (requires `R2_BUCKET`);
+- The prefix is **hardcoded per script** (its tier + dataset) — it is not
+  configurable via the environment, so a stray env var can't silently redirect
+  a tier. `download_copphil_eodata.py` writes locally by default (`--r2` uploads);
   `build_ph_admin_geoparquet.sh` writes locally unless `R2_BUCKET` is set.
 - **All credentials live in a single repo-root `.env`** (gitignored): R2 creds
   `R2_BUCKET`, `R2_ACCOUNT_ID`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`,
   optional `R2_PUBLIC_BASE`, plus CopPhil `COPPHIL_USERNAME` / `COPPHIL_PASSWORD`.
-  Every script auto-loads it (override the path with `ENV_FILE=…`); see the
-  repo-root `.env.example` for the full key list. **Do not** put `R2_PREFIX` there —
-  it would override each script's per-tier prefix.
-- Uploads are **idempotent**: a script HEADs the object and skips if it already
-  exists at the expected size.
+  Every script auto-loads it — and **only** it (override the path with
+  `ENV_FILE=…`; a `.env` in the cwd is deliberately ignored so e.g. `webmap/.env`
+  can't shadow the creds). See the repo-root `.env.example` for the full key list.
+- Uploads are **idempotent**, two flavours: the bronze downloader and the four
+  Sentinel builders HEAD/`gdalinfo` the object and **skip** if it already exists
+  (`FORCE=1` rebuilds); the admin-boundary, PMTiles, and mosaic builders instead
+  **overwrite in place** (re-runs converge but re-do the work).
 
 ### R2 one-time setup
 
@@ -185,16 +202,18 @@ Needed before the first R2 upload (any script):
 5. *(Optional)* enable the bucket's `r2.dev` subdomain or a custom domain for
    public HTTPS and set it as `R2_PUBLIC_BASE`.
 
-Endpoint is `https://<R2_ACCOUNT_ID>.r2.cloudflarestorage.com`. The Python uploader
-(`download_copphil_eodata.py`) signs with stdlib SigV4; the shell builder writes via
-GDAL `/vsis3` — **no awscli/rclone needed**.
+Endpoint is `https://<R2_ACCOUNT_ID>.r2.cloudflarestorage.com`. The Python scripts
+sign with stdlib SigV4 (shared client: `pipelines/lib/r2.py`); the shell builders
+write via GDAL `/vsis3` — no awscli/rclone needed for those. The exceptions are
+`build_ph_admin_pmtiles.sh` and `build_raster_mosaics.sh`, which upload with the
+`aws` CLI.
 
 ## Why `reference/` sits outside the medallion tiers
 
 The medallion model assumes you **own the bytes and progressively refine them**.
-Two loaders don't fit that: `mirror_philsa_catalog.py` and `load_esri_lulc.sh`
-(and the planned Earth Search loader) follow the project's
-[**catalog-by-reference**](../AGENTS.md) principle — they copy only STAC metadata
+Three loaders don't fit that: `mirror_philsa_catalog.py`, `load_esri_lulc.sh`,
+and `mock_mula_catalog.py` (and the planned Earth Search loader) follow the
+project's [**catalog-by-reference**](../AGENTS.md) principle — they copy only STAC metadata
 into pgSTAC and leave the pixels at their original source. Nothing is downloaded,
 transformed, or re-hosted, so there is no bronze→silver→gold progression to place
 them in. They register external, already-finished assets directly into the

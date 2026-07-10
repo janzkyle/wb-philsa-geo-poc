@@ -27,8 +27,9 @@ Space Ecosystem):
 Destination: local staging dir (`--out`, default <repo>/eodata) — scenes are
 downloaded there, verified against ContentLength, and KEPT for the downstream
 silver step. Pass `--r2` to ALSO upload each scene as bronze under the
-medallion-tiered key prefix `01-bronze/copphil-sentinel/` (override R2_PREFIX);
-in that mode the local staging copy is removed after a verified upload.
+medallion-tiered key prefix `01-bronze/copphil-sentinel/` (hardcoded, per the
+R2 conventions in pipelines/README.md); in that mode the local staging copy is
+removed after a verified upload.
 
 Credentials come from the environment, or the gitignored repo-root `.env`:
     COPPHIL_USERNAME, COPPHIL_PASSWORD   (required — your CopPhil account)
@@ -36,7 +37,6 @@ Credentials come from the environment, or the gitignored repo-root `.env`:
     COPPHIL_AOI_WKT                      (overrides --region; default region: central-luzon)
     R2_BUCKET        target bucket (only needed with --r2)
     R2_ACCOUNT_ID    Cloudflare account id (forms the S3 endpoint; --r2 only)
-    R2_PREFIX        key prefix (default: 01-bronze/copphil-sentinel; --r2 only)
     R2_PUBLIC_BASE   optional public base URL for printed object URLs
     AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY   R2 API-token creds (--r2 only)
 
@@ -49,9 +49,6 @@ From the repo root:
 (CopPhil + R2 creds both come from the repo-root .env.)
 """
 import argparse
-import datetime
-import hashlib
-import hmac
 import json
 import os
 import sys
@@ -72,6 +69,8 @@ def _repo_root():
 
 
 ROOT = _repo_root()
+sys.path.insert(0, os.path.join(ROOT, "pipelines", "lib"))
+from r2 import R2, load_env_file  # noqa: E402 — shared stdlib SigV4 R2 client
 
 # --- endpoints (override via env if the mirror ever moves) -------------------
 AUTH_URL = os.environ.get(
@@ -107,21 +106,6 @@ COLLECTIONS = {
 }
 
 TIMEOUT = 120
-EMPTY_SHA256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
-
-
-def load_env_file(path):
-    """Populate os.environ from a simple KEY=VALUE file (does not overwrite set vars)."""
-    if not path or not os.path.exists(path):
-        return
-    with open(path) as f:
-        for line in f:
-            line = line.strip()
-            if not line or line.startswith("#") or "=" not in line:
-                continue
-            key, _, val = line.partition("=")
-            key, val = key.strip(), val.strip().strip('"').strip("'")
-            os.environ.setdefault(key, val)
 
 
 class Auth:
@@ -154,91 +138,6 @@ class Auth:
         self._token = body["access_token"]
         self._expires_at = time.time() + int(body.get("expires_in", 600))
         return self._token
-
-
-# --- minimal Cloudflare R2 (S3-compatible) client, AWS SigV4 via stdlib ------
-def _hmac(key, msg):
-    return hmac.new(key, msg.encode("utf-8"), hashlib.sha256).digest()
-
-
-def _signing_key(secret, datestamp, region, service):
-    k = _hmac(("AWS4" + secret).encode("utf-8"), datestamp)
-    k = _hmac(k, region)
-    k = _hmac(k, service)
-    return _hmac(k, "aws4_request")
-
-
-class R2:
-    """Just enough S3 to HEAD and PUT objects on Cloudflare R2 (path-style)."""
-
-    def __init__(self, account_id, bucket, access_key, secret_key, prefix,
-                 public_base=None, region="auto"):
-        self.account_id = account_id
-        self.bucket = bucket
-        self.access_key = access_key
-        self.secret_key = secret_key
-        self.prefix = prefix.strip("/")
-        self.public_base = public_base
-        self.region = region
-        self.host = f"{account_id}.r2.cloudflarestorage.com"
-
-    def key_for(self, fname):
-        return f"{self.prefix}/{fname}" if self.prefix else fname
-
-    def _url(self, key):
-        return f"https://{self.host}/{self.bucket}/{urllib.parse.quote(key, safe='/')}"
-
-    def _auth_headers(self, method, key, payload_hash):
-        now = datetime.datetime.now(datetime.timezone.utc)
-        amzdate = now.strftime("%Y%m%dT%H%M%SZ")
-        datestamp = now.strftime("%Y%m%d")
-        canonical_uri = "/" + self.bucket + "/" + urllib.parse.quote(key, safe="/")
-        headers = {
-            "host": self.host,
-            "x-amz-content-sha256": payload_hash,
-            "x-amz-date": amzdate,
-        }
-        signed = ";".join(sorted(headers))
-        canonical_headers = "".join(f"{h}:{headers[h]}\n" for h in sorted(headers))
-        canonical_request = "\n".join(
-            [method, canonical_uri, "", canonical_headers, signed, payload_hash])
-        scope = f"{datestamp}/{self.region}/s3/aws4_request"
-        sts = "\n".join(["AWS4-HMAC-SHA256", amzdate, scope,
-                         hashlib.sha256(canonical_request.encode()).hexdigest()])
-        sig = hmac.new(_signing_key(self.secret_key, datestamp, self.region, "s3"),
-                       sts.encode(), hashlib.sha256).hexdigest()
-        headers["Authorization"] = (
-            f"AWS4-HMAC-SHA256 Credential={self.access_key}/{scope}, "
-            f"SignedHeaders={signed}, Signature={sig}")
-        return headers
-
-    def head_size(self, key):
-        """Object size in bytes, or None if it doesn't exist (404)."""
-        headers = self._auth_headers("HEAD", key, EMPTY_SHA256)
-        req = urllib.request.Request(self._url(key), method="HEAD", headers=headers)
-        try:
-            with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
-                cl = r.headers.get("Content-Length")
-                return int(cl) if cl is not None else None
-        except urllib.error.HTTPError as e:
-            if e.code == 404:
-                return None
-            raise
-
-    def put_file(self, key, filepath):
-        """Upload a local file to R2 with a single PUT (unsigned payload)."""
-        size = os.path.getsize(filepath)
-        headers = self._auth_headers("PUT", key, "UNSIGNED-PAYLOAD")
-        headers["Content-Length"] = str(size)
-        with open(filepath, "rb") as fh:
-            req = urllib.request.Request(self._url(key), data=fh, method="PUT", headers=headers)
-            with urllib.request.urlopen(req, timeout=max(TIMEOUT, 900)) as r:
-                return r.status
-
-    def url_for(self, key):
-        if self.public_base:
-            return f"{self.public_base.rstrip('/')}/{key}"
-        return f"s3://{self.bucket}/{key}"
 
 
 def build_filter(collection_name, name_token, aoi_wkt, since_iso, max_cloud, supports_cloud):
@@ -425,7 +324,7 @@ def make_r2(dry):
     if not bucket:
         sys.exit("!! --r2 needs R2_BUCKET (set it in .env, or drop --r2 for "
                  "local-only download)")
-    prefix = os.environ.get("R2_PREFIX", DEFAULT_R2_PREFIX)
+    prefix = DEFAULT_R2_PREFIX  # hardcoded per tier/dataset — see pipelines/README.md
     public_base = os.environ.get("R2_PUBLIC_BASE")
     if dry:  # preview only — no creds needed to print the target keys
         return R2("", bucket, "", "", prefix, public_base)

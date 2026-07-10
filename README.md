@@ -52,7 +52,9 @@ Confirm it's up: `curl localhost:8082/collections`.
 
 - **Docker** (for the API + pgSTAC).
 - **GDAL ≥ 3.8** for the loaders — `gdalinfo`/`ogr2ogr` with the Parquet,
-  OpenFileGDB, and `/vsis3` drivers — plus `curl` and `python3`.
+  OpenFileGDB, and `/vsis3` drivers — plus `curl` and `python3`. The Sentinel
+  silver builders need **GDAL ≥ 3.11** (they stage bronze scenes from R2 with
+  the unified `gdal vsi copy` CLI).
 - The PhilSA mirror (`mirror_philsa_catalog.py`) is pure stdlib Python and needs
   none of the above beyond `python3`.
 

@@ -3,24 +3,30 @@
 build_silver.py — batch driver: turn every raw bronze scene into its silver
 COG(s), by invoking the per-product builders.
 
-  Sentinel-2 (MSIL2A)  -> sentinel2-ndvi/build_ndvi.sh  +  sentinel2-truecolor/build_truecolor.sh
-  Sentinel-1 (GRDH)    -> sentinel1-sar/build_sar.sh
+  ndvi       Sentinel-2 (MSIL2A) -> sentinel2-ndvi/build_ndvi.sh
+  truecolor  Sentinel-2 (MSIL2A) -> sentinel2-truecolor/build_truecolor.sh
+  sar        Sentinel-1 (GRDH)   -> sentinel1-sar/build_sar.sh
+  flood      Sentinel-1 (GRDH)   -> sentinel1-flood/build_flood.sh
+             (runs after `sar` for the same scene; reads the silver VV-dB COG)
 
 Scene discovery is LOCAL-FIRST: it enumerates the local bronze dir
 (`eodata/`, where download_copphil_eodata.py stages scenes) and, if R2 creds are
 present, unions in any scenes that live only in `01-bronze/copphil-sentinel/` on
-R2. It then runs the matching builder for each `.SAFE.zip`, passing SCENE=; each
-builder itself resolves the bytes local-first (bronze dir → cache → R2), so a
-scene present locally is never re-downloaded. Builders early-skip scenes whose
-output already exists, so re-runs only build what's new.
+R2. It then runs the matching builder(s) for each `.SAFE.zip`, passing SCENE=;
+each builder itself resolves the bytes local-first (bronze dir → cache → R2), so
+a scene present locally is never re-downloaded. Builders early-skip scenes whose
+output already exists, so re-runs only build what's new. Exits nonzero if any
+builder failed.
 
 R2 is optional (used only to discover/fetch scenes not present locally); creds
 come from the repo-root `.env`. Stdlib only. Usage (from repo root):
     python3 pipelines/02-silver/build_silver.py
     python3 pipelines/02-silver/build_silver.py --dry-run
-    python3 pipelines/02-silver/build_silver.py --only sentinel-2
+    python3 pipelines/02-silver/build_silver.py --only ndvi
+    python3 pipelines/02-silver/build_silver.py --only sentinel-1   # sar + flood
 """
-import argparse, datetime as dt, glob, hashlib, hmac, os, re, subprocess, sys, urllib.error, urllib.parse, urllib.request
+import argparse, glob, os, subprocess, sys, urllib.error
+
 
 def _repo_root():
     d = os.path.dirname(os.path.abspath(__file__))
@@ -30,49 +36,48 @@ def _repo_root():
         d = os.path.dirname(d)
     return os.getcwd()
 
+
 ROOT = _repo_root()
+sys.path.insert(0, os.path.join(ROOT, "pipelines", "lib"))
+from r2 import R2, load_env_file  # noqa: E402 — shared stdlib SigV4 R2 client
+
 BRONZE_DIR = os.environ.get("BRONZE_DIR", os.path.join(ROOT, "eodata"))  # local bronze scenes
 BRONZE_PREFIX = "01-bronze/copphil-sentinel"
-EMPTY = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
-# (sensor match, [builder scripts relative to ROOT])
-BUILDERS = {
-    "sentinel-2": ("MSIL2A", ["pipelines/02-silver/sentinel2-ndvi/build_ndvi.sh",
-                              "pipelines/02-silver/sentinel2-truecolor/build_truecolor.sh"]),
-    "sentinel-1": ("GRDH",   ["pipelines/02-silver/sentinel1-sar/build_sar.sh"]),
+# product -> (scene-name token, builder script relative to ROOT). Order matters:
+# `flood` must come after `sar` (it reads the silver VV-dB COG sar just built).
+PRODUCTS = {
+    "ndvi":      ("MSIL2A", "pipelines/02-silver/sentinel2-ndvi/build_ndvi.sh"),
+    "truecolor": ("MSIL2A", "pipelines/02-silver/sentinel2-truecolor/build_truecolor.sh"),
+    "sar":       ("GRDH",   "pipelines/02-silver/sentinel1-sar/build_sar.sh"),
+    "flood":     ("GRDH",   "pipelines/02-silver/sentinel1-flood/build_flood.sh"),
 }
+ALIASES = {"sentinel-2": ["ndvi", "truecolor"], "sentinel-1": ["sar", "flood"]}
 
-def load_env(path):
-    if not os.path.exists(path): return
-    for line in open(path):
-        line = line.strip()
-        if line and not line.startswith("#") and "=" in line:
-            k, _, v = line.partition("="); os.environ.setdefault(k.strip(), v.strip().strip('"').strip("'"))
 
-def _sk(secret, day, region, svc):
-    k = hmac.new(("AWS4"+secret).encode(), day.encode(), hashlib.sha256).digest()
-    for p in (region, svc, "aws4_request"): k = hmac.new(k, p.encode(), hashlib.sha256).digest()
-    return k
+def scene_env(product, scene):
+    """Env vars for one (product, scene) builder run."""
+    env = {**os.environ, "BRONZE_DIR": BRONZE_DIR}
+    if product == "flood":
+        # flood's input is the silver VV-dB COG built from this scene, not the zip
+        base = scene
+        for suf in (".zip", ".SAFE"):
+            if base.endswith(suf):
+                base = base[: -len(suf)]
+        sar_name = f"{base}_VV_dB.tif"
+        env["SAR_NAME"] = sar_name
+        local = os.path.join(os.environ.get("OUTPUT_DIR", os.path.join(ROOT, "eodata")), sar_name)
+        if os.path.exists(local):
+            env["SRC"] = local
+    else:
+        env["SCENE"] = scene
+    return env
 
-def list_bronze(acct, bucket, ak, sk, prefix):
-    host = f"{acct}.r2.cloudflarestorage.com"
-    q = "&".join(f"{urllib.parse.quote(k,safe='')}={urllib.parse.quote(v,safe='')}"
-                 for k, v in sorted({"list-type":"2","prefix":prefix+"/"}.items()))
-    now = dt.datetime.now(dt.timezone.utc); amz = now.strftime("%Y%m%dT%H%M%SZ"); day = now.strftime("%Y%m%d")
-    hdr = {"host": host, "x-amz-content-sha256": EMPTY, "x-amz-date": amz}
-    signed = ";".join(sorted(hdr)); canon_h = "".join(f"{h}:{hdr[h]}\n" for h in sorted(hdr))
-    canon = "\n".join(["GET", "/"+bucket, q, canon_h, signed, EMPTY])
-    scope = f"{day}/auto/s3/aws4_request"
-    sts = "\n".join(["AWS4-HMAC-SHA256", amz, scope, hashlib.sha256(canon.encode()).hexdigest()])
-    sig = hmac.new(_sk(sk, day, "auto", "s3"), sts.encode(), hashlib.sha256).hexdigest()
-    hdr["Authorization"] = f"AWS4-HMAC-SHA256 Credential={ak}/{scope}, SignedHeaders={signed}, Signature={sig}"
-    url = f"https://{host}/{bucket}?{q}"
-    with urllib.request.urlopen(urllib.request.Request(url, headers=hdr), timeout=60) as r:
-        return re.findall(r"<Key>([^<]+)</Key>", r.read().decode())
 
 def main():
-    load_env(os.environ.get("ENV_FILE", os.path.join(ROOT, ".env")))
+    load_env_file(os.environ.get("ENV_FILE", os.path.join(ROOT, ".env")))
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--only", choices=list(BUILDERS), help="only this sensor")
+    ap.add_argument("--only", choices=list(PRODUCTS) + list(ALIASES),
+                    help="only this product (or all of a sensor's products)")
     ap.add_argument("--dry-run", action="store_true", help="list what would build, run nothing")
     args = ap.parse_args()
     # local-first discovery: the local bronze dir, then (if creds present) R2.
@@ -85,7 +90,8 @@ def main():
     r2_only = []
     if all([acct, bucket, ak, sk]):
         try:
-            keys = [k for k in list_bronze(acct, bucket, ak, sk, BRONZE_PREFIX) if k.lower().endswith(".zip")]
+            keys = [k for k in R2(acct, bucket, ak, sk).list_keys(BRONZE_PREFIX + "/")
+                    if k.lower().endswith(".zip")]
             local_set = set(local)
             r2_only = sorted(b for b in (os.path.basename(k) for k in keys) if b not in local_set)
             print(f">> {len(r2_only)} additional scene(s) only in R2 {BRONZE_PREFIX}")
@@ -98,20 +104,30 @@ def main():
     if not scenes:
         sys.exit(f"!! no bronze scenes found (local {BRONZE_DIR} empty and no R2 scenes)")
     print(f">> {len(scenes)} bronze scene(s) total")
-    sensors = [args.only] if args.only else list(BUILDERS)
-    totals = {"ok": 0, "skip/err": 0}
+    products = ALIASES.get(args.only, [args.only] if args.only else list(PRODUCTS))
+    totals = {"ok": 0, "failed": 0}
+    failed = []
     for scene in scenes:
-        for sensor in sensors:
-            token, builders = BUILDERS[sensor]
-            if token not in scene: continue
-            for b in builders:
-                print(f"\n>> {scene}  ->  {os.path.basename(b)}")
-                if args.dry_run: continue
-                env = {**os.environ, "SCENE": scene, "BRONZE_DIR": BRONZE_DIR}
-                rc = subprocess.run(["bash", os.path.join(ROOT, b)], env=env).returncode
-                totals["ok" if rc == 0 else "skip/err"] += 1
+        for product in products:
+            token, builder = PRODUCTS[product]
+            if token not in scene:
+                continue
+            print(f"\n>> {scene}  ->  {product} ({os.path.basename(builder)})")
+            if args.dry_run:
+                continue
+            rc = subprocess.run(["bash", os.path.join(ROOT, builder)],
+                                env=scene_env(product, scene)).returncode
+            if rc == 0:
+                totals["ok"] += 1
+            else:
+                totals["failed"] += 1
+                failed.append(f"{product}:{scene}")
     print(f"\n>> TOTAL builder runs: {totals}")
+    if failed:
+        print(">> failed:\n   " + "\n   ".join(failed), file=sys.stderr)
+        sys.exit(1)
     print(">> done.")
+
 
 if __name__ == "__main__":
     main()

@@ -7,7 +7,8 @@
 #   Input  : an EXISTING silver VV-dB COG (built by ../sentinel1-sar/build_sar.sh),
 #            read from R2 silver or a local file. We deliberately build on the
 #            silver primitive rather than re-deriving from the raw SAFE.
-#   Steps  : Otsu (or fixed) dB threshold -> Byte mask (1=water,0=land,255=nodata)
+#   Steps  : dark-water dB threshold (sigma default; otsu/fixed options) ->
+#            Byte mask (1=water, 0=land, 2=perm-water, 255=nodata)
 #            -> COG under 02-silver/sentinel1-flood/.
 #
 # NOTE — POC flood proxy, NOT a validated product. No radiometric calibration,
@@ -16,11 +17,12 @@
 # authoritative reference layer. Rigorous route = change-detection vs a dry-season
 # reference (SNAP / pyroSAR). See pipelines/README.md and TODO.md.
 #
-# Parameters (env): SAR_NAME (silver VV-dB COG basename) or SRC (local file),
-#   SAR_PREFIX (silver SAR R2 prefix), OUTPUT_DIR, STAGING, FORCE, METHOD
-#   (sigma|otsu|fixed; default sigma), THRESHOLD (dB, for fixed), K (sigma cut,
-#   mean-K*std), MIN_DB, PERM_WATER (optional mask),
-#   and the R2_* / AWS_* set from .env.
+# Parameters (env): SAR_NAME (silver VV-dB COG basename; default: newest local
+#   *_dB.tif in OUTPUT_DIR) or SRC (local file), SAR_PREFIX (silver SAR R2
+#   prefix), OUTPUT_DIR, STAGING, FORCE, METHOD (sigma|otsu|fixed; default
+#   sigma), THRESHOLD (dB, for fixed), K (sigma cut, mean-K*std), MIN_DB,
+#   PERM_WATER (optional mask), and the R2_* / AWS_* creds from .env (output
+#   prefix hardcoded: 02-silver/sentinel1-flood).
 # Requires GDAL >= 3.8 (incl. python bindings) + numpy, curl.
 #
 set -euo pipefail
@@ -30,21 +32,34 @@ while [ "$REPO_ROOT" != "/" ]; do
   if [ -e "$REPO_ROOT/.git" ] || [ -e "$REPO_ROOT/AGENTS.md" ]; then break; fi
   REPO_ROOT="$(dirname "$REPO_ROOT")"
 done
+# shared R2 creds — the single repo-root .env only (ENV_FILE overrides the path)
 . "${REPO_ROOT}/pipelines/lib/load_env.sh"
-for _envf in "${ENV_FILE:-}" "${PWD}/.env" "${REPO_ROOT}/.env" "${SCRIPT_DIR}/.env"; do
+for _envf in "${ENV_FILE:-}" "${REPO_ROOT}/.env"; do
   if [ -n "$_envf" ] && [ -f "$_envf" ]; then
     echo ">> loading env from ${_envf}"; load_env "$_envf"; break
   fi
 done
 
 SAR_PREFIX="${SAR_PREFIX:-02-silver/sentinel1-sar}"
-SAR_NAME="${SAR_NAME:-S1D_IW_GRDH_1SDV_20260613T214635_20260613T214706_003223_0059FF_B12E_COG_VV_dB.tif}"
+SAR_NAME="${SAR_NAME:-}"
 METHOD="${METHOD:-sigma}"
 STAGING="${STAGING:-${REPO_ROOT}/eodata/_staging}"
 OUTPUT_DIR="${OUTPUT_DIR:-${REPO_ROOT}/eodata}"
-R2_BUCKET="${R2_BUCKET:-}"; R2_PREFIX="${R2_PREFIX:-02-silver/sentinel1-flood}"
+R2_BUCKET="${R2_BUCKET:-}"
+R2_PREFIX="02-silver/sentinel1-flood"   # hardcoded per tier/dataset — see pipelines/README.md
 R2_PUBLIC_BASE="${R2_PUBLIC_BASE:-}"
 mkdir -p "$STAGING"
+
+# no SAR_NAME/SRC given: default to the newest local silver VV-dB COG
+if [ -z "$SAR_NAME" ] && [ -z "${SRC:-}" ]; then
+  _latest="$(ls -t "${OUTPUT_DIR}"/*_dB.tif 2>/dev/null | head -1 || true)"
+  if [ -z "$_latest" ]; then
+    echo "!! set SAR_NAME=<silver VV-dB COG basename> or SRC=<local path> (no *_dB.tif in ${OUTPUT_DIR}; build one with ../sentinel1-sar/build_sar.sh)" >&2
+    exit 1
+  fi
+  SRC="$_latest"; SAR_NAME="$(basename "$_latest")"
+  echo ">> SAR_NAME not set — using newest local silver SAR COG: ${SAR_NAME}"
+fi
 
 # derive output name from the source SAR COG: ..._VV_dB.tif -> ..._VV_flood.tif
 SRC_BASE="$(basename "${SRC:-$SAR_NAME}")"

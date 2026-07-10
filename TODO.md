@@ -64,6 +64,7 @@ version. Keep both honest.
       and/or synthetic test vectors → PMTiles
 - [ ] **Earth Search** (`PUB`): query Sentinel-2 L2A asset URLs and mirror into
       pgSTAC by reference (ETL-only, mirror the Planetary Computer pattern)
+- [ ] Fix metadata
 
 ## Geospatial AI
 
@@ -122,12 +123,14 @@ tools, not in the chat model's weights.
 - [ ] Decide the open/restricted **sensitivity tagging** scheme on items/assets
 - [ ] Presigned-URL flow for restricted assets
 
-## Frontend
+## Frontend — MapLibre webmap (ACTIVE track)
 
-- [x] Stand up STAC Browser end-to-end against the local API
-- [x] PhilSA-brand the catalog: STAC Browser (`config.js` — title, logo, favicon,
-      blue accent) locked to our API only (`allowExternalAccess: false`); STAC API
-      landing/docs branded via `STAC_FASTAPI_*` env in `compose.yml`
+**Decision (2026-07-10): the webmap is the single active frontend.** It owns the
+AI chat layer, the whole PCIC-alignment roadmap targets it, and it deploys as a
+plain static Vite build. The TerriaJS dashboard is **frozen at demoable** (see
+its own section below) as the "integrates with PhilSA's existing Terria stack"
+exhibit — no new feature work there.
+
 - [~] **MapLibre webmap (`webmap/`, AI-first rebuild)** — React+TS+Vite +
       react-map-gl/MapLibre + **Zustand + Vercel AI SDK**, replacing the Tier 1
       webmap (old version preserved in git history). Architecture: **one
@@ -150,6 +153,17 @@ tools, not in the chat model's weights.
       to do: **deck.gl overlay** (GPU date-range scrubbing via
       `DataFilterExtension`, GeoArrow vector layers); restricted (authenticated)
       layers; footprint/discovery layer; surface EMS/GFM flood once ingested.
+- [x] **GeoJSON upload → zoom-to-extent + raster clip** (2026-07-10): uploading
+      a local file already flew to its bbox; now polygon uploads also add a
+      **clip mask** layer (`buildClipMaskLayer` in `lib/geojson.ts` — world
+      polygon minus the uploaded outer rings, rendered between the new
+      `mask-slot` and `vector-slot` anchors in `MapView`) so rasters read only
+      inside the boundaries — client-side twin of the dashboard's spotlight
+      mask. It's an ordinary store layer ("Clip: <file>"): the panel's opacity
+      slider sets dimming strength (1 = hard clip), uncheck/✕ un-clips, and the
+      AI can clear it via `remove_layers(["clip-mask"])`. Needs an in-browser
+      eyeball. Follow-on: true server-side pixel clip (TiTiler `/cog/feature`)
+      once zonal stats land.
 - [x] TiTiler for raster tiling (open COGs from R2 — `compose.viz.yml`, :8083).
       Restricted COGs (presigned) still to do.
 - [x] Serve PMTiles — **open admin boundaries adm0–adm4 live on public R2**
@@ -163,6 +177,86 @@ tools, not in the chat model's weights.
       GeoParquet = canonical source (silver), PMTiles = single web derivative. Still
       to do: other vector layers; restricted layers via presigned (separate from
       admin boundaries).
+### PCIC alignment — the webmap priority queue (2026-07-10 code review)
+
+Feature gaps between the webmap and the PCIC parametric-insurance use cases
+(`PCIC_WEBMAP_USE_CASES.md`), ordered by leverage. The common thread: every
+PCIC process (underwriting · post-plant · claims) needs zone-level *numbers*,
+and today the webmap can only show pixels, not measure them.
+
+Each item is tagged by audience: `[generic]` = valuable to any agency on the
+platform (DA, NDRRMC/OCD, DENR, PAGASA, LGUs); `[PCIC]` = parametric-insurance
+specific. Only the trigger console is truly PCIC-shaped — and even there, build
+the threshold-exceedance engine generic and keep the insurance vocabulary
+(UAI, payout, policy count) in a thin presentation layer.
+
+- [ ] `[generic]` **Zonal statistics** — the unlock for all three processes. TiTiler
+      already exposes `/cog/statistics` (POST a GeoJSON geometry → band stats),
+      and the zone geometries exist (adm3/adm4 PMTiles; bboxes in
+      `ph_admin_index.json`). Surface it two ways:
+  - [ ] `zone_stats` AI tool — `(collection, zone or bbox, date range)` →
+        mean/median NDVI, % flood pixels, % crop pixels (LULC). Turns "show
+        NDVI in Nueva Ecija" into "what was the average NDVI in June, vs May?"
+        — which *is* the parametric-trigger question.
+  - [ ] Click-to-identify — click a municipality/barangay → name + pcode +
+        quick stats popup. Needs an invisible fill layer over the admin
+        PMTiles for hit-testing (line-only today) and name labels; also makes
+        uploaded-parcel properties (incl. the new `area_ha`) readable.
+- [ ] `[generic]` **Cloud-contamination guardrails** — prerequisite for any NDVI statistic
+      or trigger being trustworthy (a cloudy zone-mean NDVI reads as crop
+      failure → false payouts). Defense in depth, cheapest first:
+  - [ ] Mask clouds at the silver NDVI build (`build_ndvi.sh`): S2 L2A already
+        contains the 20 m **SCL band** — set NDVI to nodata under SCL classes
+        3 (cloud shadow), 8/9 (cloud medium/high), 10 (cirrus). One script
+        change; everything downstream (display + future stats) becomes
+        cloud-free by construction, and TiTiler masks nodata automatically.
+  - [ ] Propagate per-item **`eo:cloud_cover`** (from L2A metadata) into the
+        STAC items in `catalog_silver.py`, so the webmap/AI can rank dates and
+        warn ("best cloud-free date near June 5 is …").
+  - [ ] `zone_stats` must report the **valid-pixel fraction** per zone and
+        refuse/flag results below a threshold (e.g. <70 % valid) instead of
+        returning a silently biased mean.
+  - [ ] Parametric triggers read **temporal composites** (e.g. monthly median
+        or max-NDVI per zone), never single scenes — standard index-insurance
+        practice; also what the Sentinel-3 OLCI ingest (Ingest section) and
+        SAR fallback are for when the monsoon gap is too long.
+- [ ] `[generic core · PCIC framing]` **Zone index-history chart** (underwriting
+      / burn-cost): NDVI or flood-% per date over a selected zone, plotted with
+      a draggable threshold line — the visual "how risky is this barangay"
+      answer. The time-series-over-a-zone part is generic (drought monitoring,
+      vegetation trend); the threshold overlay is the insurance flavor. The
+      TimeSeries scrubber is the skeleton; this is its numeric sibling (needs
+      zonal stats above).
+- [ ] `[generic]` **Compare mode** (post-plant / pre-post event): swipe or
+      side-by-side of two dates of one collection. Cheap on the existing layer
+      factory.
+- [ ] `[PCIC]` **Trigger console** (claims): pick event date + threshold →
+      compute breach per zone → choropleth + exportable CSV of breaching zones.
+      The exceedance engine itself doubles as a generic early-warning /
+      alert-prioritization report; only the payout semantics are PCIC.
+- [ ] `[generic]` **Permalink / report export** (transparent evidence): URL-encoded map
+      state so a view is shareable, and a printable snapshot (map + stats +
+      dates) as the payout justification. Today a refresh loses everything.
+- [ ] `[generic]` **Chat server hardening before any external demo**: auth or shared
+      secret + rate limiting on `/api/chat`, pin `CHAT_ALLOW_ORIGIN`, and a
+      deliberate model choice — the free-model fallback chain routes PCIC
+      queries (places/dates of interest ≈ claims activity) to arbitrary
+      third-party providers.
+- [ ] `[generic]` **Shared tool schemas** between `server/chat.mjs` and
+      `src/ai/executeTool.ts` (today kept in sync by comment discipline; needs
+      a small build step or a plain shared module the server can import).
+
+## Frontend — TerriaJS dashboard & STAC Browser (FROZEN at demoable)
+
+**Frozen 2026-07-10** — kept as the "we also integrate with PhilSA's existing
+Terria stack" exhibit; already demoable (branded, STAC-driven, admin boundaries,
+split-screen compare). No new feature work; items below are parked, not
+abandoned. Fixes only if a demo breaks.
+
+- [x] Stand up STAC Browser end-to-end against the local API
+- [x] PhilSA-brand the catalog: STAC Browser (`config.js` — title, logo, favicon,
+      blue accent) locked to our API only (`allowExternalAccess: false`); STAC API
+      landing/docs branded via `STAC_FASTAPI_*` env in `compose.yml`
 - [~] TerriaJS dashboard (`dashboard/`, TerriaMap template, terriajs 8.12.2):
       mirrors PhilSA's own stack but driven by **our STAC + TiTiler**. A
       re-runnable generator (`build_catalog_from_stac.py`) reads the live STAC API
@@ -178,7 +272,7 @@ tools, not in the chat model's weights.
       `mvt` outlines streaming the **same R2 PMTiles the webmap uses** (Terria's
       Protomaps provider range-reads `.pmtiles`; click-to-read attributes), off by
       default — no more local GeoJSON. NDVI stretch aligned to the webmap
-      (`-0.2…0.9`). Still to do:
+      (`-0.2…0.9`). Parked items:
   - [~] **Admin-area filter (search → fly + spotlight)** — *built; needs in-browser
         eyeball.* A custom **`LocationSearchProvider`**
         (`lib/Models/PhilSAAdminSearchProvider.ts`, registered in `index.js`,
@@ -197,6 +291,7 @@ tools, not in the chat model's weights.
         so the dashboard isn't tied to `r2.dev` resolving. *(infra change — ask first;
         note: `catalog_silver.py` already reads COG metadata over the authenticated
         endpoint, so only TiTiler + the mosaics still depend on `r2.dev`.)*
+        *(Shared infra — also benefits the webmap, not dashboard-specific.)*
   - [ ] **Deploy / host** the dashboard (static `gulp release` build behind a
         URL; wire `serverconfig.json` proxy + config for the hosted STAC/TiTiler,
         not just `localhost`) — *see the Deployment / hosting section below.*

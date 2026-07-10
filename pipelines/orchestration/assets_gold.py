@@ -13,7 +13,6 @@ import dagster as dg
 
 from assets_bronze import REPO_ROOT
 from assets_silver import (
-    raster_mosaics,
     sentinel1_flood,
     sentinel1_sar,
     sentinel2_ndvi,
@@ -33,10 +32,12 @@ class CatalogSilverConfig(dg.Config):
     key=dg.AssetKey(["gold", "stac_catalog"]),
     group_name="gold",
     kinds={"python"},
-    deps=[sentinel2_ndvi, sentinel2_truecolor, sentinel1_sar, sentinel1_flood, raster_mosaics],
+    deps=[sentinel2_ndvi, sentinel2_truecolor, sentinel1_sar, sentinel1_flood],
     description=(
         "Silver COGs registered as STAC Collections + Items in pgSTAC by "
-        "reference, with render-extension hints (catalog_silver.py)."
+        "reference, with render-extension hints (catalog_silver.py). "
+        "silver/raster_mosaics runs downstream of this — it stitches from "
+        "the catalog entries written here."
     ),
 )
 def stac_catalog(
