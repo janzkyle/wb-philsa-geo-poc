@@ -4,7 +4,7 @@
 // inline (see GeojsonLayer in MapView), the same "upload data" behaviour TerriaJS
 // offers for local files.
 
-import type { Feature, FeatureCollection, Geometry } from "geojson";
+import type { Feature, FeatureCollection, Geometry, Position } from "geojson";
 import type { Bbox, MapLayer } from "../state/mapStore";
 
 export class GeoJsonError extends Error {}
@@ -107,6 +107,138 @@ export function geojsonBbox(fc: FeatureCollection): Bbox | undefined {
   return [w, s, e, n];
 }
 
+// --- polygon area ------------------------------------------------------------
+// Spherical-excess ring area (the same approximation turf.area uses) — accurate
+// to well under a percent at parcel scale, and dependency-free.
+
+const EARTH_R = 6371008.8; // mean Earth radius, metres
+const rad = (d: number) => (d * Math.PI) / 180;
+
+function ringAreaM2(ring: Position[]): number {
+  const n = ring.length;
+  if (n < 3) return 0;
+  let sum = 0;
+  for (let i = 0; i < n; i++) {
+    const p1 = ring[i];
+    const p2 = ring[(i + 1) % n];
+    const p3 = ring[(i + 2) % n];
+    sum += (rad(p3[0]) - rad(p1[0])) * Math.sin(rad(p2[1]));
+  }
+  return Math.abs((sum * EARTH_R * EARTH_R) / 2);
+}
+
+// Outer ring minus holes; clamped so degenerate rings can't go negative.
+const polygonAreaM2 = (coords: Position[][]): number =>
+  coords.length
+    ? Math.max(
+        0,
+        coords.slice(1).reduce((a, hole) => a - ringAreaM2(hole), ringAreaM2(coords[0])),
+      )
+    : 0;
+
+function geometryAreaM2(g: Geometry | null): number {
+  if (!g) return 0;
+  switch (g.type) {
+    case "Polygon":
+      return polygonAreaM2(g.coordinates);
+    case "MultiPolygon":
+      return g.coordinates.reduce((a, p) => a + polygonAreaM2(p), 0);
+    case "GeometryCollection":
+      return g.geometries.reduce((a, gg) => a + geometryAreaM2(gg), 0);
+    default:
+      return 0;
+  }
+}
+
+// Stamp `area_ha` onto each polygon feature (source-provided values are kept)
+// and total the collection's polygon area, in hectares.
+export function annotateAreaHa(fc: FeatureCollection): {
+  fc: FeatureCollection;
+  totalHa: number;
+} {
+  let totalM2 = 0;
+  const features = fc.features.map((f) => {
+    const m2 = geometryAreaM2(f.geometry);
+    totalM2 += m2;
+    if (m2 === 0 || f.properties?.area_ha !== undefined) return f;
+    return {
+      ...f,
+      properties: {
+        ...f.properties,
+        area_ha: Math.round((m2 / 10_000) * 100) / 100,
+      },
+    };
+  });
+  return { fc: { ...fc, features }, totalHa: totalM2 / 10_000 };
+}
+
+// --- raster clip mask ----------------------------------------------------------
+
+// Fixed id so each upload's mask replaces the previous one (addLayer is
+// replace-on-same-id) and the AI can clear it with remove_layers(["clip-mask"]).
+export const CLIP_MASK_LAYER_ID = "clip-mask";
+
+// Covers everything MapLibre draws (web-mercator latitude limit, not ±90).
+const WORLD_RING: Position[] = [
+  [-180, -85.051129],
+  [180, -85.051129],
+  [180, 85.051129],
+  [-180, 85.051129],
+  [-180, -85.051129],
+];
+
+// Outer rings of every polygon in the geometry — these become the mask's holes.
+// Polygon holes (donuts) are ignored: the whole outer extent stays unmasked.
+function collectOuterRings(g: Geometry | null): Position[][] {
+  if (!g) return [];
+  switch (g.type) {
+    case "Polygon":
+      return g.coordinates.length ? [g.coordinates[0]] : [];
+    case "MultiPolygon":
+      return g.coordinates.filter((p) => p.length).map((p) => p[0]);
+    case "GeometryCollection":
+      return g.geometries.flatMap(collectOuterRings);
+    default:
+      return [];
+  }
+}
+
+// "Clip" the rasters to an uploaded boundary: a world-covering polygon with
+// each uploaded outer ring punched out as a hole. MapView renders it above the
+// raster stack (MaskLayer, pinned under `vector-slot`) so imagery reads only
+// inside the boundaries — MapLibre can't cut raster tiles to a polygon, so this
+// inverse mask is the client-side clip, same idea as the TerriaJS dashboard's
+// spotlight focus mask. Returns undefined when the upload contains no polygons
+// (nothing to clip to). An ordinary store layer: the panel's opacity slider sets
+// the dimming strength, unchecking or removing it un-clips.
+export function buildClipMaskLayer(
+  name: string,
+  fc: FeatureCollection,
+): MapLayer | undefined {
+  const holes = fc.features.flatMap((f) => collectOuterRings(f.geometry));
+  if (holes.length === 0) return undefined;
+  return {
+    id: CLIP_MASK_LAYER_ID,
+    kind: "geojson-mask",
+    label: `Clip: ${name}`,
+    tiles: [],
+    geojson: {
+      type: "FeatureCollection",
+      features: [
+        {
+          type: "Feature",
+          properties: {},
+          geometry: { type: "Polygon", coordinates: [WORLD_RING, ...holes] },
+        },
+      ],
+    },
+    opacity: 0.75,
+    visible: true,
+    description:
+      "Masks rasters and basemap outside the uploaded boundaries. Lower the opacity to fade the surroundings back in; uncheck or remove to un-clip.",
+  };
+}
+
 // One place that turns a parsed collection into a store layer, mirroring
 // buildRasterLayer so the panel produces a well-formed MapLayer.
 export function buildGeojsonLayer(
@@ -114,17 +246,22 @@ export function buildGeojsonLayer(
   fc: FeatureCollection,
   color: string,
 ): MapLayer {
+  const { fc: annotated, totalHa } = annotateAreaHa(fc);
+  const areaNote =
+    totalHa > 0
+      ? ` · ${totalHa.toLocaleString(undefined, { maximumFractionDigits: 1 })} ha`
+      : "";
   return {
     id: `upload:${name}:${Date.now()}`,
     kind: "geojson-local",
     label: name,
     tiles: [],
-    geojson: fc,
+    geojson: annotated,
     color,
     opacity: 1,
     visible: true,
-    description: `Uploaded file · ${fc.features.length} feature${
-      fc.features.length === 1 ? "" : "s"
-    } (rendered locally, not saved)`,
+    description: `Uploaded file · ${annotated.features.length} feature${
+      annotated.features.length === 1 ? "" : "s"
+    }${areaNote} (rendered locally, not saved)`,
   };
 }

@@ -103,18 +103,31 @@ export async function searchStac(p: SearchParams): Promise<StacItemLite[]> {
   return ((fc.features ?? []) as StacFeature[]).map((f) => toLite(f));
 }
 
-// All items of one collection (Tier 1 collections are small, ≤ ~200 items).
+// All items of one collection, following pgSTAC's `next` links so a growing
+// archive doesn't silently truncate the date lists. Page cap bounds the worst
+// case (20 × 200 = 4,000 items) — raise it if a collection ever outgrows that.
 export async function collectionItems(
   collection: string,
 ): Promise<StacItemLite[]> {
-  const res = await fetch(
-    `${STAC_API}/collections/${collection}/items?limit=200`,
-  );
-  if (!res.ok) throw new Error(`STAC ${collection}/items ${res.status}`);
-  const fc = await res.json();
-  return ((fc.features ?? []) as StacFeature[]).map((f) =>
-    toLite(f, collection),
-  );
+  const out: StacItemLite[] = [];
+  let url: string | undefined =
+    `${STAC_API}/collections/${collection}/items?limit=200`;
+  for (let page = 0; url && page < 20; page++) {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`STAC ${collection}/items ${res.status}`);
+    const fc = await res.json();
+    out.push(
+      ...((fc.features ?? []) as StacFeature[]).map((f) =>
+        toLite(f, collection),
+      ),
+    );
+    const next = ((fc.links ?? []) as { rel?: string; href?: string }[]).find(
+      (l) => l.rel === "next",
+    )?.href;
+    // hrefs are normally absolute; resolve just in case a proxy makes them relative
+    url = next ? new URL(next, `${STAC_API}/`).toString() : undefined;
+  }
+  return out;
 }
 
 // Distinct acquisition dates in a collection, ascending.

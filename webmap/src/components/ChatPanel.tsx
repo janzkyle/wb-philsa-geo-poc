@@ -16,7 +16,7 @@ import { useMapStore } from "../state/mapStore";
 const SUGGESTIONS = [
   "Show the flood extent on its latest available date",
   "What data is available over Central Luzon?",
-  "Show NDVI in Cagayan Valley for June 2026",
+  "Show NDVI in Nueva Ecija for June 2026",
 ];
 
 // Human-readable one-liner for a tool invocation chip.

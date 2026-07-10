@@ -13,7 +13,11 @@ export type LayerKind =
   | "raster-mosaic"
   | "raster-cogs"
   | "vector-pmtiles"
-  | "geojson-local";
+  | "geojson-local"
+  // Inverse-polygon clip mask (world minus uploaded boundaries) drawn over the
+  // raster stack so imagery reads only inside the boundaries. `opacity` is the
+  // mask's dimming strength, not a raster opacity.
+  | "geojson-mask";
 
 export interface MapLayer {
   id: string; // unique, e.g. "sentinel1-flood:2026-06-05"
@@ -24,9 +28,10 @@ export interface MapLayer {
   tiles: string[]; // XYZ templates — one per MapLibre source
   pmtilesUrl?: string; // vector-pmtiles only
   sourceLayer?: string; // vector-pmtiles only
-  // geojson-local only: inline features parsed from a file the user dropped in,
-  // rendered entirely client-side (nothing is uploaded). Kept off snapshot() so
-  // the raw geometry never gets shipped to the chat backend.
+  // geojson-local / geojson-mask: inline features parsed from a file the user
+  // dropped in (or derived from one), rendered entirely client-side (nothing is
+  // uploaded). Kept off snapshot() so the raw geometry never gets shipped to
+  // the chat backend.
   geojson?: FeatureCollection;
   color?: string; // vector line / geojson stroke colour
   width?: number; // vector line width
@@ -95,11 +100,17 @@ export const useMapStore = create<MapStore>((set, get) => ({
   view: { bbox: undefined, nonce: 0 },
 
   addLayer: (layer) =>
-    set((s) => ({
-      // replace-on-same-id keeps adds idempotent (re-asking for a layer that's
-      // already on just refreshes it instead of stacking duplicates)
-      layers: [...s.layers.filter((l) => l.id !== layer.id), layer],
-    })),
+    set((s) => {
+      // Replace-on-same-id keeps adds idempotent. The replacement happens IN
+      // PLACE (same array index) so React keeps the mounted Source — MapLibre
+      // then swaps the tiles via setTiles instead of remove+re-add, and
+      // refreshing a layer can't hoist it above the other rasters.
+      const i = s.layers.findIndex((l) => l.id === layer.id);
+      if (i === -1) return { layers: [...s.layers, layer] };
+      const layers = s.layers.slice();
+      layers[i] = layer;
+      return { layers };
+    }),
 
   removeLayers: (ids) => {
     const existing = get().layers.filter((l) => ids.includes(l.id));

@@ -2,7 +2,7 @@
 // This is the one place that knows how a STAC collection becomes tiles, so the
 // panel and the AI's add_layers tool produce byte-identical layers.
 
-import { mosaicJsonUrl, rasterDef } from "../config";
+import { mosaicJsonUrl, rasterDef, RASTER_DEFS } from "../config";
 import { cogTileUrl, mosaicTileUrl } from "./titiler";
 import { searchStac } from "./stac";
 import { describePasses, summarizePasses, type PassSummary } from "./passes";
@@ -40,9 +40,9 @@ export async function buildRasterLayer(
   const def = rasterDef(collection);
   if (!def) {
     throw new LayerBuildError(
-      `Unknown collection "${collection}" — the webmap styles: ${
-        ["sentinel2-truecolor", "sentinel2-ndvi", "sentinel1-sar", "sentinel1-flood", "esri-10m-lulc"].join(", ")
-      }.`,
+      `Unknown collection "${collection}" — the webmap styles: ${RASTER_DEFS.map(
+        (r) => r.id,
+      ).join(", ")}.`,
     );
   }
 

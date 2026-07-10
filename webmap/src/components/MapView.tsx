@@ -1,6 +1,8 @@
 // Renders whatever the layer store says — MapView owns no layer state of its
-// own. Rasters pin below the `vector-slot` anchor so admin outlines always
-// draw on top, regardless of when either driver adds a layer.
+// own. Two empty anchor layers fix the stacking order no matter when either
+// driver adds a layer: basemaps + data rasters pin below `mask-slot`, the clip
+// mask sits between `mask-slot` and `vector-slot` (so it covers every raster,
+// even ones added later), and vector outlines + uploaded GeoJSON draw on top.
 
 import { useEffect, useRef, useState } from "react";
 import { Map, Source, Layer } from "react-map-gl/maplibre";
@@ -12,6 +14,7 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import { INITIAL_VIEW } from "../config";
 import { useMapStore } from "../state/mapStore";
 import type { MapLayer } from "../state/mapStore";
+import MapLegend from "./MapLegend";
 
 // Register the pmtiles:// protocol with MapLibre once, at module load.
 const protocol = new Protocol();
@@ -46,9 +49,10 @@ const BASEMAPS: Record<
   },
 };
 
-// Minimal base: a neutral background plus the empty `vector-slot` anchor that
-// separates the raster stack (below) from vector outlines (above). The basemaps
-// themselves are declarative children (see Basemaps) so they can toggle live.
+// Minimal base: a neutral background plus two empty anchor layers — `mask-slot`
+// caps the raster stack, `vector-slot` separates the clip mask from vector
+// outlines. The basemaps themselves are declarative children (see Basemaps) so
+// they can toggle live.
 const baseStyle: StyleSpecification = {
   version: 8,
   sources: {
@@ -59,11 +63,12 @@ const baseStyle: StyleSpecification = {
   },
   layers: [
     { id: "bg", type: "background", paint: { "background-color": "#e9e9e9" } },
+    { id: "mask-slot", type: "line", source: "empty" },
     { id: "vector-slot", type: "line", source: "empty" },
   ],
 };
 
-// Both basemaps mounted at once, below vector-slot (and thus below all data
+// Both basemaps mounted at once, below mask-slot (and thus below all data
 // rasters, which insert into the same slot after these mount). Only the active
 // one is visible.
 function Basemaps({ active }: { active: Basemap }) {
@@ -81,7 +86,7 @@ function Basemaps({ active }: { active: Basemap }) {
           <Layer
             id={`basemap-${key}-r`}
             type="raster"
-            beforeId="vector-slot"
+            beforeId="mask-slot"
             layout={{ visibility: key === active ? "visible" : "none" }}
           />
         </Source>
@@ -104,7 +109,7 @@ function RasterLayer({ layer }: { layer: MapLayer }) {
           <Layer
             id={`${layer.id}:${i}:r`}
             type="raster"
-            beforeId="vector-slot"
+            beforeId="mask-slot"
             layout={{ visibility: layer.visible ? "visible" : "none" }}
             paint={{ "raster-opacity": layer.opacity }}
           />
@@ -131,6 +136,29 @@ function VectorLayer({ layer }: { layer: MapLayer }) {
           "line-width": layer.width ?? 1,
           "line-opacity": layer.opacity,
         }}
+      />
+    </Source>
+  );
+}
+
+// The raster clip mask (world polygon minus the uploaded boundaries, built by
+// buildClipMaskLayer): pinned between mask-slot and vector-slot so it covers
+// every data raster — including ones added after it — while admin outlines and
+// the uploaded boundary itself stay readable above. `opacity` is the dimming
+// strength; 1 hides the outside entirely (a hard clip).
+function MaskLayer({ layer }: { layer: MapLayer }) {
+  return (
+    <Source
+      id={`${layer.id}-src`}
+      type="geojson"
+      data={layer.geojson ?? { type: "FeatureCollection", features: [] }}
+    >
+      <Layer
+        id={`${layer.id}-fill`}
+        type="fill"
+        beforeId="vector-slot"
+        layout={{ visibility: layer.visible ? "visible" : "none" }}
+        paint={{ "fill-color": "#10151c", "fill-opacity": layer.opacity }}
       />
     </Source>
   );
@@ -209,6 +237,7 @@ export default function MapView() {
   const rasters = layers.filter(
     (l) => l.kind === "raster-mosaic" || l.kind === "raster-cogs",
   );
+  const masks = layers.filter((l) => l.kind === "geojson-mask");
   const vectors = layers.filter((l) => l.kind === "vector-pmtiles");
   const geojsons = layers.filter((l) => l.kind === "geojson-local");
 
@@ -246,12 +275,17 @@ export default function MapView() {
       {rasters.map((l) => (
         <RasterLayer key={l.id} layer={l} />
       ))}
+      {masks.map((l) => (
+        <MaskLayer key={l.id} layer={l} />
+      ))}
       {vectors.map((l) => (
         <VectorLayer key={l.id} layer={l} />
       ))}
       {geojsons.map((l) => (
         <GeojsonLayer key={l.id} layer={l} />
       ))}
+
+      <MapLegend />
     </Map>
   );
 }

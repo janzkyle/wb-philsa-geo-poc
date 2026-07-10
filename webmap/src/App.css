@@ -1,6 +1,6 @@
 .app {
   display: grid;
-  grid-template-columns: 300px 1fr 360px;
+  grid-template-columns: 340px 1fr 360px;
   height: 100%;
 }
 
@@ -12,7 +12,7 @@
 .panel {
   background: #fff;
   overflow-y: auto;
-  padding: 14px 16px;
+  padding: 16px 18px;
   box-shadow: 0 0 12px rgba(0, 0, 0, 0.12);
   z-index: 2;
 }
@@ -26,9 +26,11 @@
 .panel h2 {
   font-size: 11px;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.07em;
   color: #6b7686;
-  margin: 16px 0 6px;
+  margin: 18px 0 8px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid #eef1f6;
 }
 
 .hint {
@@ -104,10 +106,16 @@
 /* --- On-the-map layer rows ------------------------------------------------ */
 
 .layerrow {
-  border: 1px solid #e3e7ee;
-  border-radius: 8px;
-  padding: 7px 9px;
-  margin-bottom: 7px;
+  border: 1px solid #e6eaf1;
+  border-radius: 10px;
+  padding: 9px 11px;
+  margin-bottom: 8px;
+  background: #fbfcfe;
+  transition: border-color 0.15s;
+}
+
+.layerrow:hover {
+  border-color: #c9d2e0;
 }
 
 .layerhead {
@@ -119,15 +127,25 @@
 
 .layerhead label {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 7px;
   min-width: 0;
 }
 
+.layerhead label input[type="checkbox"] {
+  margin-top: 2px;
+  flex-shrink: 0;
+}
+
+/* Wrap layer names up to two lines before clamping — long labels like
+   "Sentinel-1 flood mask — 2026-06-05" stay readable instead of truncating. */
 .layerhead label span {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: 1.35;
 }
 
 .layerbtns {
@@ -174,35 +192,109 @@
 
 /* --- Add-data rows ---------------------------------------------------------- */
 
+/* Two-line rows: the label owns the first line (wrapping, never truncated),
+   the date select + button flow beneath it and share the width. */
 .addrow {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 7px;
-  padding: 3px 0;
+  gap: 4px 7px;
+  padding: 5px 0;
+}
+
+.addrow + .addrow {
+  border-top: 1px solid #f2f4f8;
 }
 
 .addrow .addlabel {
-  flex: 1;
+  flex: 1 1 100%;
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
+  line-height: 1.35;
+  color: #37414f;
 }
 
 .addrow select {
-  max-width: 118px;
+  flex: 1;
+  min-width: 0;
 }
 
 .addrow button {
   border: 1px solid #c9d2e0;
   background: #f4f7fb;
-  border-radius: 6px;
-  padding: 3px 10px;
+  border-radius: 7px;
+  padding: 4px 12px;
+  transition: background 0.15s;
+}
+
+.addrow button:hover:not(:disabled) {
+  background: #e8edf5;
 }
 
 .addrow button:disabled {
   opacity: 0.5;
   cursor: default;
+}
+
+/* "annual" / "loading dates…" placeholders fill the select's slot so the Add
+   button stays right-aligned across rows. */
+.addrow .muted {
+  flex: 1;
+}
+
+/* --- Time series ------------------------------------------------------------ */
+
+.ts-controls {
+  margin-top: 4px;
+}
+
+.ts-range {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.ts-range label {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 11px;
+  color: #6b7686;
+  min-width: 0;
+}
+
+.ts-range select {
+  width: 100%;
+}
+
+.ts-transport {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.ts-transport .mini {
+  border: 1px solid #c9d2e0;
+  background: #f4f7fb;
+}
+
+.ts-transport .mini:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.ts-date {
+  margin-left: 6px;
+  font-size: 11.5px;
+  color: #6b7686;
+  font-variant-numeric: tabular-nums;
+}
+
+.ts-controls input[type="range"] {
+  width: 100%;
+  margin: 6px 0 0;
+  accent-color: #0038a8;
 }
 
 /* --- Legends ---------------------------------------------------------------- */
@@ -242,6 +334,36 @@
   height: 10px;
   border-radius: 2px;
   border: 1px solid rgba(0, 0, 0, 0.15);
+}
+
+/* --- On-map legend panel (visible layers' colour keys) --------------------- */
+
+.map-legend {
+  position: absolute;
+  right: 10px;
+  top: 10px;
+  z-index: 2;
+  background: #fff;
+  border-radius: 7px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+  padding: 9px 11px;
+  font-size: 12px;
+  color: #45526b;
+  max-width: 230px;
+  max-height: 45vh;
+  overflow-y: auto;
+}
+
+.map-legend-item + .map-legend-item {
+  margin-top: 9px;
+  padding-top: 9px;
+  border-top: 1px solid #e3e7ee;
+}
+
+.map-legend-label {
+  font-weight: 600;
+  font-size: 11.5px;
+  line-height: 1.25;
 }
 
 /* --- Chat panel ------------------------------------------------------------- */

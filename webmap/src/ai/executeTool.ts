@@ -6,6 +6,7 @@
 
 import { searchStac, listCollections, collectionPassesByDate } from "../lib/stac";
 import { resolveRegion } from "../lib/regions";
+import { pointToBbox, buildHighlightLayer } from "../lib/geo";
 import { buildRasterLayer, LayerBuildError } from "../lib/layers";
 import { formatPass } from "../lib/passes";
 import { useMapStore } from "../state/mapStore";
@@ -119,6 +120,22 @@ export async function executeTool(
             note: `No admin unit matched "${query}". Try a shorter name or the official one (e.g. "Region III (Central Luzon)" is matched by "Central Luzon").`,
           };
         return { matches };
+      }
+      case "resolve_point": {
+        const { lat, lon, radius_km } = input as {
+          lat: number;
+          lon: number;
+          radius_km?: number;
+        };
+        const radiusKm = radius_km ?? 5;
+        const bbox = pointToBbox(lat, lon, radiusKm);
+        return { bbox, center: [lon, lat], radius_km: radiusKm };
+      }
+      case "highlight_location": {
+        const { bbox, label } = input as { bbox: Bbox; label?: string };
+        const layer = buildHighlightLayer(bbox, label);
+        store.addLayer(layer);
+        return { highlighted: layer.id, bbox, label: label ?? null };
       }
       case "search_catalog":
         return await searchCatalog(input as SearchInput);

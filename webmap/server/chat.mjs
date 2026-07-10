@@ -157,6 +157,34 @@ const tools = {
         .describe("Restrict to an admin level: 0=country 1=region 2=province 3=city/municipality"),
     }),
   },
+  resolve_point: {
+    description:
+      "Convert an explicit coordinate the user supplied (WGS84 latitude/longitude in decimal degrees) into a bounding box for search_catalog and set_view. Use this — NOT resolve_region — whenever the user gives raw coordinates instead of a place name. radius_km sets the half-size of the square box around the point (default 5).",
+    inputSchema: z.object({
+      lat: z.number().min(-90).max(90).describe("Latitude in decimal degrees (Philippines is ~5–20°N)"),
+      lon: z.number().min(-180).max(180).describe("Longitude in decimal degrees (Philippines is ~117–127°E)"),
+      radius_km: z
+        .number()
+        .positive()
+        .max(500)
+        .optional()
+        .describe("Half-size of the bounding box around the point, in km (default 5)"),
+    }),
+  },
+  highlight_location: {
+    description:
+      "Draw a highlight on the map for a location the user mentioned: a translucent rectangle over the bounding box plus a marker at its center. Pass the bbox from resolve_region or resolve_point. Use it when the user asks where a place is, or alongside a display request so they can see exactly where you focused. A new highlight replaces the previous one; remove_layers(['highlight']) clears it.",
+    inputSchema: z.object({
+      bbox: z
+        .array(z.number())
+        .length(4)
+        .describe("[west, south, east, north] in WGS84 degrees (from resolve_region/resolve_point)"),
+      label: z
+        .string()
+        .optional()
+        .describe("Name of the place, shown as the layer label, e.g. 'Pampanga'"),
+    }),
+  },
   search_catalog: {
     description:
       "Search the STAC catalog for imagery/data items. Filter by collections, a bounding box, and/or a datetime range. Returns matched items grouped by acquisition date; when nothing matches the date range it returns each collection's available dates instead — offer the nearest to the user.",
@@ -239,11 +267,13 @@ Data collections you can display (ids for search_catalog / add_layers):
 Other catalog collections (diwata-2, mula, planetscope, skysat) are metadata-only references — searchable but not displayable as map layers.
 
 How to fulfil a display request like "show flood data for <place> between <dates>":
-1. resolve_region for the place name (never guess coordinates). If several plausible matches, pick the best and mention the choice.
+1. resolve_region for the place name (never guess coordinates). If several plausible matches, pick the best and mention the choice. If the user instead gives an explicit coordinate (latitude/longitude), use resolve_point — not resolve_region — to turn it into a bbox.
 2. search_catalog with the collection(s), the bbox, and the datetime range.
 3. add_layers for the date(s) found — prefer the most relevant few, not all.
-4. set_view to the region's bbox.
+4. set_view to the region's bbox (the bbox from resolve_region or resolve_point).
 Then summarize in one or two sentences what is now on the map, including the acquisition date(s).
+
+If the user simply asks where a place is (no data to display), resolve it and call highlight_location with the bbox, then set_view — that marks the spot without adding any raster. You may also highlight_location alongside a data display so the focus area is obvious.
 
 Rules:
 - Ground every factual claim in tool results or the map state — never invent dates, coverage, or place names.

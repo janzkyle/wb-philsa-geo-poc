@@ -7,6 +7,7 @@ import { RASTER_DEFS } from "../config";
 import { collectionDates } from "../lib/stac";
 import { buildRasterLayer, LayerBuildError } from "../lib/layers";
 import {
+  buildClipMaskLayer,
   buildGeojsonLayer,
   geojsonBbox,
   GeoJsonError,
@@ -16,6 +17,7 @@ import {
 import { describePasses } from "../lib/passes";
 import { useMapStore } from "../state/mapStore";
 import LegendView from "./LegendView";
+import TimeSeries from "./TimeSeries";
 
 // Available acquisition dates per temporal collection, fetched once.
 function useAvailableDates() {
@@ -68,7 +70,9 @@ function AddRow({
 
   return (
     <div className="addrow">
-      <span className="addlabel">{label}</span>
+      <span className="addlabel" title={label}>
+        {label}
+      </span>
       {temporal ? (
         dates.length ? (
           <select value={date} onChange={(e) => setPickedDate(e.target.value)}>
@@ -97,7 +101,9 @@ function AddRow({
 
 // Load a local GeoJSON file and render it client-side — no server round-trip,
 // mirroring TerriaJS' "Add data > upload". Reads the file in the browser, parses
-// it, drops it in the store as a geojson-local layer and flies to its extent.
+// it, drops it in the store as a geojson-local layer, flies to its extent and —
+// when the file contains polygons — adds a clip mask so the rasters read only
+// inside the uploaded boundaries (its layer row un-clips: opacity / hide / ✕).
 function UploadRow({ onError }: { onError: (msg: string) => void }) {
   const addLayer = useMapStore((s) => s.addLayer);
   const setViewBbox = useMapStore((s) => s.setViewBbox);
@@ -119,7 +125,10 @@ function UploadRow({ onError }: { onError: (msg: string) => void }) {
           layers.filter((l) => l.kind === "geojson-local").length %
             GEOJSON_COLORS.length
         ];
-      addLayer(buildGeojsonLayer(file.name.replace(/\.(geo)?json$/i, ""), fc, color));
+      const name = file.name.replace(/\.(geo)?json$/i, "");
+      addLayer(buildGeojsonLayer(name, fc, color));
+      const mask = buildClipMaskLayer(name, fc);
+      if (mask) addLayer(mask);
       const bbox = geojsonBbox(fc);
       if (bbox) setViewBbox(bbox);
     } catch (err) {
@@ -247,6 +256,9 @@ export default function LayerPanel() {
       ))}
       <UploadRow onError={setError} />
 
+      <h2>Time series</h2>
+      <TimeSeries dates={dates} onError={setError} />
+
       <h2>Boundaries</h2>
       {vectors.map((l) => (
         <label key={l.id} className="row">
@@ -259,11 +271,6 @@ export default function LayerPanel() {
           {l.label}
         </label>
       ))}
-
-      <p className="hint">
-        Rasters need the local STAC API (:8082) + TiTiler (:8083); the chat
-        needs `npm run chat`. Boundaries stream from public R2.
-      </p>
     </div>
   );
 }
