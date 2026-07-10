@@ -4,10 +4,38 @@
 // TerriaJS app POSTs {context, messages} here; this process holds the key, calls
 // OpenRouter with our free-model fall-through list, and streams the reply back.
 //
-// Run:  OPENROUTER_API_KEY=sk-... node genai-proxy/server.js
+// Run:  node genai-proxy/server.js   (reads OPENROUTER_API_KEY from the repo-root .env)
 // Node >= 20 (uses the built-in fetch + web streams). No npm install needed.
 
 import { createServer } from "node:http";
+import { existsSync, readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
+// --- env: same convention as the pipelines — secrets live in repo-root .env --
+// (walks up to the repo root; only fills vars that aren't already set, so shell/
+// platform env always wins — a deployed proxy keeps using real env vars.
+// Mirrors webmap/server/chat.mjs.)
+function loadRepoRootEnv() {
+  let dir = dirname(fileURLToPath(import.meta.url));
+  while (dir !== dirname(dir)) {
+    const candidate = join(dir, ".env");
+    if (existsSync(join(dir, "AGENTS.md")) || existsSync(join(dir, ".git"))) {
+      if (existsSync(candidate)) {
+        for (const line of readFileSync(candidate, "utf8").split("\n")) {
+          const t = line.trim();
+          if (!t || t.startsWith("#") || !t.includes("=")) continue;
+          const [k, ...rest] = t.split("=");
+          const v = rest.join("=").trim().replace(/^['"]|['"]$/g, "");
+          process.env[k.trim()] ??= v;
+        }
+      }
+      return;
+    }
+    dir = dirname(dir);
+  }
+}
+loadRepoRootEnv();
 
 const PORT = Number(process.env.GENAI_PROXY_PORT) || 8084;
 const API_KEY = process.env.OPENROUTER_API_KEY;

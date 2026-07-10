@@ -171,16 +171,18 @@ How it works:
 Run it (in addition to `yarn gulp dev`):
 
 ```bash
-cd genai-proxy
-cp .env.example .env          # then paste your key from https://openrouter.ai/keys
-set -a && source .env && set +a
-node server.js                # listens on http://localhost:8084
+# put OPENROUTER_API_KEY in the repo-root .env (see <repo-root>/.env.example);
+# server.js auto-loads it — same convention as the pipelines and webmap chat.
+node genai-proxy/server.js    # listens on http://localhost:8084
 ```
+
+Proxy-specific overrides (port, CORS origin) can still be set as env vars or
+via a local `genai-proxy/.env` sourced manually — see its `.env.example`.
 
 The client defaults to `http://localhost:8084/api/chat`; override without a
 rebuild via `window.GENAI_PROXY_URL`. If the proxy is down or the key is missing,
-the panel shows a friendly error instead of crashing. `.env` is git-ignored so
-the key can't be committed.
+the panel shows a friendly error instead of crashing. All `.env` files are
+git-ignored so the key can't be committed.
 
 The streaming path (context injection, retained follow-up history, SSE
 passthrough, model-fallback order) is covered by an integration test that mocks
