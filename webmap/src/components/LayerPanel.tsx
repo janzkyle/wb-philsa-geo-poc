@@ -3,7 +3,7 @@
 // tools use, so the two drivers can never drift apart.
 
 import { useEffect, useRef, useState } from "react";
-import { RASTER_DEFS } from "../config";
+import { RASTER_DEFS, stacBrowserCollectionUrl } from "../config";
 import { collectionDates } from "../lib/stac";
 import { buildRasterLayer, LayerBuildError } from "../lib/layers";
 import {
@@ -72,6 +72,16 @@ function AddRow({
     <div className="addrow">
       <span className="addlabel" title={label}>
         {label}
+        <a
+          className="infobtn"
+          href={stacBrowserCollectionUrl(defId)}
+          target="_blank"
+          rel="noopener noreferrer"
+          title="Dataset details in the STAC catalog"
+          aria-label={`${label} — dataset details in the STAC catalog`}
+        >
+          i
+        </a>
       </span>
       {temporal ? (
         dates.length ? (

@@ -134,6 +134,8 @@ services:
         value: https://philsa-stac-api.onrender.com
       - key: VITE_TITILER
         value: https://philsa-titiler.onrender.com
+      - key: VITE_STAC_BROWSER
+        value: https://philsa-browser.onrender.com
       - key: VITE_R2_PUBLIC_BASE
         value: https://pub-17ab60a2ca7142a48ae8e2685cd853f7.r2.dev
     routes:
