@@ -19,6 +19,14 @@ export type LayerKind =
   // mask's dimming strength, not a raster opacity.
   | "geojson-mask";
 
+// One date of a time-series window (see MapLayer.frames). `tiles` stays empty
+// until the frame's layer has been built.
+export interface TimeseriesFrame {
+  key: string; // acquisition date, YYYY-MM-DD
+  tiles: string[];
+  tileBounds?: (Bbox | undefined)[];
+}
+
 export interface MapLayer {
   id: string; // unique, e.g. "sentinel1-flood:2026-06-05"
   kind: LayerKind;
@@ -26,6 +34,16 @@ export interface MapLayer {
   collection?: string; // STAC collection (raster layers)
   date?: string; // YYYY-MM-DD acquisition date (temporal rasters)
   tiles: string[]; // XYZ templates — one per MapLibre source
+  // Source bounds ([w,s,e,n], aligned with `tiles`): keeps MapLibre from
+  // requesting tiles outside each COG/mosaic footprint — for a single granule
+  // that's most of the viewport.
+  tileBounds?: (Bbox | undefined)[];
+  // Time-series playback (the "timeseries" layer only): every date of the play
+  // window. MapView pre-mounts them as hidden raster layers so stepping frames
+  // is an opacity flip, not a tile refetch. `tiles`/`label`/`date` still
+  // describe the current frame for the panel and the AI snapshot.
+  frames?: TimeseriesFrame[];
+  frameIndex?: number; // which entry of `frames` is showing
   pmtilesUrl?: string; // vector-pmtiles only
   sourceLayer?: string; // vector-pmtiles only
   // geojson-local / geojson-mask: inline features parsed from a file the user

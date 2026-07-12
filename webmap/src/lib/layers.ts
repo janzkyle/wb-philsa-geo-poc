@@ -4,9 +4,32 @@
 
 import { mosaicJsonUrl, rasterDef, RASTER_DEFS } from "../config";
 import { cogTileUrl, mosaicTileUrl } from "./titiler";
-import { searchStac } from "./stac";
+import { searchStac, type StacItemLite } from "./stac";
 import { describePasses, summarizePasses, type PassSummary } from "./passes";
-import type { MapLayer } from "../state/mapStore";
+import type { Bbox, MapLayer } from "../state/mapStore";
+
+// Source id for one tile-source of a time-series frame — shared between
+// MapView (which mounts the sources) and TimeSeries (which polls their load
+// state before advancing playback).
+export const tsFrameSourceId = (date: string, i: number) =>
+  `ts-frame:${date}:${i}`;
+
+// Union of the items' bboxes — the footprint of a day's mosaic.
+function unionBbox(items: StacItemLite[]): Bbox | undefined {
+  let out: Bbox | undefined;
+  for (const it of items) {
+    if (!it.bbox) continue;
+    out = out
+      ? [
+          Math.min(out[0], it.bbox[0]),
+          Math.min(out[1], it.bbox[1]),
+          Math.max(out[2], it.bbox[2]),
+          Math.max(out[3], it.bbox[3]),
+        ]
+      : [...it.bbox];
+  }
+  return out;
+}
 
 // A day's mosaic exists only for collections build_raster_mosaics.sh covers
 // (flood isn't among them yet) — probe with a HEAD and fall back to rendering
@@ -48,17 +71,16 @@ export async function buildRasterLayer(
 
   if (!def.temporal) {
     const items = await searchStac({ collections: [collection], limit: 100 });
-    const tiles = items
-      .filter((i) => i.cogHref)
-      .map((i) => cogTileUrl(i.cogHref!, def.titilerParams));
-    if (!tiles.length)
+    const withCog = items.filter((i) => i.cogHref);
+    if (!withCog.length)
       throw new LayerBuildError(`No COG items found in "${collection}".`);
     return {
       id: collection,
       kind: "raster-cogs",
       label: def.label,
       collection,
-      tiles,
+      tiles: withCog.map((i) => cogTileUrl(i.cogHref!, def.titilerParams)),
+      tileBounds: withCog.map((i) => i.bbox),
       opacity: 1,
       visible: true,
       legend: def.legend,
@@ -91,6 +113,7 @@ export async function buildRasterLayer(
       collection,
       date,
       tiles: [mosaicTileUrl(mosaic, def.titilerParams)],
+      tileBounds: [unionBbox(items)],
       opacity: 1,
       visible: true,
       legend: def.legend,
@@ -100,10 +123,8 @@ export async function buildRasterLayer(
   }
 
   // No per-date mosaic — render that day's item COGs individually.
-  const tiles = items
-    .filter((i) => i.cogHref)
-    .map((i) => cogTileUrl(i.cogHref!, def.titilerParams));
-  if (!tiles.length) {
+  const withCog = items.filter((i) => i.cogHref);
+  if (!withCog.length) {
     throw new LayerBuildError(
       `"${collection}" has no items on ${date} — use search_catalog to find dates with data.`,
     );
@@ -114,7 +135,8 @@ export async function buildRasterLayer(
     label: `${def.label} — ${date}`,
     collection,
     date,
-    tiles,
+    tiles: withCog.map((i) => cogTileUrl(i.cogHref!, def.titilerParams)),
+    tileBounds: withCog.map((i) => i.bbox),
     opacity: 1,
     visible: true,
     legend: def.legend,

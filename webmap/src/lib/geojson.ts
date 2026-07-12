@@ -251,6 +251,11 @@ export function buildGeojsonLayer(
     totalHa > 0
       ? ` · ${totalHa.toLocaleString(undefined, { maximumFractionDigits: 1 })} ha`
       : "";
+  // Polygon uploads double as the AOI for the time-series window average.
+  const statsNote =
+    totalHa > 0
+      ? " Pick it as the area under “Time series” to average an index over these polygons and export CSV."
+      : "";
   return {
     id: `upload:${name}:${Date.now()}`,
     kind: "geojson-local",
@@ -262,6 +267,6 @@ export function buildGeojsonLayer(
     visible: true,
     description: `Uploaded file · ${annotated.features.length} feature${
       annotated.features.length === 1 ? "" : "s"
-    }${areaNote} (rendered locally, not saved)`,
+    }${areaNote} (rendered locally, not saved).${statsNote}`,
   };
 }

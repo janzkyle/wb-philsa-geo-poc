@@ -137,19 +137,26 @@ function UploadRow({ onError }: { onError: (msg: string) => void }) {
   };
 
   return (
-    <div className="addrow">
-      <span className="addlabel">Local GeoJSON file</span>
-      <input
-        ref={inputRef}
-        type="file"
-        accept=".geojson,.json,application/geo+json,application/json"
-        style={{ display: "none" }}
-        onChange={onPick}
-      />
-      <button type="button" onClick={() => inputRef.current?.click()}>
-        Upload
-      </button>
-    </div>
+    <>
+      <div className="addrow">
+        <span className="addlabel">Local GeoJSON file</span>
+        <input
+          ref={inputRef}
+          type="file"
+          accept=".geojson,.json,application/geo+json,application/json"
+          style={{ display: "none" }}
+          onChange={onPick}
+        />
+        <button type="button" onClick={() => inputRef.current?.click()}>
+          Upload
+        </button>
+      </div>
+      <p className="hint">
+        Uploaded polygons clip the imagery and can be picked as the area under
+        “Time series” to average an index (e.g. radar vegetation) across dates
+        and export the result as CSV.
+      </p>
+    </>
   );
 }
 

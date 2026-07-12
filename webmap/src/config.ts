@@ -117,6 +117,10 @@ export interface RasterDef {
   // if present, per-item COGs otherwise). Date-independent collections (false,
   // e.g. annual LULC) render all their COGs at once.
   temporal: boolean;
+  // Unit label for zonal means of this collection (time-series window average
+  // + CSV export). Only single-band physical/index layers get one — RGB and
+  // categorical layers omit it, which hides the averaging UI for them.
+  statsUnit?: string;
 }
 
 export const RASTER_DEFS: RasterDef[] = [
@@ -135,6 +139,7 @@ export const RASTER_DEFS: RasterDef[] = [
     // single-band float32 — needs a stretch + colormap or it renders black.
     titilerParams: "rescale=-0.2,0.9&colormap_name=rdylgn",
     temporal: true,
+    statsUnit: "NDVI",
     description:
       "Vegetation greenness index (Sentinel-2). Green = dense/healthy vegetation, red = bare soil or water.",
     legend: {
@@ -154,6 +159,7 @@ export const RASTER_DEFS: RasterDef[] = [
     // NoData (-9999) is declared in the COG, so TiTiler masks it automatically.
     titilerParams: "rescale=20,52",
     temporal: true,
+    statsUnit: "dB (VV)",
     description:
       "Radar backscatter (Sentinel-1 VV, grayscale). Sees through cloud, day or night; bright = rough/built-up, dark = smooth/water.",
     legend: {
@@ -161,6 +167,27 @@ export const RASTER_DEFS: RasterDef[] = [
       stops: ["#000000", "#ffffff"],
       minLabel: "20 dB · smooth / water",
       maxLabel: "rough / built · 52 dB",
+    },
+  },
+  {
+    id: "sentinel1-ratio",
+    label: "Radar Vegetation (VH/VV)",
+    // single-band float32 cross-ratio in dB — needs a stretch + colormap.
+    // Colourblind-safe sequential ramp: pale = bare/water, dark green = canopy.
+    // stretch = p2–p98 of the first built scene (2026-07-07): −13.9…−2.4 dB.
+    titilerParams: "rescale=-14,-2&colormap_name=ylgn",
+    temporal: true,
+    statsUnit: "dB (VH/VV)",
+    description:
+      "Radar vegetation index (Sentinel-1 VH/VV ratio, dB). Rises with crop canopy growth and sees through cloud — NDVI's wet-season sibling. Index layer, not a calibrated crop product.",
+    legend: {
+      kind: "ramp",
+      stops: [
+        "#ffffe5", "#f7fcb9", "#d9f0a3", "#addd8e", "#78c679", "#41ab5d",
+        "#238443", "#006837", "#004529",
+      ],
+      minLabel: "−14 dB · bare / water",
+      maxLabel: "dense canopy · −2 dB",
     },
   },
   {

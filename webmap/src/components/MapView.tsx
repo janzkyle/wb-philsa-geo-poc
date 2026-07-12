@@ -12,6 +12,8 @@ import { Protocol } from "pmtiles";
 import type { StyleSpecification } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { INITIAL_VIEW } from "../config";
+import { RASTER_TILE_SIZE } from "../lib/titiler";
+import { tsFrameSourceId } from "../lib/layers";
 import { useMapStore } from "../state/mapStore";
 import type { MapLayer } from "../state/mapStore";
 import MapLegend from "./MapLegend";
@@ -96,6 +98,7 @@ function Basemaps({ active }: { active: Basemap }) {
 }
 
 function RasterLayer({ layer }: { layer: MapLayer }) {
+  if (layer.frames?.length) return <FrameStack layer={layer} />;
   return (
     <>
       {layer.tiles.map((tileUrl, i) => (
@@ -104,7 +107,8 @@ function RasterLayer({ layer }: { layer: MapLayer }) {
           id={`${layer.id}:${i}`}
           type="raster"
           tiles={[tileUrl]}
-          tileSize={256}
+          tileSize={RASTER_TILE_SIZE}
+          bounds={layer.tileBounds?.[i]}
         >
           <Layer
             id={`${layer.id}:${i}:r`}
@@ -115,6 +119,47 @@ function RasterLayer({ layer }: { layer: MapLayer }) {
           />
         </Source>
       ))}
+    </>
+  );
+}
+
+// Time-series playback stack: one raster source per armed frame, all mounted
+// with only the current frame's opacity up. Stepping a date is then a paint-
+// property flip — instant, no tile refetch — and the load-gated playback in
+// TimeSeries.tsx polls these sources by id before advancing. Which frames are
+// armed (tiles non-empty) is decided by TimeSeries: cursor + a small lookahead,
+// grow-only, so frames behind the cursor stay warm and loops never refetch.
+function FrameStack({ layer }: { layer: MapLayer }) {
+  const frames = layer.frames!;
+  const current = layer.frameIndex ?? 0;
+  return (
+    <>
+      {frames.map((f, fi) =>
+        f.tiles.map((tileUrl, i) => (
+          <Source
+            key={tsFrameSourceId(f.key, i)}
+            id={tsFrameSourceId(f.key, i)}
+            type="raster"
+            tiles={[tileUrl]}
+            tileSize={RASTER_TILE_SIZE}
+            bounds={f.tileBounds?.[i]}
+          >
+            <Layer
+              id={`${tsFrameSourceId(f.key, i)}:r`}
+              type="raster"
+              beforeId="mask-slot"
+              layout={{ visibility: layer.visible ? "visible" : "none" }}
+              paint={{
+                "raster-opacity": fi === current ? layer.opacity : 0,
+                // Instant frame flips and no tile fade-in — during playback a
+                // 300 ms cross-fade reads as "still loading".
+                "raster-opacity-transition": { duration: 0 },
+                "raster-fade-duration": 0,
+              }}
+            />
+          </Source>
+        )),
+      )}
     </>
   );
 }
@@ -243,6 +288,7 @@ export default function MapView() {
 
   return (
     <Map
+      id="main"
       ref={mapRef}
       initialViewState={INITIAL_VIEW}
       mapStyle={baseStyle}

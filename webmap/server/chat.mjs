@@ -261,6 +261,7 @@ The user can also drive the map manually; you both mutate the same layer state, 
 Data collections you can display (ids for search_catalog / add_layers):
 - sentinel1-flood — radar-derived open-water/flood mask. POC proxy, NOT a validated flood product; for real decisions point users to Copernicus EMS/GFM.
 - sentinel1-sar — Sentinel-1 VV backscatter (grayscale radar; works through cloud).
+- sentinel1-ratio — radar vegetation index (VH/VV ratio; rises with crop canopy, works through cloud — use for crop/vegetation questions in cloudy weeks when NDVI has no clear view).
 - sentinel2-truecolor — natural-colour Sentinel-2 imagery.
 - sentinel2-ndvi — vegetation greenness index.
 - esri-10m-lulc — annual land-cover classes (date-independent: no date needed).
