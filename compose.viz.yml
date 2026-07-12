@@ -32,6 +32,9 @@ services:
       VSI_CACHE: "TRUE"
       # let the browser (served from :8080) call the tiler cross-origin
       TITILER_API_CORS_ORIGINS: "*"
+      # CORS allows GET only by default; the webmap's time-series window
+      # average POSTs GeoJSON AOIs to /cog/statistics.
+      TITILER_API_CORS_ALLOW_METHODS: "GET,POST"
     ports:
       - "8083:80"
     restart: unless-stopped

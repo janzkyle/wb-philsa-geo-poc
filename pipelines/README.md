@@ -21,7 +21,8 @@ pipelines/
 │   ├── sentinel2-ndvi/
 │   ├── sentinel2-truecolor/
 │   ├── sentinel1-sar/
-│   └── sentinel1-flood/
+│   ├── sentinel1-flood/
+│   └── sentinel1-ratio/
 │       (copernicus-ems/ … as built)
 ├── 03-gold/                   # catalog-served products → pgSTAC (by reference)
 │   └── catalog_silver.py
@@ -39,7 +40,7 @@ This is an Earth-observation STAC POC, so the medallion tiers map to asset state
 | Tier | Meaning | Storage | Example scripts |
 | --- | --- | --- | --- |
 | **01-bronze** | Raw scenes pulled in verbatim, no transformation. | Local `eodata/` (default); optional R2 `01-bronze/copphil-sentinel/` via `--r2` | `download_copphil_eodata.py` (raw Sentinel-1/2 SAFE zips from CopPhil) |
-| **02-silver** | Cleaned, clipped, reprojected, or derived products (NDVI, SAR flood masks, conformed vectors → GeoParquet/PMTiles). | R2 (public/private COGs, GeoParquet, PMTiles) | `build_ph_admin_geoparquet.sh`, `sentinel2-ndvi/build_ndvi.sh`, `sentinel2-truecolor/build_truecolor.sh`, `sentinel1-sar/build_sar.sh`, `sentinel1-flood/build_flood.sh`; *planned:* `vector_to_pmtiles.py` (VEC path) |
+| **02-silver** | Cleaned, clipped, reprojected, or derived products (NDVI, SAR flood masks, conformed vectors → GeoParquet/PMTiles). | R2 (public/private COGs, GeoParquet, PMTiles) | `build_ph_admin_geoparquet.sh`, `sentinel2-ndvi/build_ndvi.sh`, `sentinel2-truecolor/build_truecolor.sh`, `sentinel1-sar/build_sar.sh`, `sentinel1-flood/build_flood.sh`, `sentinel1-ratio/build_ratio.sh`; *planned:* `vector_to_pmtiles.py` (VEC path) |
 | **03-gold** | Serving-ready catalog entries — what end users discover and consume. | pgSTAC Items (hrefs → R2) | `catalog_silver.py` (registers silver COGs as STAC items); *planned:* open/restricted tagging |
 
 The full CopPhil path is the clean medallion example:
@@ -59,9 +60,10 @@ The full CopPhil path is the clean medallion example:
 | **Sentinel-2 true-colour** *(silver)* | Bronze S2 L2A — 10 m TCI band | Extract TCI → 8-bit RGB COG; fill (`0`) flagged NoData | Visual reference imagery / basemap |
 | **Sentinel-1 SAR** *(silver)* | Bronze S1 IW GRD, VV polarization | GCP warp → EPSG:4326, amplitude → dB → Float32 COG | Backscatter base layer (**not** a validated flood product); served grayscale (15…55 dB) |
 | **Sentinel-1 flood** *(silver)* | Silver S1 VV backscatter (dB) COG | Dark-water threshold (`sigma` = mean−k·std default; `otsu`/`fixed` options), block-wise → Byte mask (1=water, 0=land, 2=perm-water, 255=nodata) | POC flood **proxy** (**not** validated; uncalibrated dB); pairs with Copernicus EMS/GFM; served via flood colormap |
+| **Sentinel-1 VH/VV ratio** *(silver)* | Bronze S1 IW GRD, both polarisations | GCP warp both pols to one grid → `VH_dB − VV_dB` → Float32 COG | Radar vegetation index (rises with crop canopy, works through cloud — the SAR fallback for parametric triggers); ratio cancels the per-scene gain of the uncalibrated dB, so the fixed stretch reads consistently; served `ylgn` |
 | **STAC catalog** *(gold)* | All silver COGs already in R2 | `catalog_silver.py` registers collections + items **by reference** (reading COG metadata over the authenticated R2 endpoint), with render-extension hints (rescale + colormap); **requires the STAC API's transactions extension enabled** (`ENABLE_TRANSACTIONS_EXTENSIONS=true`) or POST/PUT return 405 | What users discover/consume via the STAC API |
 
-The four silver Sentinel products are **single-/multi-band COGs in R2**; they're
+The five silver Sentinel products are **single-/multi-band COGs in R2**; they're
 visualized through **TiTiler** (repo-root [`compose.viz.yml`](../compose.viz.yml),
 `:8083`), which reads them over the authenticated R2 S3 endpoint and serves styled
 XYZ tiles to **STAC Browser** (per the `buildTileUrlTemplate` in its `config.js`).
@@ -87,6 +89,7 @@ script. This table is just the map:
 | `02-silver/sentinel2-truecolor/build_truecolor.sh` | 02-silver | shell | Sentinel-2 TCI → true-colour RGB COG → R2 | `bash <path>` |
 | `02-silver/sentinel1-sar/build_sar.sh` | 02-silver | shell | Sentinel-1 GRD VV → geocoded backscatter (dB) COG → R2 | `bash <path>` |
 | `02-silver/sentinel1-flood/build_flood.sh` | 02-silver | shell | Silver VV-dB COG → flood/water Byte mask COG → R2 | `SAR_NAME=… bash <path>` |
+| `02-silver/sentinel1-ratio/build_ratio.sh` | 02-silver | shell | Sentinel-1 GRD VV+VH → VH/VV cross-ratio (dB) COG → R2 | `bash <path>` |
 | `02-silver/sentinel1-flood/otsu_flood.py` | 02-silver | Python | Classify VV-dB → flood Byte mask (`sigma`/`otsu`/`fixed`); called by `build_flood.sh` | `python3 <path> --help` |
 | `02-silver/build_silver.py` | 02-silver | Python | Batch driver: every bronze scene → every silver product (ndvi, truecolor, sar, flood) | `python3 <path> --dry-run` |
 | `02-silver/build_raster_mosaics.sh` | 02-silver | shell | Per-date MosaicJSON stitching same-day Sentinel COG granules (the 3 scene collections; flood excluded by default) → R2. Reads hrefs from the catalog, so run it **after** the gold step | `bash <path>` |

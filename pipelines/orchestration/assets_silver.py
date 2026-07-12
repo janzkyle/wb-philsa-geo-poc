@@ -199,6 +199,33 @@ def sentinel1_flood(
 
 
 @dg.asset(
+    key=dg.AssetKey(["silver", "sentinel1_ratio"]),
+    group_name="silver",
+    kinds={"bash"},
+    deps=[copphil_sentinel],
+    description=(
+        "VH/VV cross-ratio (dB) Float32 COG from bronze dual-pol S1 GRD → R2 "
+        "02-silver/sentinel1-ratio/ (build_ratio.sh; single radar vegetation "
+        "index — rises with crop canopy, works through cloud; no scene in "
+        "config = batch over every bronze scene)."
+    ),
+)
+def sentinel1_ratio(
+    context: dg.AssetExecutionContext,
+    config: SceneBuildConfig,
+    pipes_subprocess_client: dg.PipesSubprocessClient,
+) -> dg.MaterializeResult:
+    if not config.scene:
+        return _run_batch(context, pipes_subprocess_client, "ratio", config.force)
+    return _run_silver_script(
+        context,
+        pipes_subprocess_client,
+        SILVER_DIR / "sentinel1-ratio" / "build_ratio.sh",
+        {"SCENE": config.scene, "FORCE": "1" if config.force else ""},
+    )
+
+
+@dg.asset(
     key=dg.AssetKey(["silver", "ph_admin_geoparquet"]),
     group_name="silver",
     kinds={"bash"},

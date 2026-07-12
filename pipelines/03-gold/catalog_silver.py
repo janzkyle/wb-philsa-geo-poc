@@ -80,6 +80,19 @@ PRODUCTS = [
      "renders": {"backscatter": {"title": "VV backscatter (dB)", "assets": ["data"],
                                  "rescale": [[15, 55]], "colormap_name": "gray",
                                  "resampling": "bilinear"}}},
+    {"collection": "sentinel1-ratio", "prefix": "02-silver/sentinel1-ratio",
+     "title": "Radar Vegetation Index (VH/VV) — Philippines",
+     "source_product": "sentinel1-ratio", "extra_keywords": ["SAR", "radar", "cross-ratio", "vegetation"],
+     "description": "Sentinel-1 VH/VV cross-polarisation ratio in dB (VH_dB − VV_dB) over the "
+                    "Philippines, as Cloud-Optimized GeoTIFF (silver tier). Volume scattering "
+                    "makes the ratio rise with crop canopy growth, and it works through cloud — "
+                    "a radar sibling of NDVI for wet-season monitoring. Index layer from "
+                    "uncalibrated backscatter — not a calibrated crop product.",
+     "platform": "sentinel-1", "instruments": ["c-sar"], "gsd": 10,
+     "asset_title": "VH/VV cross-ratio dB (Float32 COG)",
+     "renders": {"ratio": {"title": "VH/VV cross-ratio (dB)", "assets": ["data"],
+                           "rescale": [[-14, -2]], "colormap_name": "ylgn",
+                           "resampling": "bilinear"}}},
     {"collection": "sentinel1-flood", "prefix": "02-silver/sentinel1-flood",
      "title": "Flood Extent (radar-derived) — Philippines",
      "source_product": "sentinel1-flood", "extra_keywords": ["flood", "water", "SAR", "threshold"],

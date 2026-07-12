@@ -37,6 +37,29 @@ version. Keep both honest.
           (calibration · speckle · terrain-correction).
           **Complements** (not replaces) Copernicus EMS/GFM below — our own
           derived layer + the authoritative reference.
+    - [~] **Sentinel-1 VH/VV cross-ratio (radar vegetation index)** — the
+          "SAR fallback index" the cloud-guardrails item (Frontend section)
+          asks for: a single thresholdable band, VH−VV in dB
+          (`02-silver/sentinel1-ratio/build_ratio.sh`; both pols are already
+          in the bronze `1SDV` zips). VH (volume scattering) rises with crop
+          canopy → reads "up = more crop" like NDVI but through monsoon
+          cloud — post-plant confirmation + trigger input. The ratio also
+          cancels the per-scene gain of the uncalibrated dB backscatter, so
+          a **fixed stretch reads consistently scene-to-scene** (the SAR
+          readability fix, done upstream — no colormap slider needed).
+          Caveats: per-pol calibration LUTs don't cancel exactly; per-pixel
+          ratio speckle is noisier (zone-level averaging handles it); NOT a
+          calibrated/validated crop product. **Built + verified (2026-07-11,
+          1 of 14 scenes):** full chain live for the 2026-07-07 S1D scene —
+          silver COG (1.8 GB), gold collection `sentinel1-ratio` (ylgn render,
+          stretch −14…−2 dB = measured p2–p98; values land in the physical
+          VH−VV range, confirming the gain cancellation), stac-browser tile
+          rule, Dagster asset `silver/sentinel1_ratio` (auto-joins
+          `copphil_chain_refresh`), webmap layer + legend + chat-assistant
+          entry (verified in-browser: panel, date pick, tiles, legend).
+          **Still to do:** batch the remaining scenes (`build_silver.py
+          --only ratio`; ~2 GB Float32 COG per scene — mind R2 usage),
+          per-date mosaics.
   - [x] Catalog silver COGs in pgSTAC by reference (gold,
         `pipelines/03-gold/catalog_silver.py`): S2 NDVI, S2 true-colour, S1 VV
         backscatter as STAC collections + items (asset hrefs → public R2)

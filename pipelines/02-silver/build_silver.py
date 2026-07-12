@@ -8,6 +8,8 @@ COG(s), by invoking the per-product builders.
   sar        Sentinel-1 (GRDH)   -> sentinel1-sar/build_sar.sh
   flood      Sentinel-1 (GRDH)   -> sentinel1-flood/build_flood.sh
              (runs after `sar` for the same scene; reads the silver VV-dB COG)
+  ratio      Sentinel-1 (GRDH)   -> sentinel1-ratio/build_ratio.sh
+             (VH/VV cross-ratio dB; reads both pols from the bronze zip)
 
 Scene discovery is LOCAL-FIRST: it enumerates the local bronze dir
 (`eodata/`, where download_copphil_eodata.py stages scenes) and, if R2 creds are
@@ -50,8 +52,9 @@ PRODUCTS = {
     "truecolor": ("MSIL2A", "pipelines/02-silver/sentinel2-truecolor/build_truecolor.sh"),
     "sar":       ("GRDH",   "pipelines/02-silver/sentinel1-sar/build_sar.sh"),
     "flood":     ("GRDH",   "pipelines/02-silver/sentinel1-flood/build_flood.sh"),
+    "ratio":     ("GRDH",   "pipelines/02-silver/sentinel1-ratio/build_ratio.sh"),
 }
-ALIASES = {"sentinel-2": ["ndvi", "truecolor"], "sentinel-1": ["sar", "flood"]}
+ALIASES = {"sentinel-2": ["ndvi", "truecolor"], "sentinel-1": ["sar", "flood", "ratio"]}
 
 
 def scene_env(product, scene):
