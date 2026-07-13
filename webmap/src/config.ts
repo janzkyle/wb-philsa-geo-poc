@@ -180,7 +180,7 @@ export const RASTER_DEFS: RasterDef[] = [
   },
   {
     id: "sentinel1-ratio",
-    label: "Radar Vegetation (VH/VV)",
+    label: "Radar Vegetation Index (VH/VV)",
     // single-band float32 cross-ratio in dB — needs a stretch + colormap.
     // Colourblind-safe sequential ramp: pale = bare/water, dark green = canopy.
     // stretch = p2–p98 of the first built scene (2026-07-07): −13.9…−2.4 dB.
@@ -201,7 +201,7 @@ export const RASTER_DEFS: RasterDef[] = [
   },
   {
     id: "sentinel1-flood",
-    label: "Flood extent (radar-derived)",
+    label: "Flood Extent (radar-derived)",
     // Byte mask: 1=water, 2=permanent water, 0=land, 255=nodata. Discrete
     // colormap (only water classes coloured; land left transparent) matching
     // the `flood` render in catalog_silver.py.

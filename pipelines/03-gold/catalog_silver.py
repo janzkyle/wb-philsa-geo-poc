@@ -118,7 +118,7 @@ PRODUCTS = [
                                  "rescale": [[15, 55]], "colormap_name": "gray",
                                  "resampling": "bilinear"}}},
     {"collection": "sentinel1-ratio", "prefix": "02-silver/sentinel1-ratio",
-     "title": "Radar Vegetation Index (VH/VV) — Philippines",
+     "title": "Sentinel-1 VH/VV Cross-Ratio — Philippines",
      "source_product": "sentinel1-ratio", "extra_keywords": ["SAR", "radar", "cross-ratio", "vegetation"],
      "description": "Sentinel-1 VH/VV cross-polarisation ratio in dB (VH_dB − VV_dB) over the "
                     "Philippines, as Cloud-Optimized GeoTIFF (silver tier). Volume scattering "
@@ -135,7 +135,7 @@ PRODUCTS = [
                            "rescale": [[-14, -2]], "colormap_name": "ylgn",
                            "resampling": "bilinear"}}},
     {"collection": "sentinel1-flood", "prefix": "02-silver/sentinel1-flood",
-     "title": "Flood Extent (radar-derived) — Philippines",
+     "title": "Sentinel-1 Flood / Water Mask — Philippines",
      "source_product": "sentinel1-flood", "extra_keywords": ["flood", "water", "SAR", "threshold"],
      "description": "Open-water / flood mask derived from Sentinel-1 VV backscatter (dB) by "
                     "dark-water thresholding (sigma default; otsu/fixed options) "
