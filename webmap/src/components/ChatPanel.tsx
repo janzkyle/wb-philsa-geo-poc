@@ -46,6 +46,7 @@ function toolChipLabel(toolName: string, input: unknown): string {
 
 export default function ChatPanel() {
   const [input, setInput] = useState("");
+  const [collapsed, setCollapsed] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const { messages, sendMessage, addToolResult, status, error } = useChat({
@@ -82,9 +83,39 @@ export default function ChatPanel() {
     setInput("");
   };
 
+  if (collapsed) {
+    return (
+      <div className="panel chatpanel collapsed">
+        <button
+          type="button"
+          className="chatexpand"
+          onClick={() => setCollapsed(false)}
+          aria-label="Expand map assistant"
+          title="Expand map assistant"
+        >
+          <span className="chatexpand-icon" aria-hidden="true">
+            💬
+          </span>
+          <span className="chatexpand-label">Map assistant</span>
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div className="panel chatpanel">
-      <h2 className="chattitle">Map assistant</h2>
+      <div className="chathead">
+        <h2 className="chattitle">Map assistant</h2>
+        <button
+          type="button"
+          className="chatcollapse"
+          onClick={() => setCollapsed(true)}
+          aria-label="Collapse map assistant"
+          title="Collapse map assistant"
+        >
+          ›
+        </button>
+      </div>
       <div className="chatlog" ref={scrollRef}>
         {messages.length === 0 && (
           <div className="chatempty">
