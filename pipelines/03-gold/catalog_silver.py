@@ -76,7 +76,7 @@ SENTINEL_PROVIDERS = [
 # Silver products to catalogue: one Collection per family.
 PRODUCTS = [
     {"collection": "sentinel2-ndvi", "prefix": "02-silver/sentinel2-ndvi",
-     "title": "Vegetation Health (NDVI) — Philippines",
+     "title": "Sentinel-2 NDVI — Philippines",
      "source_product": "sentinel2-ndvi", "extra_keywords": ["NDVI", "vegetation"],
      "description": "Per-scene NDVI = (B08-B04)/(B08+B04) from Sentinel-2 L2A over the "
                     "Philippines, as Cloud-Optimized GeoTIFF (silver tier).",
@@ -89,7 +89,7 @@ PRODUCTS = [
                           "rescale": [[-0.2, 0.8]], "colormap_name": "rdylgn",
                           "resampling": "bilinear"}}},
     {"collection": "sentinel2-truecolor", "prefix": "02-silver/sentinel2-truecolor",
-     "title": "Natural-Colour Satellite Imagery — Philippines",
+     "title": "Sentinel-2 True-Colour (TCI) — Philippines",
      "source_product": "sentinel2-truecolor", "extra_keywords": ["true-colour", "TCI", "RGB"],
      "description": "Sentinel-2 L2A true-colour (TCI, 10 m) over the Philippines, as an "
                     "8-bit RGB Cloud-Optimized GeoTIFF (silver tier).",
@@ -103,7 +103,7 @@ PRODUCTS = [
      "renders": {"true-color": {"title": "True colour", "assets": ["data"],
                                 "resampling": "nearest"}}},
     {"collection": "sentinel1-sar", "prefix": "02-silver/sentinel1-sar",
-     "title": "All-Weather Radar Imagery — Philippines",
+     "title": "Sentinel-1 SAR VV Backscatter — Philippines",
      "source_product": "sentinel1-sar", "extra_keywords": ["SAR", "radar", "VV backscatter"],
      "description": "Geocoded Sentinel-1 IW GRD VV backscatter in dB over the Philippines, "
                     "as Cloud-Optimized GeoTIFF (silver tier). Backscatter base layer — "
@@ -261,9 +261,11 @@ def build_item(prod, key, info, href, extra_links=None):
 
 def build_collection(prod, bbox, dts, items):
     interval = [min(dts) if dts else None, max(dts) if dts else None]
-    # Layman-friendly `title` is what users see; the underlying silver product name
-    # is preserved as a queryable property + keyword so the technical lineage is
-    # never lost. `source_product` defaults to the collection id (display-only rename).
+    # The STAC `title` is the original/technical product name (what the catalog
+    # browser shows); layman-friendly framing lives in the webmap layer labels
+    # (webmap RASTER_DEFS). The underlying silver product name is preserved as a
+    # queryable property + keyword so the technical lineage is never lost.
+    # `source_product` defaults to the collection id (display-only rename).
     source_product = prod.get("source_product", prod["collection"])
     keywords = ["sentinel", "philippines", "silver", prod["platform"],
                 source_product, *prod.get("extra_keywords", [])]

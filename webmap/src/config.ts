@@ -135,7 +135,7 @@ export interface RasterDef {
 export const RASTER_DEFS: RasterDef[] = [
   {
     id: "sentinel2-truecolor",
-    label: "Sentinel-2 True Colour",
+    label: "Natural-Colour Satellite Imagery",
     // 8-bit RGB TCI COG — TiTiler auto-detects the 3 bands.
     titilerParams: "",
     temporal: true,
@@ -144,7 +144,7 @@ export const RASTER_DEFS: RasterDef[] = [
   },
   {
     id: "sentinel2-ndvi",
-    label: "Sentinel-2 NDVI",
+    label: "Vegetation Health (NDVI)",
     // single-band float32 — needs a stretch + colormap or it renders black.
     titilerParams: "rescale=-0.2,0.9&colormap_name=rdylgn",
     temporal: true,
@@ -163,7 +163,7 @@ export const RASTER_DEFS: RasterDef[] = [
   },
   {
     id: "sentinel1-sar",
-    label: "Sentinel-1 SAR (VV)",
+    label: "All-Weather Radar Imagery",
     // single-band float32 VV backscatter (dB) — grayscale; rescale ≈ mean ±2σ.
     // NoData (-9999) is declared in the COG, so TiTiler masks it automatically.
     titilerParams: "rescale=20,52",
