@@ -46,7 +46,7 @@ info "PhilSA catalog mirror (by reference) …"
 python3 "$REPO_ROOT/pipelines/reference/philsa-catalog/mirror_philsa_catalog.py"
 
 if $with_esri; then
-  info "ESRI 10 m LULC (year ${YEAR:=2023}) — needs GDAL ≥ 3.8 …"
+  info "ESRI 10 m LULC (year ${YEAR:=2025}) — needs GDAL ≥ 3.8 …"
   YEAR="$YEAR" bash "$REPO_ROOT/pipelines/reference/esri-lulc/load_esri_lulc.sh"
 else
   info "skipping ESRI LULC (pass --with-esri or set YEAR= to include it)."

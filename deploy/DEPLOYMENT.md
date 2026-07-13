@@ -145,7 +145,7 @@ one), then choose how much to load:
 ```bash
 deploy/scripts/load-reference-data.sh prod                 # PhilSA mirror only: diwata-2 / planetscope / skysat
 deploy/scripts/load-reference-data.sh prod --with-silver   # + Sentinel silver: sentinel1-sar, sentinel1-flood, sentinel2-ndvi, sentinel2-truecolor
-YEAR=2023 deploy/scripts/load-reference-data.sh prod --with-esri   # + ESRI 10 m LULC
+deploy/scripts/load-reference-data.sh prod --with-esri             # + ESRI 10 m LULC (default year 2025; override with YEAR=)
 deploy/scripts/load-reference-data.sh prod --all           # mirror + esri + silver (the full catalog)
 deploy/scripts/db-check.sh prod                            # verify collection/item counts
 ```
