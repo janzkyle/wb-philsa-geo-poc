@@ -35,20 +35,17 @@ BLOB_BASE="https://lulctimeseries.blob.core.windows.net/lulctimeseriesv003"
 echo ">> year=${YEAR}  api=${STAC_API}  collection=${COLLECTION}"
 echo ">> tiles: ${TILES}"
 
-# ---- ensure the Collection exists (once) ------------------------------------
-if curl -fsS "${STAC_API}/collections/${COLLECTION}" >/dev/null 2>&1; then
-  echo ">> collection '${COLLECTION}' already exists"
-else
-  echo ">> creating collection '${COLLECTION}' ..."
-  curl -fsS -X POST "${STAC_API}/collections" \
-    -H 'Content-Type: application/json' -d @- <<JSON >/dev/null
+# ---- upsert the Collection (POST, then PUT on 409 — idempotent) --------------
+COL_JSON=$(cat <<JSON
 {
   "type": "Collection",
   "stac_version": "1.0.0",
+  "stac_extensions": ["https://stac-extensions.github.io/item-assets/v1.0.0/schema.json"],
   "id": "${COLLECTION}",
   "title": "ESRI 10m Annual Land Use/Land Cover (Impact Observatory v003)",
   "description": "Sentinel-2 derived 10m annual global LULC, 9-class scheme. Items reference public Azure COGs by href (not re-hosted).",
   "license": "CC-BY-4.0",
+  "keywords": ["land cover", "land use", "LULC", "sentinel-2", "philippines", "annual", "impact observatory"],
   "providers": [
     {"name": "Impact Observatory", "roles": ["producer", "processor"], "url": "https://www.impactobservatory.com/"},
     {"name": "Esri", "roles": ["host"], "url": "https://livingatlas.arcgis.com/landcover/"}
@@ -57,9 +54,28 @@ else
     "spatial": {"bbox": [[116.9, 4.6, 126.6, 21.1]]},
     "temporal": {"interval": [["2017-01-01T00:00:00Z", null]]}
   },
+  "item_assets": {
+    "data": {
+      "type": "image/tiff; application=geotiff; profile=cloud-optimized",
+      "title": "Annual LULC map (COG)",
+      "roles": ["data"]
+    }
+  },
   "links": []
 }
 JSON
+)
+col_code=$(curl -s -o /dev/null -w "%{http_code}" -X POST "${STAC_API}/collections" \
+  -H 'Content-Type: application/json' -d "$COL_JSON")
+if [ "$col_code" = "409" ]; then
+  curl -fsS -X PUT "${STAC_API}/collections/${COLLECTION}" \
+    -H 'Content-Type: application/json' -d "$COL_JSON" >/dev/null
+  echo ">> collection '${COLLECTION}' updated"
+elif [ "$col_code" = "200" ] || [ "$col_code" = "201" ]; then
+  echo ">> collection '${COLLECTION}' created"
+else
+  echo "!! collection upsert failed (HTTP ${col_code})" >&2
+  exit 1
 fi
 
 # ---- per-tile loader --------------------------------------------------------
@@ -114,15 +130,24 @@ epsg = int(m.group(1)) if m else 32600 + int(tile[:2])
 proj_bbox_native = [gt[0], gt[3] + gt[5]*H, gt[0] + gt[1]*W, gt[3]]
 
 classes = [
-    {"value": 1,  "name": "Water",              "color_hint": "1A5BAB"},
-    {"value": 2,  "name": "Trees",              "color_hint": "358221"},
-    {"value": 4,  "name": "Flooded vegetation", "color_hint": "87D19E"},
-    {"value": 5,  "name": "Crops",              "color_hint": "FFDB5C"},
-    {"value": 7,  "name": "Built area",         "color_hint": "ED022A"},
-    {"value": 8,  "name": "Bare ground",        "color_hint": "EDE9E4"},
-    {"value": 9,  "name": "Snow/ice",           "color_hint": "F2FAFF"},
-    {"value": 10, "name": "Clouds",             "color_hint": "C8C8C8"},
-    {"value": 11, "name": "Rangeland",          "color_hint": "C6AD8D"},
+    {"value": 1,  "name": "Water",              "color_hint": "1A5BAB",
+     "description": "Water bodies predominantly present throughout the year (not sporadic or ephemeral water)"},
+    {"value": 2,  "name": "Trees",              "color_hint": "358221",
+     "description": "Dense, tall vegetation clusters with closed or dense canopy (roughly 5 m or taller)"},
+    {"value": 4,  "name": "Flooded vegetation", "color_hint": "87D19E",
+     "description": "Vegetation intermixed with water for most of the year"},
+    {"value": 5,  "name": "Crops",              "color_hint": "FFDB5C",
+     "description": "Human-planted cereals, grasses, and crops below tree height"},
+    {"value": 7,  "name": "Built area",         "color_hint": "ED022A",
+     "description": "Human-made structures and impervious surfaces (roads, buildings)"},
+    {"value": 8,  "name": "Bare ground",        "color_hint": "EDE9E4",
+     "description": "Rock or soil with very sparse to no vegetation year-round"},
+    {"value": 9,  "name": "Snow/ice",           "color_hint": "F2FAFF",
+     "description": "Large homogeneous areas of permanent snow or ice"},
+    {"value": 10, "name": "Clouds",             "color_hint": "C8C8C8",
+     "description": "No land-cover information due to persistent cloud cover"},
+    {"value": 11, "name": "Rangeland",          "color_hint": "C6AD8D",
+     "description": "Open areas of homogeneous grasses, scrub, and open savanna with little tall vegetation"},
 ]
 
 item = {
@@ -138,7 +163,9 @@ item = {
     "geometry": {"type": "Polygon", "coordinates": ext},
     "bbox": bbox,
     "properties": {
-        "datetime": None,
+        # midpoint rather than null: pgstac drops a null datetime on output,
+        # which makes served items fail the item schema; start/end carry the range
+        "datetime": f"{year}-07-01T00:00:00Z",
         "start_datetime": f"{year}-01-01T00:00:00Z",
         "end_datetime":   f"{year}-12-31T23:59:59Z",
         "esri:tile": tile,

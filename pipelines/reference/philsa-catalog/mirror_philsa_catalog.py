@@ -8,7 +8,11 @@ Dest   (your pgstac): http://localhost:8082   (Transactions extension enabled)
 
 Only the STAC metadata (Collections + Items) is copied. Item assets keep their
 original absolute hrefs (storage.googleapis.com/dpad-bucket/...), so pixels are
-streamed from PhilSA's storage — nothing is re-hosted.
+streamed from PhilSA's storage — nothing is re-hosted. Each mirrored record
+keeps its license/citation links and gains a rel=via link to the original
+PhilSA record (mirror provenance), and upstream `eo:bands.common_name` values
+outside the EO-extension vocabulary (`red-edge`, `coastal_blue`, …) are
+normalized on ingest so the records validate.
 
 Idempotent: POST first, and on 409 Conflict fall back to PUT, so re-running
 updates in place instead of erroring.
@@ -77,16 +81,55 @@ def upsert(kind, post_url, put_url, payload, dry):
     return f"error[{status}]: {body}"
 
 
-def strip_links(obj):
-    """Drop source-relative navigation links; pgstac rebuilds its own."""
+# EO extension v1.x common_name vocabulary; upstream PhilSA records use values
+# outside it (e.g. "red-edge", "coastal_blue"), which fail schema validation.
+EO_COMMON_NAMES = {"coastal", "blue", "green", "red", "rededge", "yellow", "pan",
+                   "nir", "nir08", "nir09", "cirrus", "swir16", "swir22",
+                   "lwir", "lwir11", "lwir12"}
+EO_COMMON_FIX = {"red-edge": "rededge", "red edge": "rededge",
+                 "coastal_blue": "coastal", "coastal-blue": "coastal"}
+
+
+def fix_eo_bands(bands):
+    """Map non-vocabulary common_name values to the EO vocabulary, or drop the
+    field (a band without common_name is valid; a wrong one is not)."""
+    for b in bands or []:
+        cn = b.get("common_name")
+        if cn is None:
+            continue
+        cn = EO_COMMON_FIX.get(cn, cn)
+        if cn in EO_COMMON_NAMES:
+            b["common_name"] = cn
+        else:
+            del b["common_name"]
+
+
+def normalize(obj):
+    fix_eo_bands(obj.get("properties", {}).get("eo:bands"))
+    for a in obj.get("assets", {}).values():
+        fix_eo_bands(a.get("eo:bands"))
+    fix_eo_bands(obj.get("summaries", {}).get("eo:bands"))
+    return obj
+
+
+def rewrite_links(obj):
+    """Drop source-relative navigation links (pgstac rebuilds its own), but keep
+    license/citation links and record provenance: the source record's rel=self
+    becomes rel=via — the canonical marker for a by-reference mirror."""
     obj = dict(obj)
-    obj["links"] = []
+    links = obj.get("links") or []
+    kept = [l for l in links if l.get("rel") in ("license", "cite-as", "describedby")]
+    self_href = next((l.get("href") for l in links if l.get("rel") == "self"), None)
+    if self_href:
+        kept.append({"rel": "via", "href": self_href, "type": "application/json",
+                     "title": "Original record in the PhilSA catalog"})
+    obj["links"] = kept
     return obj
 
 
 def mirror_collection(col, dry):
     cid = col.get("id")
-    payload = strip_links(col)
+    payload = normalize(rewrite_links(col))
     payload.setdefault("type", "Collection")
     res = upsert(
         "collection",
@@ -117,7 +160,7 @@ def iter_items(cid, limit, max_items):
 def mirror_items(cid, limit, max_items, dry):
     counts = {"created": 0, "updated": 0, "error": 0, "dry-run": 0}
     for f in iter_items(cid, limit, max_items):
-        f = strip_links(f)
+        f = normalize(rewrite_links(f))
         f["collection"] = cid
         iid = f.get("id")
         res = upsert(

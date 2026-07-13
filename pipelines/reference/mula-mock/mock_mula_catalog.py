@@ -39,6 +39,7 @@ import urllib.request
 STAC_API = os.environ.get("STAC_API", os.environ.get("DST", "http://localhost:8082")).rstrip("/")
 TIMEOUT = 30
 RENDER_EXT = "https://stac-extensions.github.io/render/v1.0.0/schema.json"
+ITEM_ASSETS_EXT = "https://stac-extensions.github.io/item-assets/v1.0.0/schema.json"
 
 # MULA true-colour render: bands 4/2/1 of the borrowed 9-band TOA COG (matches the
 # dashboard's Diwata-2 style so the placeholder renders identically).
@@ -126,7 +127,9 @@ def build_collection(bbox, dates):
     return {
         "type": "Collection",
         "stac_version": "1.0.0",
-        "stac_extensions": [RENDER_EXT],
+        # item-assets is required alongside render: the render objects reference
+        # assets, and the render schema wants them declared on the collection
+        "stac_extensions": [RENDER_EXT, ITEM_ASSETS_EXT],
         "id": "mula",
         "title": "MULA — Multispectral Unit for Land Assessment",
         "description": (
@@ -146,6 +149,15 @@ def build_collection(bbox, dates):
             "spatial": {"bbox": [bbox]},
             "temporal": {"interval": [[f"{min(dates).isoformat()}T00:00:00Z",
                                        f"{max(dates).isoformat()}T23:59:59Z"]]},
+        },
+        "item_assets": {
+            "top-of-atmosphere-reflectance": {
+                "type": "image/tiff; application=geotiff; profile=cloud-optimized",
+                "title": "Top-of-atmosphere reflectance (COG)",
+                "roles": ["data", "visual"],
+            },
+            "thumbnail": {"type": "image/png", "title": "Thumbnail",
+                          "roles": ["thumbnail"]},
         },
         "renders": MULA_RENDER,
         "links": [],

@@ -87,7 +87,14 @@ version. Keep both honest.
       and/or synthetic test vectors → PMTiles
 - [ ] **Earth Search** (`PUB`): query Sentinel-2 L2A asset URLs and mirror into
       pgSTAC by reference (ETL-only, mirror the Planetary Computer pattern)
-- [ ] Fix metadata
+- [x] Fix metadata (2026-07-13): all catalog records now pass STAC schema
+      validation (stac-node-validator). Loaders emit providers, summaries,
+      item_assets, classification classes, `processing:lineage`, and
+      `derived_from`/`via` provenance links; mirror normalizes upstream
+      `eo:bands.common_name` to the EO vocabulary
+- [ ] Report upstream to PhilSA: their catalog's `eo:bands.common_name` values
+      (`red-edge`, `coastal_blue`, `green_i`) are outside the EO-extension
+      vocabulary and fail STAC validation (our mirror normalizes them on ingest)
 
 ## Geospatial AI
 
