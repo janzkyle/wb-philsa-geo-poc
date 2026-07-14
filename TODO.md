@@ -95,6 +95,7 @@ version. Keep both honest.
 - [ ] Report upstream to PhilSA: their catalog's `eo:bands.common_name` values
       (`red-edge`, `coastal_blue`, `green_i`) are outside the EO-extension
       vocabulary and fail STAC validation (our mirror normalizes them on ingest)
+- [ ] Use uv package manager for the environment. Use uv for all python scripts
 
 ## Geospatial AI
 
