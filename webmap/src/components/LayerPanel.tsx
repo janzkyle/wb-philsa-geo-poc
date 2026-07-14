@@ -162,9 +162,9 @@ function UploadRow({ onError }: { onError: (msg: string) => void }) {
         </button>
       </div>
       <p className="hint">
-        Uploaded polygons clip the imagery and can be picked as the area under
-        “Time series” to average an index (e.g. radar vegetation) across dates
-        and export the result as CSV.
+        Each uploaded polygon is treated as one farm: pick the file as the area
+        under “Time series” to average an index (e.g. radar vegetation) over
+        every farm across dates and export the per-farm table as CSV.
       </p>
     </>
   );

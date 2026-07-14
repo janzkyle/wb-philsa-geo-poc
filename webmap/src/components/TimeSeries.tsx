@@ -301,10 +301,11 @@ export default function TimeSeries({
     setIndex((i) => Math.min(endIdx, Math.max(startIdx, i + delta)));
   };
 
-  // --- window average -------------------------------------------------------
-  // Zonal mean of the index for every date in the window (TiTiler statistics
-  // over the COGs), then the across-dates average. AOI is either an uploaded
-  // polygon layer or the current viewport.
+  // --- per-farm window average ----------------------------------------------
+  // Mean of the index over EACH farm (upload feature) for every date in the
+  // window (TiTiler statistics over the COGs), plus each farm's across-dates
+  // average — PCIC's per-farm index unit, exported as a farm × date CSV. AOI is
+  // either an uploaded polygon layer (many farms) or the current viewport (one).
 
   const uploads = layers.filter((l) => l.kind === "geojson-local" && l.geojson);
   // Fall back to the viewport if the selected upload has been removed.
@@ -324,6 +325,7 @@ export default function TimeSeries({
         features: [
           {
             type: "Feature",
+            id: "current view",
             properties: {},
             geometry: {
               type: "Polygon",
@@ -379,7 +381,7 @@ export default function TimeSeries({
         .replace(/[^a-z0-9]+/g, "-")
         .replace(/^-|-$/g, "") || "aoi";
     downloadCsv(
-      `${collection}_${slug}_${dateList[startIdx]}_${dateList[endIdx]}_mean.csv`,
+      `${collection}_${slug}_${dateList[startIdx]}_${dateList[endIdx]}_per-farm.csv`,
       csv,
     );
   };
@@ -497,9 +499,9 @@ export default function TimeSeries({
               <div className="ts-stats">
                 <span
                   className="ts-statslabel"
-                  title="Zonal mean over the area for every date in the window, then averaged across dates. Upload a GeoJSON boundary (Add data) to average over your own polygons."
+                  title="Averages the index over each farm's footprint for every date in the window (one row per farm per date), then exports the farm × date table as CSV. Upload your farm polygons under Add data; the current map view works as a single area."
                 >
-                  Window average — area
+                  Per-farm average — farms
                 </span>
                 <div className="ts-statsrow">
                   <select
@@ -520,28 +522,50 @@ export default function TimeSeries({
                     type="button"
                     onClick={computeStats}
                     disabled={statsBusy}
-                    title="Average the index over the area for every date in the window"
+                    title="Average the index over each farm's footprint for every date in the window"
                   >
-                    {statsBusy ? `${statsDone}/${statsTotal}…` : "Average"}
+                    {statsBusy ? `${statsDone}/${statsTotal}…` : "Compute"}
                   </button>
                 </div>
-                {statsResult && (
-                  <div className="ts-statsresult">
-                    <span>
-                      mean <b>{statsResult.stats.average.toFixed(2)}</b>{" "}
-                      {statsResult.unit} · {statsResult.stats.rows.length} dates
-                      {statsResult.stats.skipped.length > 0 &&
-                        ` · ${statsResult.stats.skipped.length} without coverage`}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={exportCsv}
-                      title="Download the per-date means and the overall average as CSV"
-                    >
-                      Export CSV
-                    </button>
-                  </div>
-                )}
+                {statsResult &&
+                  (() => {
+                    const { farms } = statsResult.stats;
+                    const covered = farms.filter((f) => f.rows.length > 0);
+                    const uncovered = farms.length - covered.length;
+                    const avgs = covered.map((f) => f.average);
+                    const lo = avgs.length ? Math.min(...avgs) : NaN;
+                    const hi = avgs.length ? Math.max(...avgs) : NaN;
+                    return (
+                      <div className="ts-statsresult">
+                        <span>
+                          {farms.length === 1 ? (
+                            <>
+                              mean <b>{avgs.length ? avgs[0].toFixed(2) : "—"}</b>{" "}
+                              {statsResult.unit} · {covered[0]?.rows.length ?? 0}/
+                              {statsResult.stats.dates.length} dates
+                            </>
+                          ) : (
+                            <>
+                              <b>{farms.length}</b> farms ·{" "}
+                              {statsResult.stats.dates.length} dates · mean{" "}
+                              <b>
+                                {lo.toFixed(2)}–{hi.toFixed(2)}
+                              </b>{" "}
+                              {statsResult.unit}
+                              {uncovered > 0 && ` · ${uncovered} without coverage`}
+                            </>
+                          )}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={exportCsv}
+                          title="Download the per-farm, per-date means (and each farm's average) as CSV"
+                        >
+                          Export CSV
+                        </button>
+                      </div>
+                    );
+                  })()}
               </div>
             )}
           </div>
