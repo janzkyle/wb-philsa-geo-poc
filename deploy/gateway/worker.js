@@ -97,51 +97,66 @@ export default {
     const cache = caches.default;
     const cacheKey = new Request(originUrl.toString(), { method: "GET" });
 
-    if (cacheable) {
-      const hit = await cache.match(cacheKey);
-      if (hit) return withCors(hit);
+    try {
+      if (cacheable) {
+        const hit = await cache.match(cacheKey);
+        if (hit) return withCors(hit);
+      }
+
+      // Optional rate limiting (Cloudflare rate-limit binding; see wrangler.toml).
+      // Only cache misses reach here — the requests that actually cost the origin.
+      // Keyed by client IP so one agency's bulk pull can't starve the rest.
+      if (env.RATE_LIMITER) {
+        const ip = request.headers.get("CF-Connecting-IP") ?? "anon";
+        const { success } = await env.RATE_LIMITER.limit({ key: `${kind}:${ip}` });
+        if (!success) return deny(429, "Rate limit exceeded — slow down or request an API key.");
+      }
+
+      // --- Phase 3 hook: per-key auth for restricted collections -------------
+      // if (routeIsRestricted(url) && !(await validKey(request, env))) {
+      //   return deny(401, "Restricted collection — a valid API key is required.");
+      // }
+      // (open collections stay anonymous; keys only gate the private/licensed tier)
+
+      const fwdHeaders = new Headers(request.headers);
+      // Drop the inbound Host (…workers.dev) so the subrequest's Host is derived
+      // from originUrl — Render routes by Host, and forwarding the gateway's Host
+      // would 404 at the origin.
+      fwdHeaders.delete("host");
+      // Tell the origin its public host is THIS worker, so stac-fastapi's
+      // ProxyHeaderMiddleware builds self/next links pointing at the gateway (not
+      // the onrender origin) — otherwise paginated STAC link-following would walk
+      // clients straight off the gateway.
+      fwdHeaders.set("X-Forwarded-Host", url.host);
+      fwdHeaders.set("X-Forwarded-Proto", "https");
+
+      const init = { method, headers: fwdHeaders };
+      if (!isReadMethod(method)) {
+        // POST /search forwards the client's body stream; the fetch spec requires
+        // duplex for stream bodies (harmless where the runtime doesn't enforce it).
+        init.body = request.body;
+        init.duplex = "half";
+      }
+      const originResp = await fetch(originUrl.toString(), init);
+
+      if (cacheable && originResp.ok) {
+        const ttl = CACHE_TTL[kind] ?? 60;
+        const toCache = new Response(originResp.body, originResp);
+        toCache.headers.set("Cache-Control", `public, max-age=${ttl}`);
+        ctx.waitUntil(cache.put(cacheKey, toCache.clone()));
+        return withCors(toCache);
+      }
+
+      return withCors(originResp);
+    } catch (err) {
+      // The free-tier Render origin sleeps and takes ~30–60 s to wake; a cold
+      // start can exceed the subrequest timeout, and DNS/network blips throw too.
+      // Return a CORS'd 502 so browser consumers see the real cause, not an opaque
+      // CORS error from an unhandled exception (which would omit CORS headers).
+      console.error(JSON.stringify({
+        msg: "gateway origin error", kind, method, path: url.pathname, error: String(err),
+      }));
+      return deny(502, "Upstream service is unavailable or waking up — please retry in ~30–60 s.");
     }
-
-    // Optional rate limiting (Cloudflare rate-limit binding; see wrangler.toml).
-    // Only cache misses reach here — the requests that actually cost the origin.
-    // Keyed by client IP so one agency's bulk pull can't starve the rest.
-    if (env.RATE_LIMITER) {
-      const ip = request.headers.get("CF-Connecting-IP") ?? "anon";
-      const { success } = await env.RATE_LIMITER.limit({ key: `${kind}:${ip}` });
-      if (!success) return deny(429, "Rate limit exceeded — slow down or request an API key.");
-    }
-
-    // --- Phase 3 hook: per-key auth for restricted collections ---------------
-    // if (routeIsRestricted(url) && !(await validKey(request, env))) {
-    //   return deny(401, "Restricted collection — a valid API key is required.");
-    // }
-    // (open collections stay anonymous; keys only gate the private/licensed tier)
-
-    // Tell the origin its public host is THIS worker, so stac-fastapi's
-    // ProxyHeaderMiddleware builds self/next links pointing at the gateway
-    // (not the onrender origin) — otherwise paginated STAC link-following would
-    // walk clients straight off the gateway.
-    const fwdHeaders = new Headers(request.headers);
-    fwdHeaders.set("X-Forwarded-Host", url.host);
-    fwdHeaders.set("X-Forwarded-Proto", "https");
-
-    const init = { method, headers: fwdHeaders };
-    if (!isReadMethod(method)) {
-      // POST /search forwards the client's body stream; the fetch spec requires
-      // duplex for stream bodies (harmless where the runtime doesn't enforce it).
-      init.body = request.body;
-      init.duplex = "half";
-    }
-    const originResp = await fetch(originUrl.toString(), init);
-
-    if (cacheable && originResp.ok) {
-      const ttl = CACHE_TTL[kind] ?? 60;
-      const toCache = new Response(originResp.clone().body, originResp);
-      toCache.headers.set("Cache-Control", `public, max-age=${ttl}`);
-      ctx.waitUntil(cache.put(cacheKey, toCache.clone()));
-      return withCors(toCache);
-    }
-
-    return withCors(originResp);
   },
 };

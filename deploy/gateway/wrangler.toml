@@ -14,13 +14,20 @@
 # Origins are the current POC services (see ../../render.yaml). Change them if
 # Render appended a suffix to a taken service name.
 
-compatibility_date = "2026-07-01"
+compatibility_date = "2026-07-15"
 main = "worker.js"
 workers_dev = true            # serve on *.workers.dev (no custom domain)
 
 # The top-level name is only used if you deploy without -e; the real deploys use
 # the per-environment names below.
 name = "philsa-open-data-gateway"
+
+# Logs + traces (Workers Logs — included on the free plan, with a daily cap a POC
+# won't hit). Inherited by both [env.*] below. This is how you'll see origin 502s,
+# cache behaviour, and rate-limit denials; the worker logs origin failures as JSON.
+[observability]
+enabled = true
+head_sampling_rate = 1
 
 # --- STAC API gateway ---------------------------------------------------------
 [env.stac]
