@@ -73,11 +73,12 @@
 <script>
 /* ═══════════════════════════════════════════════════════════════════════════
    1. CONFIG — the only thing you edit to point at PhilSA.
-   If PhilSA gives you gateway URLs (…workers.dev), swap only the hosts here.
+   These are the always-on gateway URLs. If PhilSA later moves to custom domains
+   (e.g. stac.philsa.gov.ph), swap only the hosts here.
    ═══════════════════════════════════════════════════════════════════════════ */
 const PHILSA = {
-  stac:  "https://philsa-stac-api.onrender.com",
-  tiler: "https://philsa-titiler.onrender.com",
+  stac:  "https://philsa-stac-gateway.philsa.workers.dev",
+  tiler: "https://philsa-tiles-gateway.philsa.workers.dev",
   r2:    "https://pub-17ab60a2ca7142a48ae8e2685cd853f7.r2.dev",
 };
 

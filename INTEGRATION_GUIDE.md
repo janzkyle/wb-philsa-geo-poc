@@ -30,22 +30,25 @@ per-date **mosaics** — you rarely call it directly; the tiler reads it for you
 ### Base URLs
 
 ```
-STAC API   https://philsa-stac-api.onrender.com
-TiTiler    https://philsa-titiler.onrender.com
+STAC API   https://philsa-stac-gateway.philsa.workers.dev
+TiTiler    https://philsa-tiles-gateway.philsa.workers.dev
 Public R2  https://pub-17ab60a2ca7142a48ae8e2685cd853f7.r2.dev
 ```
 
-> **If PhilSA gives you different base URLs** (e.g. an `…workers.dev` gateway in
-> front of the above), **swap only the host** — every path, parameter, and recipe
-> below is identical. Treat these three constants as your only configuration.
+> **The STAC and tile URLs are an always-on edge gateway** (Cloudflare, in front
+> of the services) — stable and cached. If PhilSA later publishes custom domains
+> (e.g. `stac.philsa.gov.ph`), **swap only the host** — every path, parameter, and
+> recipe below is identical. Treat these three constants as your only configuration.
 
 Two things to know up front:
 
 - **Read-only & open.** These endpoints only ever *read*. No key is required for
   the open layers. (A future *restricted* tier — licensed imagery — will need a
   key; the open layers below never will.)
-- **Free-tier cold starts.** The services sleep after ~15 min idle and take
-  ~30–60 s to wake on the first request. Expected for a POC; retry once.
+- **Always-on edge, but cold origins behind it.** The gateway itself never sleeps
+  and caches repeat requests, but the free-tier services behind it sleep after
+  ~15 min idle — so the *first uncached* request can take ~30–60 s while the origin
+  wakes. Expected for a POC; retry once.
 
 ---
 
@@ -78,7 +81,7 @@ are kept in step with the `renders` metadata the catalog publishes.
 ## 3. Two-minute quickstart (curl)
 
 ```bash
-STAC=https://philsa-stac-api.onrender.com
+STAC=https://philsa-stac-gateway.philsa.workers.dev
 
 # 1. What layers exist?
 curl -s "$STAC/collections" | jq '.collections[].id'
@@ -126,8 +129,8 @@ That's the whole discovery surface: `GET /collections`,
 Set these once and reuse them in every snippet:
 
 ```js
-const STAC  = "https://philsa-stac-api.onrender.com";
-const TILER = "https://philsa-titiler.onrender.com";
+const STAC  = "https://philsa-stac-gateway.philsa.workers.dev";
+const TILER = "https://philsa-tiles-gateway.philsa.workers.dev";
 const R2    = "https://pub-17ab60a2ca7142a48ae8e2685cd853f7.r2.dev";
 ```
 
@@ -184,11 +187,11 @@ Two ways in:
   NDVI via the per-date mosaic:
 
   ```
-  https://philsa-titiler.onrender.com/mosaicjson/tiles/WebMercatorQuad/{z}/{x}/{y}.png?tilesize=512&url=https://pub-17ab60a2ca7142a48ae8e2685cd853f7.r2.dev/02-silver/sentinel2-ndvi/mosaics/sentinel2-ndvi_2026-07-07.mosaicjson&rescale=-0.2,0.9&colormap_name=rdylgn
+  https://philsa-tiles-gateway.philsa.workers.dev/mosaicjson/tiles/WebMercatorQuad/{z}/{x}/{y}.png?tilesize=512&url=https://pub-17ab60a2ca7142a48ae8e2685cd853f7.r2.dev/02-silver/sentinel2-ndvi/mosaics/sentinel2-ndvi_2026-07-07.mosaicjson&rescale=-0.2,0.9&colormap_name=rdylgn
   ```
 
 - **As a STAC catalog** — install the **STAC API Browser** plugin, add
-  `https://philsa-stac-api.onrender.com` as a connection, search a collection, and
+  `https://philsa-stac-gateway.philsa.workers.dev` as a connection, search a collection, and
   load an item's `data` (COG) asset directly. COGs are public, so QGIS streams
   only the pixels in view.
 
@@ -202,7 +205,7 @@ insured farm polygon — straight into your own database.
 from pystac_client import Client
 import rasterio, rasterio.mask, numpy as np
 
-STAC = "https://philsa-stac-api.onrender.com"
+STAC = "https://philsa-stac-gateway.philsa.workers.dev"
 cat = Client.open(STAC)
 
 # your farm polygon, GeoJSON geometry in EPSG:4326

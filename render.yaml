@@ -26,7 +26,13 @@ services:
     dockerfilePath: ./deploy/stac-api/Dockerfile   # pins deps to the known-good 6.2.1 set
     dockerContext: ./stac-fastapi-pgstac
     dockerCommand: uvicorn stac_fastapi.pgstac.app:app --host 0.0.0.0 --port $PORT
-    autoDeploy: false
+    autoDeploy: true
+    # Only redeploy when the STAC API's own code/build files change — not on every
+    # webmap/docs commit (auto-deploy fires per-service on commits to the branch).
+    buildFilter:
+      paths:
+        - stac-fastapi-pgstac/**
+        - deploy/stac-api/**
     healthCheckPath: /_mgmt/ping
     envVars:
       - key: ENVIRONMENT
@@ -97,7 +103,10 @@ services:
     region: singapore
     dockerfilePath: ./deploy/titiler/Dockerfile
     dockerContext: ./deploy/titiler
-    autoDeploy: false
+    autoDeploy: true
+    buildFilter:
+      paths:
+        - deploy/titiler/**
     envVars:
       # R2 (S3-compatible) creds — same values as the repo-root .env.
       - key: AWS_ACCESS_KEY_ID
@@ -132,12 +141,16 @@ services:
     name: philsa-browser
     buildCommand: cd stac-browser && npm ci && npm run build
     staticPublishPath: stac-browser/dist
-    autoDeploy: false
+    autoDeploy: true
+    buildFilter:
+      paths:
+        - stac-browser/**
     pullRequestPreviewsEnabled: false
     envVars:
       # The Browser is locked to this one catalog (allowExternalAccess:false).
+      # Points at the always-on STAC gateway, not the onrender origin directly.
       - key: SB_catalogUrl
-        value: https://philsa-stac-api.onrender.com
+        value: https://philsa-stac-gateway.philsa.workers.dev
     routes:
       - type: rewrite
         source: /*
@@ -149,13 +162,19 @@ services:
     name: philsa-webmap
     buildCommand: cd webmap && npm ci && npm run build
     staticPublishPath: webmap/dist
-    autoDeploy: false
+    autoDeploy: true
+    buildFilter:
+      paths:
+        - webmap/**
     pullRequestPreviewsEnabled: false
     envVars:
+      # STAC + tiles go through the always-on Cloudflare gateway (deploy/gateway/):
+      # edge cache + read-only enforcement in front of the free-tier origins.
       - key: VITE_STAC_API
-        value: https://philsa-stac-api.onrender.com
+        value: https://philsa-stac-gateway.philsa.workers.dev
       - key: VITE_TITILER
-        value: https://philsa-titiler.onrender.com
+        value: https://philsa-tiles-gateway.philsa.workers.dev
+      # The Browser UI is a static site, not fronted by the gateway — its own URL.
       - key: VITE_STAC_BROWSER
         value: https://philsa-browser.onrender.com
       - key: VITE_R2_PUBLIC_BASE

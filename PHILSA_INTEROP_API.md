@@ -128,11 +128,12 @@ open-data CORS is a deliberate contract, not an accident.
 
 ### 2. Stable public URLs — the credibility gap
 **This POC uses no custom domains.** The published base URLs are the gateway's
-two `*.workers.dev` endpoints (`philsa-stac-gateway.*.workers.dev`,
-`philsa-tiles-gateway.*.workers.dev`) — stable, always-on (unlike the origins),
-and fronting the `*.onrender.com` services. Publish *those* as the canonical base
-URLs in the developer docs; the webmap and any sample site read them from
-build-time env (already the pattern in `webmap/src/config.ts`).
+two `*.workers.dev` endpoints, now deployed:
+`https://philsa-stac-gateway.philsa.workers.dev` and
+`https://philsa-tiles-gateway.philsa.workers.dev` — stable, always-on (unlike the
+origins), and fronting the `*.onrender.com` services. These are the canonical base
+URLs in the developer docs; the webmap and partner template read them from
+build-time env (`render.yaml` `VITE_STAC_API`/`VITE_TITILER`, already repointed).
 
 - **Custom domains (`stac.philsa.gov.ph`, …) are a later, non-POC step** — the
   worker code and consumer URLs move, nothing else. Out of scope here.
@@ -230,7 +231,7 @@ just doesn't *say so*. To make it read as "the sample an agency could build":
 |---|---|---|
 | **0 — today** | Internal POC: STAC + TiTiler + R2 on Render, webmap consumes them; CORS already open | ✅ done |
 | **1 — declare the contract** | Explicit CORS in `render.yaml`; integration docs with base URLs + MapLibre/Leaflet/QGIS/pystac recipes; webmap surfaces "Data via PhilSA API" | no infra change; docs + config only |
-| **2 — front + cache (POC)** | Cloudflare Worker gateway on `*.workers.dev` (`deploy/gateway/`): read-only enforcement, CORS, edge **tile caching**, optional rate limits. **No custom domains.** | ✅ built — deploy `wrangler deploy -e stac`/`-e tiles`, then repoint frontends |
+| **2 — front + cache (POC)** | Cloudflare Worker gateway on `*.workers.dev` (`deploy/gateway/`): read-only enforcement, CORS, edge **tile caching**, optional rate limits. **No custom domains.** | ✅ deployed on `philsa.workers.dev`; frontends + docs repointed |
 | **3 — govern it** | Gateway keys for server/restricted access, usage metrics; presigned-URL path for the private R2 bucket | identity for key issuance; restricted collection tagging |
 | **4 — graduate (if needed)** | Custom domains (`*.philsa.gov.ph`); full API-management (APISIX/Kong), SLAs, quotas per agency | only if adoption warrants the ops cost |
 
