@@ -1,0 +1,249 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Partner Agency × PhilSA — starter template</title>
+
+<!-- MapLibre GL JS from CDN. Swap for a local/npm copy if your agency bundles. -->
+<link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet" />
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; font: 14px/1.4 system-ui, sans-serif; }
+  #app { display: flex; height: 100%; }
+  #panel {
+    width: 320px; padding: 18px; overflow-y: auto; background: #fff;
+    box-shadow: 0 0 12px rgba(0,0,0,.12); z-index: 1;
+  }
+  #map { flex: 1; }
+  h1 { font-size: 15px; margin: 0 0 2px; color: #0038a8; }
+  .sub { color: #6b7686; font-size: 12px; margin: 0 0 16px; }
+  h2 { font-size: 11px; text-transform: uppercase; letter-spacing: .07em;
+       color: #6b7686; margin: 18px 0 8px; border-bottom: 1px solid #eef1f6; padding-bottom: 4px; }
+  label { display: block; font-size: 12px; color: #444; margin: 10px 0 4px; }
+  select, input[type=range] { width: 100%; }
+  .hint { font-size: 12px; color: #8a93a2; margin: 8px 0 0; }
+  .status { font-size: 12px; margin-top: 10px; min-height: 16px; color: #6b7686; }
+  .status.err { color: #b3261e; }
+  .tag { display: inline-block; font-size: 10px; font-weight: 600; text-transform: uppercase;
+         letter-spacing: .06em; color: #0038a8; background: #eef3ff; border-radius: 4px; padding: 3px 7px; }
+  a { color: #0038a8; }
+  code { background: #f3f5f9; border-radius: 3px; padding: 1px 4px; font-size: 12px; }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="panel">
+    <h1>Partner Agency portal</h1>
+    <p class="sub">Starter template — your data over PhilSA satellite layers.</p>
+
+    <h2>PhilSA layer</h2>
+    <label for="layer">Satellite layer</label>
+    <select id="layer"></select>
+
+    <label for="date" id="dateLabel">Date</label>
+    <select id="date"></select>
+
+    <label for="opacity">Opacity</label>
+    <input id="opacity" type="range" min="0" max="1" step="0.05" value="0.85" />
+
+    <div class="status" id="status"></div>
+
+    <h2>Your data</h2>
+    <p class="hint">
+      This starter shows PhilSA's layers only. To make it your agency's map, add
+      your own GeoJSON (farms, assets, claims…) — set <code>MY_DATA</code> in the
+      source and it's drawn on top of the satellite layers.
+    </p>
+
+    <h2>How this works</h2>
+    <p class="hint">
+      PhilSA hosts the Earth-observation layers; this page just points at their
+      open <strong>STAC</strong> + <strong>tile</strong> endpoints (see the
+      <code>PHILSA</code> config at the top of the source). No PhilSA library or
+      key. Full recipes: <em>INTEGRATION_GUIDE.md</em>.
+    </p>
+    <p class="hint" id="attrib"></p>
+  </div>
+  <div id="map"></div>
+</div>
+
+<script>
+/* ═══════════════════════════════════════════════════════════════════════════
+   1. CONFIG — the only thing you edit to point at PhilSA.
+   If PhilSA gives you gateway URLs (…workers.dev), swap only the hosts here.
+   ═══════════════════════════════════════════════════════════════════════════ */
+const PHILSA = {
+  stac:  "https://philsa-stac-api.onrender.com",
+  tiler: "https://philsa-titiler.onrender.com",
+  r2:    "https://pub-17ab60a2ca7142a48ae8e2685cd853f7.r2.dev",
+};
+
+// The PhilSA layers + the render params that make each look right. Copied from
+// the canonical cheat-sheet in INTEGRATION_GUIDE.md §2 (colormaps: §6) — if a
+// layer looks different from the PhilSA webmap, re-sync from there.
+// Categorical layers use a colormap object.
+const LAYERS = {
+  "sentinel2-ndvi":      { label: "Vegetation health (NDVI)",     temporal: true,  params: "rescale=-0.2,0.9&colormap_name=rdylgn" },
+  "sentinel1-ratio":     { label: "Radar vegetation (VH/VV)",     temporal: true,  params: "rescale=-14,-2&colormap_name=ylgn" },
+  "sentinel2-truecolor": { label: "Natural colour (Sentinel-2)",  temporal: true,  params: "" },
+  "sentinel1-sar":       { label: "Radar backscatter (VV)",       temporal: true,  params: "rescale=20,52" },
+  "sentinel1-flood":     { label: "Flood extent (POC proxy ⚠️)",  temporal: true,
+      params: "colormap=" + encodeURIComponent(JSON.stringify({ "1":[33,102,204,255], "2":[120,170,230,255] })) },
+  "esri-10m-lulc":       { label: "Land cover (10 m, 2025)",       temporal: false,
+      params: "colormap=" + encodeURIComponent(JSON.stringify({
+        "1":[26,91,171,255],"2":[53,130,33,255],"4":[135,209,158,255],"5":[255,219,92,255],
+        "7":[237,2,42,255],"8":[237,233,228,255],"9":[242,250,255,255],"10":[200,200,200,255],"11":[198,173,141,255] })) },
+};
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   2. YOUR DATA (optional) — your agency's own GeoJSON, drawn on top of the
+   PhilSA layers. Left null so this starter shows PhilSA's layers only. To
+   overlay your data, set MY_DATA to a GeoJSON FeatureCollection, e.g.:
+     const MY_DATA = { type: "FeatureCollection", features: [ …your parcels… ] };
+   ═══════════════════════════════════════════════════════════════════════════ */
+const MY_DATA = null;
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   3. Map + wiring (you shouldn't need to touch below here).
+   ═══════════════════════════════════════════════════════════════════════════ */
+const map = new maplibregl.Map({
+  container: "map",
+  center: [120.70, 15.69], zoom: 12,
+  style: {
+    version: 8,
+    sources: { osm: { type: "raster", tileSize: 256,
+      tiles: ["https://a.tile.openstreetmap.org/{z}/{x}/{y}.png"],
+      attribution: "© OpenStreetMap contributors" } },
+    layers: [{ id: "osm", type: "raster", source: "osm" }],
+  },
+});
+map.addControl(new maplibregl.NavigationControl(), "top-right");
+
+const el = (id) => document.getElementById(id);
+const setStatus = (msg, err = false) => {
+  const s = el("status"); s.textContent = msg || ""; s.className = "status" + (err ? " err" : "");
+};
+
+let philsaLayerIds = [];   // MapLibre layer/source ids we manage, for cleanup
+let renderSeq = 0;         // discard slow responses that a newer selection superseded
+
+// Return XYZ tile-URL templates for a layer+date: per-date mosaic if it exists,
+// else that day's item COGs (or, for non-temporal layers, all item COGs).
+async function philsaTiles(collection, date) {
+  const { params, temporal } = LAYERS[collection];
+  const p = params ? "&" + params : "";
+
+  if (temporal) {
+    const mosaic = `${PHILSA.r2}/02-silver/${collection}/mosaics/${collection}_${date}.mosaicjson`;
+    const head = await fetch(mosaic, { method: "HEAD" }).catch(() => null);
+    if (head && head.ok) {
+      return [`${PHILSA.tiler}/mosaicjson/tiles/WebMercatorQuad/{z}/{x}/{y}.png` +
+              `?tilesize=512&url=${encodeURIComponent(mosaic)}${p}`];
+    }
+  }
+  // fallback / non-temporal: one tile source per granule COG
+  const body = { collections: [collection], limit: 100 };
+  if (temporal && date) body.datetime = `${date}T00:00:00Z/${date}T23:59:59Z`;
+  const r = await fetch(`${PHILSA.stac}/search`, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+  });
+  const { features = [] } = await r.json();
+  return features.filter((f) => f.assets?.data?.href).map((f) =>
+    `${PHILSA.tiler}/cog/tiles/WebMercatorQuad/{z}/{x}/{y}.png` +
+    `?tilesize=512&url=${encodeURIComponent(f.assets.data.href)}${p}`);
+}
+
+function clearPhilSA() {
+  for (const id of philsaLayerIds) {
+    if (map.getLayer(id)) map.removeLayer(id);
+    if (map.getSource(id)) map.removeSource(id);
+  }
+  philsaLayerIds = [];
+}
+
+async function renderPhilSA() {
+  const collection = el("layer").value;
+  const date = el("date").value;
+  const seq = ++renderSeq;
+  setStatus("Loading tiles… (first request can take ~30–60 s if the service was idle)");
+  try {
+    const tiles = await philsaTiles(collection, date);
+    // A slow request (cold origin) can resolve AFTER the user has already picked
+    // another layer/date — without this check it would repaint the stale layer.
+    if (seq !== renderSeq) return;
+    clearPhilSA();
+    if (!tiles.length) { setStatus("No imagery for that layer/date.", true); return; }
+    const opacity = +el("opacity").value;
+    // If you added your own data, keep it on top by inserting rasters below it.
+    const beforeId = map.getLayer("mydata-fill") ? "mydata-fill" : undefined;
+    tiles.forEach((url, i) => {
+      const id = `philsa-${i}`;
+      map.addSource(id, { type: "raster", tileSize: 512, tiles: [url] });
+      map.addLayer({ id, type: "raster", source: id, paint: { "raster-opacity": opacity } }, beforeId);
+      philsaLayerIds.push(id);
+    });
+    setStatus(`Showing ${LAYERS[collection].label}${date ? " · " + date : ""}.`);
+  } catch (e) {
+    if (seq === renderSeq) setStatus("Could not load PhilSA tiles: " + e.message, true);
+  }
+}
+
+// Populate the date dropdown for a temporal collection (distinct dates, latest first).
+async function loadDates(collection) {
+  const dateSel = el("date"), dateLabel = el("dateLabel");
+  const { temporal } = LAYERS[collection];
+  dateSel.style.display = dateLabel.style.display = temporal ? "" : "none";
+  dateSel.innerHTML = "";
+  if (!temporal) return;
+  try {
+    const r = await fetch(`${PHILSA.stac}/collections/${collection}/items?limit=100`);
+    const { features = [] } = await r.json();
+    const dates = [...new Set(features.map((f) => (f.properties?.datetime || "").slice(0, 10)).filter(Boolean))].sort().reverse();
+    for (const d of dates) dateSel.add(new Option(d, d));
+    if (!dates.length) dateSel.add(new Option("(no dates found)", ""));
+  } catch (e) {
+    setStatus("Could not list dates: " + e.message, true);
+  }
+}
+
+async function onLayerChange() {
+  await loadDates(el("layer").value);
+  await renderPhilSA();
+}
+
+map.on("error", (e) => { if (e && e.error) setStatus("Map error: " + e.error.message, true); });
+
+map.on("load", async () => {
+  // ── ADD YOUR OWN DATA (optional) ──────────────────────────────────────────
+  // If MY_DATA is set (top of file), draw it on top of the PhilSA layers. Fill +
+  // outline only — no text, so no glyphs/font setup is needed. This is also where
+  // you'd wire a parcel click to your backend (see INTEGRATION_GUIDE.md §5d).
+  if (MY_DATA) {
+    map.addSource("mydata", { type: "geojson", data: MY_DATA });
+    map.addLayer({ id: "mydata-fill", type: "fill", source: "mydata",
+      paint: { "fill-color": "#ff7f0e", "fill-opacity": 0.25 } });
+    map.addLayer({ id: "mydata-line", type: "line", source: "mydata",
+      paint: { "line-color": "#e8590c", "line-width": 2 } });
+  }
+  // ──────────────────────────────────────────────────────────────────────────
+
+  // Build the layer dropdown, then load the first layer.
+  const layerSel = el("layer");
+  for (const [id, def] of Object.entries(LAYERS)) layerSel.add(new Option(def.label, id));
+  el("attrib").innerHTML = "EO layers © PhilSA (Sentinel / Copernicus; land cover © Impact Observatory). Basemap © OpenStreetMap.";
+
+  layerSel.onchange = onLayerChange;
+  el("date").onchange = renderPhilSA;
+  el("opacity").oninput = () => {
+    const o = +el("opacity").value;
+    for (const id of philsaLayerIds) if (map.getLayer(id)) map.setPaintProperty(id, "raster-opacity", o);
+  };
+
+  await onLayerChange();
+});
+</script>
+</body>
+</html>

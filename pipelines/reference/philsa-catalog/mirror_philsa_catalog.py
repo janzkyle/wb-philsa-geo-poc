@@ -33,6 +33,9 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "lib"))
+from stac_write import ensure_writable  # noqa: E402 — refuse read-only STAC targets
+
 SRC = os.environ.get("SRC", "https://api.catalog.data.philsa.gov.ph").rstrip("/")
 DST = os.environ.get("DST", os.environ.get("STAC_API", "http://localhost:8082")).rstrip("/")
 TIMEOUT = 60
@@ -194,6 +197,8 @@ def main():
     print(f">> dest  : {DST}")
     if args.dry_run:
         print(">> DRY RUN — no writes")
+    else:
+        ensure_writable(DST)
 
     cols = get(f"{SRC}/collections").get("collections", [])
     cols = [c for c in cols if c.get("id")]  # skip the phantom empty-id entry

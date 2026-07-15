@@ -36,6 +36,9 @@ import sys
 import urllib.parse
 import urllib.request
 
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "lib"))
+from stac_write import ensure_writable  # noqa: E402 — refuse read-only STAC targets
+
 STAC_API = os.environ.get("STAC_API", os.environ.get("DST", "http://localhost:8082")).rstrip("/")
 TIMEOUT = 30
 RENDER_EXT = "https://stac-extensions.github.io/render/v1.0.0/schema.json"
@@ -186,6 +189,8 @@ def main():
     print(f">> source : {args.source_collection}  (bbox {args.bbox})")
     print(f">> dates  : {dates[-1]} … {dates[0]} ({args.count} scenes)"
           + ("  [DRY RUN]" if args.dry_run else ""))
+    if not args.dry_run:
+        ensure_writable(STAC_API)
 
     scenes = source_scenes(args.source_collection, args.bbox, args.count)
     if len(scenes) < args.count:

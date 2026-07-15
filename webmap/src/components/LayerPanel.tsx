@@ -3,7 +3,7 @@
 // tools use, so the two drivers can never drift apart.
 
 import { useEffect, useRef, useState } from "react";
-import { RASTER_DEFS, stacBrowserCollectionUrl } from "../config";
+import { DATA_SOURCE, RASTER_DEFS, stacBrowserCollectionUrl } from "../config";
 import { collectionDates } from "../lib/stac";
 import { buildRasterLayer, LayerBuildError } from "../lib/layers";
 import {
@@ -288,6 +288,21 @@ export default function LayerPanel() {
           {l.label}
         </label>
       ))}
+
+      <div className="apisource">
+        <span className="apisource-label">Data via PhilSA Open Data API</span>
+        <p className="hint">
+          This map is a reference consumer — it draws every layer from public
+          standards-based endpoints any agency can call. Point your own map or
+          pipeline at the same URLs.
+        </p>
+        <a href={DATA_SOURCE.stacApi} target="_blank" rel="noreferrer">
+          STAC catalog (discovery) ↗
+        </a>
+        <a href={DATA_SOURCE.browser} target="_blank" rel="noreferrer">
+          Browse the catalog ↗
+        </a>
+      </div>
     </div>
   );
 }

@@ -53,8 +53,13 @@ services:
         value: "1"
       - key: USE_API_HYDRATE
         value: "false"
-      - key: ENABLE_TRANSACTIONS_EXTENSIONS   # ingest scripts write over HTTP
-        value: "true"
+      # READ-ONLY in prod. The public API must never accept writes (a public
+      # Transactions endpoint = anyone can POST/PUT/DELETE catalog items). Prod
+      # ingest/migration now runs against Neon through a PRIVATE, ephemeral
+      # transactions-enabled API — see deploy/scripts/prod-ingest.sh and
+      # deploy/DEPLOYMENT.md. Local dev keeps transactions ON via compose.
+      - key: ENABLE_TRANSACTIONS_EXTENSIONS
+        value: "false"
       - key: VSI_CACHE
         value: "TRUE"
       - key: GDAL_HTTP_MERGE_CONSECUTIVE_RANGES
@@ -66,6 +71,23 @@ services:
         value: PhilSA Geospatial STAC API
       - key: STAC_FASTAPI_LANDING_ID
         value: philsa-geo-stac
+      # --- Open-data CORS contract (external agencies consume this in-browser) ---
+      # STAC-FastAPI already DEFAULTS cors_origins to "*", but declaring it here
+      # makes the open-data contract deliberate — a dependency bump can't silently
+      # narrow it. Origins "*" is safe only with credentials OFF (default). Methods
+      # must include POST (/search is a POST) and OPTIONS (browser preflight).
+      # Naming gotcha: the Settings fields are cors_origins/cors_methods with NO
+      # env prefix, so the vars are CORS_ORIGINS/CORS_METHODS — unlike TiTiler's
+      # TITILER_API_* below. (STAC_FASTAPI_TITLE works only because that field is
+      # literally named stac_fastapi_title; a STAC_FASTAPI_CORS_* var is silently
+      # ignored. See stac-fastapi-pgstac/tests/test_config.py.)
+      # NOTE: this opens READ access to any origin; writes are already impossible
+      # here (ENABLE_TRANSACTIONS_EXTENSIONS=false above). The edge gateway
+      # (deploy/gateway/) re-blocks writes too, as defense-in-depth.
+      - key: CORS_ORIGINS
+        value: "*"
+      - key: CORS_METHODS
+        value: "GET,POST,OPTIONS"
 
   # ----------------------------------------------------------------- TiTiler --
   - type: web

@@ -49,6 +49,7 @@ def _repo_root():
 ROOT = _repo_root()
 sys.path.insert(0, os.path.join(ROOT, "pipelines", "lib"))
 from r2 import R2, load_env_file  # noqa: E402 — shared stdlib SigV4 R2 client
+from stac_write import ensure_writable  # noqa: E402 — refuse read-only STAC targets
 
 STAC_API = os.environ.get("STAC_API", os.environ.get("DST", "http://localhost:8082")).rstrip("/")
 TIMEOUT = 60
@@ -364,6 +365,8 @@ def main():
     print(">> read   : vsis3 (authenticated)")
     if args.dry_run:
         print(">> DRY RUN — no writes")
+    else:
+        ensure_writable(STAC_API)
 
     # Bronze granules in R2, keyed by basename (minus .SAFE/.zip) — lets each
     # silver item carry a rel=derived_from link to its source granule.

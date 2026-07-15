@@ -1,0 +1,47 @@
+# Cloudflare Worker config for the PhilSA Open Data API gateway (worker.js).
+#
+# This POC uses NO custom domains — each deploy lands on a *.workers.dev URL. One
+# worker fronts one origin, so it's deployed TWICE via wrangler environments:
+#
+#   cd deploy/gateway
+#   wrangler deploy -e stac      # -> https://philsa-stac-gateway.<account>.workers.dev
+#   wrangler deploy -e tiles     # -> https://philsa-tiles-gateway.<account>.workers.dev
+#   wrangler dev -e stac         # local test against the real STAC origin
+#
+# Then repoint the frontends (render.yaml VITE_STAC_API / VITE_TITILER /
+# SB_catalogUrl) at those two workers.dev URLs and redeploy the static sites.
+#
+# Origins are the current POC services (see ../../render.yaml). Change them if
+# Render appended a suffix to a taken service name.
+
+compatibility_date = "2026-07-01"
+main = "worker.js"
+workers_dev = true            # serve on *.workers.dev (no custom domain)
+
+# The top-level name is only used if you deploy without -e; the real deploys use
+# the per-environment names below.
+name = "philsa-open-data-gateway"
+
+# --- STAC API gateway ---------------------------------------------------------
+[env.stac]
+name = "philsa-stac-gateway"
+workers_dev = true
+vars = { ORIGIN = "https://philsa-stac-api.onrender.com", KIND = "stac" }
+
+# --- TiTiler gateway ----------------------------------------------------------
+[env.tiles]
+name = "philsa-tiles-gateway"
+workers_dev = true
+vars = { ORIGIN = "https://philsa-titiler.onrender.com", KIND = "tiler" }
+
+# --- Optional: native rate limiting -------------------------------------------
+# Uncomment inside EACH env above (or here to share) to enforce per-IP limits
+# (worker.js calls env.RATE_LIMITER.limit()). 100 requests / 60s per client IP is
+# a sane open-data default; raise it once you issue API keys for heavier
+# server consumers. Example (add under an [env.*] block):
+#
+#   [[env.stac.unsafe.bindings]]
+#   name = "RATE_LIMITER"
+#   type = "ratelimit"
+#   namespace_id = "1001"
+#   simple = { limit = 100, period = 60 }

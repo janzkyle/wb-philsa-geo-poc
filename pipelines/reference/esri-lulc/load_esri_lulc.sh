@@ -35,6 +35,16 @@ BLOB_BASE="https://lulctimeseries.blob.core.windows.net/lulctimeseriesv003"
 echo ">> year=${YEAR}  api=${STAC_API}  collection=${COLLECTION}"
 echo ">> tiles: ${TILES}"
 
+# Refuse a read-only STAC target early (the public prod API has no Transaction
+# extension — every write below would 405). Shell twin of
+# pipelines/lib/stac_write.py; an unreachable /conformance is not fatal here,
+# the first real request will report it.
+conf=$(curl -fsS "${STAC_API}/conformance" 2>/dev/null || true)
+if [ -n "$conf" ] && ! printf '%s' "$conf" | grep -qE '/extensions/transaction|/conf/simpletx'; then
+  echo "error: ${STAC_API} is a READ-ONLY STAC API — ingest a deployed environment via: deploy/scripts/prod-ingest.sh <env> --with-esri" >&2
+  exit 1
+fi
+
 # ---- upsert the Collection (POST, then PUT on 409 — idempotent) --------------
 COL_JSON=$(cat <<JSON
 {

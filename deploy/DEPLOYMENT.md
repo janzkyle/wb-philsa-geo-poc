@@ -138,29 +138,43 @@ redeploy the two static sites:
 Verify the API is live: open `https://<your-api>.onrender.com/collections`
 (first hit may be slow while it wakes).
 
-### Step 5 — Load the catalog into prod
-Point `STAC_API` in `prod.env` at the real API URL (default assumes the predicted
-one), then choose how much to load:
+### Step 5 — Ingest/migrate the catalog into prod
+
+> **The public prod API is read-only.** It runs with
+> `ENABLE_TRANSACTIONS_EXTENSIONS=false` (`render.yaml`) so no one on the internet
+> can write to the catalog. You therefore **do not** point the loaders at the
+> public URL — `load-reference-data.sh` refuses to run against any non-local env
+> unless `prod-ingest.sh` has injected its private write endpoint, and the
+> individual loaders check the target's `/conformance` and refuse read-only APIs.
+> Ingest goes through `prod-ingest.sh`.
+
+`prod-ingest.sh` stands up a **private, ephemeral** transactions-enabled STAC API
+on `localhost`, binds it to the prod database (Neon, from `prod.env`), runs the
+normal loaders against it, and tears it down. The writes land in Neon; the public
+API then serves those same rows read-only. Nothing writable is ever
+internet-reachable. Requires Docker.
 
 ```bash
-deploy/scripts/load-reference-data.sh prod                 # PhilSA mirror only: diwata-2 / planetscope / skysat
-deploy/scripts/load-reference-data.sh prod --with-silver   # + Sentinel silver: sentinel1-sar, sentinel1-flood, sentinel2-ndvi, sentinel2-truecolor
-deploy/scripts/load-reference-data.sh prod --with-esri             # + ESRI 10 m LULC (default year 2025; override with YEAR=)
-deploy/scripts/load-reference-data.sh prod --all           # mirror + esri + silver (the full catalog)
-deploy/scripts/db-check.sh prod                            # verify collection/item counts
+deploy/scripts/prod-ingest.sh prod                 # PhilSA mirror only: diwata-2 / planetscope / skysat
+deploy/scripts/prod-ingest.sh prod --with-silver   # + Sentinel silver: sentinel1-sar, sentinel1-flood, sentinel2-ndvi, sentinel2-truecolor
+deploy/scripts/prod-ingest.sh prod --with-esri     # + ESRI 10 m LULC (default year 2025; override with YEAR=)
+deploy/scripts/prod-ingest.sh prod --all           # mirror + esri + silver (the full catalog)
+deploy/scripts/prod-ingest.sh prod --silver-only   # JUST re-catalog the silver COGs (skips the mirror)
+deploy/scripts/db-check.sh prod                    # verify collection/item counts
 ```
 
-Loaders and what they need:
+Loaders and what they need (same as before — only the write endpoint moved):
 - **mirror** (always) — pure stdlib, no extra deps.
 - **`--with-silver`** — catalogs the R2 silver COGs by reference
   (`pipelines/03-gold/catalog_silver.py`); needs **GDAL** and the **R2 creds in
   the repo-root `.env`**. This is what creates `sentinel1-sar` et al.
 - **`--with-esri`** (or `YEAR=`) — ESRI 10 m LULC; needs **GDAL ≥ 3.8**.
 
-Timing: over the free-tier Render API each item is a network round-trip, so a
-full `--all` load is roughly **5–10 minutes** (mostly waiting on the API, not
-CPU). To (re)load only the silver derivatives without re-running the mirror:
-`STAC_API=<api-url> python3 pipelines/03-gold/catalog_silver.py`.
+Timing: writes now go to a localhost API talking directly to Neon (no Render
+round-trip, no cold starts), so a full `--all` load is faster than before —
+roughly **3–6 minutes**, mostly the mirror. To re-catalog only the silver
+derivatives after a pipeline re-run, use `--silver-only` (seconds, no mirror).
+`INGEST_PORT=` overrides the default `8092` if that port is busy.
 
 Open the Browser (`https://philsa-browser.onrender.com`) — the collections appear.
 
@@ -175,7 +189,8 @@ deploy/scripts/db-check.sh local
 deploy/scripts/load-reference-data.sh local
 ```
 
-Promoting the same data to prod is the same command with `prod`.
+Promoting the same data to prod uses `prod-ingest.sh prod` (not
+`load-reference-data.sh prod` — the public prod API is read-only; see Step 5).
 
 ---
 
@@ -186,8 +201,18 @@ Promoting the same data to prod is the same command with `prod`.
 - **Neon free** auto-suspends a database after ~5 min idle (it wakes on the next
   connection, ~1 s cold start) and caps you at 0.5 GB storage. A by-reference
   catalog is tiny, so storage is a non-issue; the auto-suspend is transparent.
-- **CORS** — the STAC API allows all origins by default, which is what lets the
-  static frontends call it cross-origin. Tighten later when auth lands.
+- **CORS** — the STAC API and TiTiler allow all origins (declared explicitly in
+  `render.yaml`), which is what lets the static frontends *and external agencies*
+  call them cross-origin. This is the open-data contract; keep it for open
+  collections and gate only the restricted tier (see `deploy/gateway/`).
+- **Read-only prod / edge gateway** — prod writes are disabled at the origin
+  (`ENABLE_TRANSACTIONS_EXTENSIONS=false`); ingest goes through `prod-ingest.sh`
+  (Step 5). The optional `deploy/gateway/` Cloudflare Worker fronts the origins
+  on `*.workers.dev` (no custom domains in this POC) with caching, rate limits,
+  and a re-block on writes.
+- **R2 CORS** — the public bucket needs a read CORS policy for browsers to fetch
+  mosaics directly (else the webmap/template fall back to per-item COGs). Apply
+  once with `deploy/r2/apply-cors.sh` — see `deploy/r2/README.md`.
 - **pgSTAC version** is pinned to `0.9.8` in `scripts/lib.sh` to match the local
   Docker image (`ghcr.io/stac-utils/pgstac:v0.9.8`). Bump both together.
 - **Secrets** never enter git: `*.env` and `deploy/.venv/` are gitignored, and
@@ -199,5 +224,7 @@ Promoting the same data to prod is the same command with `prod`.
 | --- | --- |
 | `db-migrate.sh <env>` | Install/upgrade the pgSTAC schema on any env (this is the prod bootstrap too). |
 | `db-check.sh <env>` | Connection + pgSTAC version + collection/item counts. |
-| `load-reference-data.sh <env>` | Run the by-reference loaders against that env's STAC API. |
+| `load-reference-data.sh <env>` | Run the by-reference loaders against a writable STAC API. Direct for `local`; for any other env it refuses to run except *via* `prod-ingest.sh` (which injects the private write endpoint). |
+| `prod-ingest.sh <env>` | Ingest/migrate into a deployed catalog via a private, ephemeral transactions API bound to that env's DB — the prod-safe way to load, since the public API is read-only. Needs Docker. |
+| `../r2/apply-cors.sh [--show]` | Apply (or show) the read CORS policy on the public R2 bucket so browsers can fetch mosaics/COGs cross-origin. Needs the AWS CLI + `.env` R2 creds. |
 | `lib.sh` | Shared helpers (env loading, pypgstac bootstrap). Sourced, not run. |

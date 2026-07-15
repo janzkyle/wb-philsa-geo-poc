@@ -44,6 +44,37 @@
   font-size: 12px;
 }
 
+/* "Reference consumer" footer — signals the map draws from a public API. */
+.apisource {
+  margin-top: 22px;
+  padding-top: 12px;
+  border-top: 1px solid #eef1f6;
+}
+
+.apisource-label {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #0038a8; /* Philippine national blue */
+  background: #eef3ff;
+  border-radius: 4px;
+  padding: 3px 7px;
+}
+
+.apisource a {
+  display: block;
+  font-size: 12px;
+  color: #0038a8;
+  margin-top: 6px;
+  text-decoration: none;
+}
+
+.apisource a:hover {
+  text-decoration: underline;
+}
+
 .err {
   font-size: 12px;
   color: #b3261e;
