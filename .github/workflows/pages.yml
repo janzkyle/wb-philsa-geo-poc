@@ -1,0 +1,55 @@
+# Publishes ONLY partner-template/ to GitHub Pages, so the rest of the repo
+# (pipelines, internal docs, deploy scripts) stays unpublished. The template is
+# static — no build step — so this just uploads the folder as the Pages artifact.
+#
+# Result URL (project page):  https://janzkyle.github.io/wb-philsa-geo-poc/
+#   starter map:  https://janzkyle.github.io/wb-philsa-geo-poc/
+#   dev guide:    https://janzkyle.github.io/wb-philsa-geo-poc/guide.html
+#
+# ONE-TIME SETUP after this lands on the default branch:
+#   repo Settings ▸ Pages ▸ Build and deployment ▸ Source → "GitHub Actions".
+# (On a private repo, Pages needs GitHub Pro/Team/Enterprise.)
+
+name: Deploy partner template to Pages
+
+on:
+  push:
+    branches: [main]
+    # Only redeploy when the template (or this workflow) actually changes.
+    paths:
+      - "partner-template/**"
+      - ".github/workflows/pages.yml"
+  workflow_dispatch: {} # allow manual runs from the Actions tab
+
+# Least privilege: read the repo, write Pages, mint the OIDC token deploy needs.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deploy at a time; don't cancel an in-progress publish (Pages best practice).
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload partner-template as the Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: partner-template
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
