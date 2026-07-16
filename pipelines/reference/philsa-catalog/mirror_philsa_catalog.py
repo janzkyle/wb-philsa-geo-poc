@@ -40,6 +40,35 @@ SRC = os.environ.get("SRC", "https://api.catalog.data.philsa.gov.ph").rstrip("/"
 DST = os.environ.get("DST", os.environ.get("STAC_API", "http://localhost:8082")).rstrip("/")
 TIMEOUT = 60
 
+# PhilSA catalog review (Jul 2026): stamp every mirrored collection with a
+# "Metadata Last Updated" date, and attach contact details to PhilSA-provided
+# missions (Diwata) via the STAC Contact extension. The stac-browser
+# fields.config renders the ISO date as "15 Jul 2026" and the contacts under a
+# "Contact Details" header.
+METADATA_UPDATED = "2026-07-15"
+CONTACTS_EXT = "https://stac-extensions.github.io/contacts/v0.1.1/schema.json"
+PHILSA_CONTACTS = [{
+    "organization": "Space Mission Control and Operations Division (SMCOD)",
+    "emails": [{"value": "smcod@philsa.gov"}],
+}]
+
+
+def is_philsa_provided(cid):
+    """PhilSA-owned missions get contact details (Diwata; MULA is loaded by a
+    separate script). PlanetScope / SkySat are commercial and are left as-is."""
+    return bool(cid) and cid.lower().startswith("diwata")
+
+
+def augment(col):
+    """Add the PhilSA-review metadata fields to a mirrored collection in place."""
+    col["philsa:metadata_updated"] = METADATA_UPDATED
+    if is_philsa_provided(col.get("id")):
+        col["contacts"] = PHILSA_CONTACTS
+        exts = col.setdefault("stac_extensions", [])
+        if CONTACTS_EXT not in exts:
+            exts.append(CONTACTS_EXT)
+    return col
+
 
 def get(url, retries=3):
     """GET JSON with retries — a transient network error must not kill a long
@@ -132,7 +161,7 @@ def rewrite_links(obj):
 
 def mirror_collection(col, dry):
     cid = col.get("id")
-    payload = normalize(rewrite_links(col))
+    payload = augment(normalize(rewrite_links(col)))
     payload.setdefault("type", "Collection")
     res = upsert(
         "collection",

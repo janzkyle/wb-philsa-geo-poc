@@ -43,6 +43,18 @@ STAC_API = os.environ.get("STAC_API", os.environ.get("DST", "http://localhost:80
 TIMEOUT = 30
 RENDER_EXT = "https://stac-extensions.github.io/render/v1.0.0/schema.json"
 ITEM_ASSETS_EXT = "https://stac-extensions.github.io/item-assets/v1.0.0/schema.json"
+CONTACTS_EXT = "https://stac-extensions.github.io/contacts/v0.1.1/schema.json"
+
+# Shown on every collection ("Metadata Last Updated"); ISO date rendered as
+# "15 Jul 2026" by the stac-browser fields.config (PhilSA catalog review, Jul 2026).
+METADATA_UPDATED = "2026-07-15"
+
+# Contact details for PhilSA-provided products (MULA, Diwata), via the STAC
+# Contact extension — rendered under a "Contact Details" header.
+PHILSA_CONTACTS = [{
+    "organization": "Space Mission Control and Operations Division (SMCOD)",
+    "emails": [{"value": "smcod@philsa.gov"}],
+}]
 
 # MULA true-colour render: bands 4/2/1 of the borrowed 9-band TOA COG (matches the
 # dashboard's Diwata-2 style so the placeholder renders identically).
@@ -132,7 +144,7 @@ def build_collection(bbox, dates):
         "stac_version": "1.0.0",
         # item-assets is required alongside render: the render objects reference
         # assets, and the render schema wants them declared on the collection
-        "stac_extensions": [RENDER_EXT, ITEM_ASSETS_EXT],
+        "stac_extensions": [RENDER_EXT, ITEM_ASSETS_EXT, CONTACTS_EXT],
         "id": "mula",
         "title": "MULA — Multispectral Unit for Land Assessment",
         "description": (
@@ -144,10 +156,12 @@ def build_collection(bbox, dates):
         ),
         "license": "proprietary",
         "keywords": ["mula", "philsa", "philippines", "true-colour", "simulated", "demo"],
+        "philsa:metadata_updated": METADATA_UPDATED,
         "providers": [
             {"name": "Philippine Space Agency (PhilSA)", "roles": ["producer", "licensor"]},
             {"name": "Surrey Satellite Technology Ltd (SSTL)", "roles": ["processor"]},
         ],
+        "contacts": PHILSA_CONTACTS,
         "extent": {
             "spatial": {"bbox": [bbox]},
             "temporal": {"interval": [[f"{min(dates).isoformat()}T00:00:00Z",

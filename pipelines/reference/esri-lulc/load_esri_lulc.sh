@@ -64,6 +64,8 @@ COL_JSON=$(cat <<JSON
     "spatial": {"bbox": [[116.9, 4.6, 126.6, 21.1]]},
     "temporal": {"interval": [["2017-01-01T00:00:00Z", null]]}
   },
+  "philsa:metadata_updated": "2026-07-15",
+  "philsa:update_frequency": "annual",
   "item_assets": {
     "data": {
       "type": "image/tiff; application=geotiff; profile=cloud-optimized",

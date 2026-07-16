@@ -63,6 +63,10 @@ PROCESSING_EXT = "https://stac-extensions.github.io/processing/v1.1.0/schema.jso
 COG_TYPE = "image/tiff; application=geotiff; profile=cloud-optimized"
 BRONZE_PREFIX = "01-bronze/copphil-sentinel"
 
+# "Metadata Last Updated" stamp shown on every collection (PhilSA catalog review,
+# Jul 2026). ISO date — the stac-browser fields.config renders it as "15 Jul 2026".
+METADATA_UPDATED = "2026-07-15"
+
 # Providers for the Sentinel-derived silver collections (ISO 19115 "responsible
 # party" equivalent; also carries the Copernicus attribution obligation).
 SENTINEL_PROVIDERS = [
@@ -294,6 +298,7 @@ def build_collection(prod, bbox, dts, items):
         "keywords": keywords,
         "summaries": summaries,
         "philsa:source_product": source_product,
+        "philsa:metadata_updated": METADATA_UPDATED,
         "item_assets": {"data": {"type": COG_TYPE, "title": prod["asset_title"],
                                  "roles": ["data"]}},
         "links": [],
