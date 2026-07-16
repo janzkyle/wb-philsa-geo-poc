@@ -2,7 +2,7 @@
 // feature: the mean of a single-band index over EACH uploaded area (its polygon
 // or MultiPolygon), once per acquisition date, plus that area's across-dates
 // average. The index is measured over each area's own geometry, never blended
-// across areas — so the result is an area × date matrix, one row per area per
+// across areas - so the result is an area × date matrix, one row per area per
 // date, exported as CSV.
 //
 // Computed by TiTiler's /cog/statistics endpoint straight from the silver COGs
@@ -15,7 +15,7 @@
 // TiTiler request), and an area split across granules (or a MultiPolygon whose
 // fields fall in different granules) is pooled back together, weighted by
 // valid-pixel count. TiTiler already returns one statistics block per feature,
-// so keeping areas separate is free — we simply don't merge them.
+// so keeping areas separate is free - we simply don't merge them.
 
 import type { Feature, FeatureCollection, MultiPolygon, Polygon } from "geojson";
 import { TITILER } from "../config";
@@ -35,7 +35,7 @@ export interface AreaDateStat {
   // Valid-data coverage of the area on this date (0–100): how much of the
   // footprint the swath actually observed (cloud/swath gaps drop it). A
   // decimation-robust ratio from TiTiler's valid_percent, not a raw pixel
-  // count — see the module note on why counts aren't comparable across areas.
+  // count - see the module note on why counts aren't comparable across areas.
   coveragePct: number;
   granules: number; // COGs that contributed valid pixels
 }
@@ -60,7 +60,7 @@ const MAX_AREAS = 500;
 // Dates processed in parallel. Each date is 1–3 statistics POSTs, so this keeps
 // at most ~9 requests in flight against the single-process tiler.
 const DATE_CONCURRENCY = 3;
-// Cap the raster read per request — TiTiler decimates through the COG overviews,
+// Cap the raster read per request - TiTiler decimates through the COG overviews,
 // keeping large-area requests fast at negligible cost to the mean.
 const MAX_READ_SIZE = 1024;
 
@@ -144,7 +144,7 @@ interface Accum {
 }
 
 // Per-area pooled statistics for one date, aligned with `areas` (null where an
-// area had no valid pixels that day — swath missed it or it was fully masked).
+// area had no valid pixels that day - swath missed it or it was fully masked).
 async function statsForDate(
   collection: string,
   date: string,
@@ -228,7 +228,7 @@ export async function computeTemporalStats(opts: {
   );
   if (polys.length > MAX_AREAS) {
     throw new StatsError(
-      `${polys.length} areas is too many for on-the-fly statistics (max ${MAX_AREAS}) — split the file or narrow the selection.`,
+      `${polys.length} areas is too many for on-the-fly statistics (max ${MAX_AREAS}) - split the file or narrow the selection.`,
     );
   }
   const areas: Area[] = [];
@@ -238,7 +238,7 @@ export async function computeTemporalStats(opts: {
   });
   if (!areas.length) {
     throw new StatsError(
-      "The chosen area contains no polygons — per-AOI statistics need polygon footprints.",
+      "The chosen area contains no polygons - per-AOI statistics need polygon footprints.",
     );
   }
   const aoiBbox = areas.reduce<Bbox>(
@@ -251,7 +251,7 @@ export async function computeTemporalStats(opts: {
     [Infinity, Infinity, -Infinity, -Infinity],
   );
 
-  // perDate[dateIdx][areaIdx] — filled by a small pool of date workers.
+  // perDate[dateIdx][areaIdx] - filled by a small pool of date workers.
   const perDate: (AreaDateStat | null)[][] = new Array(opts.dates.length);
   let next = 0;
   let done = 0;
@@ -292,7 +292,7 @@ export async function computeTemporalStats(opts: {
 
   if (out.every((a) => a.rows.length === 0)) {
     throw new StatsError(
-      "No valid pixels over any area on any date in the window — the imagery may not cover this area.",
+      "No valid pixels over any area on any date in the window - the imagery may not cover this area.",
     );
   }
   return { areas: out, dates: opts.dates };
@@ -300,7 +300,7 @@ export async function computeTemporalStats(opts: {
 
 // Render the result as CSV: `#` metadata lines, then one row per area per
 // window date (blank stats where that date had no coverage, so every area × date
-// cell is explicit), then a per-AOI summary block. Four decimals — well past
+// cell is explicit), then a per-AOI summary block. Four decimals - well past
 // the sensor noise floor of these indices.
 export function statsToCsv(meta: {
   collectionLabel: string;
@@ -314,7 +314,7 @@ export function statsToCsv(meta: {
   const uncovered = areas.filter((a) => a.rows.length === 0).map((a) => a.id);
 
   const lines = [
-    `# ${meta.collectionLabel} — per-AOI zonal mean per acquisition date`,
+    `# ${meta.collectionLabel} - per-AOI zonal mean per acquisition date`,
     `# source: ${meta.aoiName}`,
     `# unit: ${meta.unit}`,
     `# areas: ${areas.length} · dates: ${dates.length}`,
@@ -374,7 +374,7 @@ export function statsToCsv(meta: {
   return lines.join("\n") + "\n";
 }
 
-// Client-side download — the CSV never touches a server.
+// Client-side download - the CSV never touches a server.
 export function downloadCsv(filename: string, csv: string): void {
   const blob = new Blob([csv], { type: "text/csv" });
   const url = URL.createObjectURL(blob);

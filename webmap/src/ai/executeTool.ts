@@ -1,6 +1,6 @@
 // Client-side execution of the chat assistant's tools. The server
 // (server/chat.mjs) declares the tool schemas but defines no `execute`, so the
-// AI SDK forwards every call here — where the STAC API, the admin index and
+// AI SDK forwards every call here - where the STAC API, the admin index and
 // the layer store all live. Tool names/inputs must stay in sync with the
 // schemas in server/chat.mjs.
 
@@ -12,7 +12,7 @@ import { formatPass } from "../lib/passes";
 import { useMapStore } from "../state/mapStore";
 import type { Bbox } from "../state/mapStore";
 
-// Tool results go back into the model's context — keep them small and, on
+// Tool results go back into the model's context - keep them small and, on
 // failure, actionable (say what to try instead, not just "error").
 
 interface SearchInput {
@@ -31,7 +31,7 @@ async function searchCatalog(input: SearchInput) {
   });
 
   if (items.length === 0 && input.datetime) {
-    // Nothing in the requested window — tell the model what IS available so
+    // Nothing in the requested window - tell the model what IS available so
     // "no data" becomes "nearest dates are …" instead of a dead end.
     const fallback = await searchStac({
       collections: input.collections,
@@ -48,7 +48,7 @@ async function searchCatalog(input: SearchInput) {
     }
     return {
       matched: 0,
-      note: "No items in the requested datetime range (for this area, if a bbox was given). Available acquisition dates per collection follow — offer the nearest ones to the user.",
+      note: "No items in the requested datetime range (for this area, if a bbox was given). Available acquisition dates per collection follow - offer the nearest ones to the user.",
       available_dates: datesByCollection,
     };
   }
@@ -143,7 +143,7 @@ export async function executeTool(
         const { collection } = input as { collection: string };
         const passesByDate = await collectionPassesByDate(collection);
         const dates = Object.keys(passesByDate).sort();
-        // Only flag dates that combine >1 pass — single-pass dates need no caveat
+        // Only flag dates that combine >1 pass - single-pass dates need no caveat
         // and would just bloat the model's context.
         const multiPass: Record<string, string[]> = {};
         for (const d of dates) {
@@ -156,7 +156,7 @@ export async function executeTool(
           dates,
           multi_pass_dates: hasMulti ? multiPass : undefined,
           note: hasMulti
-            ? "Dates in multi_pass_dates stitch several satellite passes (different orbit/look geometry) into one mosaic; SAR backscatter across passes is not directly comparable — mention this if the user measures or compares values."
+            ? "Dates in multi_pass_dates stitch several satellite passes (different orbit/look geometry) into one mosaic; SAR backscatter across passes is not directly comparable - mention this if the user measures or compares values."
             : undefined,
         };
       }
@@ -180,7 +180,7 @@ export async function executeTool(
         });
         return ok
           ? { updated: id }
-          : { error: `No layer with id "${id}" — check the map state for current ids.` };
+          : { error: `No layer with id "${id}" - check the map state for current ids.` };
       }
       case "set_view": {
         const { bbox } = input as { bbox: Bbox };

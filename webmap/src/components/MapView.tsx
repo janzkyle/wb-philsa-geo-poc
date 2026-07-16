@@ -1,8 +1,10 @@
-// Renders whatever the layer store says — MapView owns no layer state of its
+// Renders whatever the layer store says - MapView owns no layer state of its
 // own. Two empty anchor layers fix the stacking order no matter when either
 // driver adds a layer: basemaps + data rasters pin below `mask-slot`, the clip
 // mask sits between `mask-slot` and `vector-slot` (so it covers every raster,
 // even ones added later), and vector outlines + uploaded GeoJSON draw on top.
+// Within each band, an effect re-sorts by the store's stackRank so the most
+// recently added or re-shown layer is topmost.
 
 import { useEffect, useRef, useState } from "react";
 import { Map, Source, Layer } from "react-map-gl/maplibre";
@@ -42,7 +44,7 @@ const BASEMAPS: Record<
   },
   satellite: {
     label: "Satellite",
-    // Esri World Imagery — free with attribution, no API key. Note z/y/x order.
+    // Esri World Imagery - free with attribution, no API key. Note z/y/x order.
     tiles: [
       "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
     ],
@@ -51,7 +53,7 @@ const BASEMAPS: Record<
   },
 };
 
-// Minimal base: a neutral background plus two empty anchor layers — `mask-slot`
+// Minimal base: a neutral background plus two empty anchor layers - `mask-slot`
 // caps the raster stack, `vector-slot` separates the clip mask from vector
 // outlines. The basemaps themselves are declarative children (see Basemaps) so
 // they can toggle live.
@@ -125,7 +127,7 @@ function RasterLayer({ layer }: { layer: MapLayer }) {
 
 // Time-series playback stack: one raster source per armed frame, all mounted
 // with only the current frame's opacity up. Stepping a date is then a paint-
-// property flip — instant, no tile refetch — and the load-gated playback in
+// property flip - instant, no tile refetch - and the load-gated playback in
 // TimeSeries.tsx polls these sources by id before advancing. Which frames are
 // armed (tiles non-empty) is decided by TimeSeries: cursor + a small lookahead,
 // grow-only, so frames behind the cursor stay warm and loops never refetch.
@@ -151,7 +153,7 @@ function FrameStack({ layer }: { layer: MapLayer }) {
               layout={{ visibility: layer.visible ? "visible" : "none" }}
               paint={{
                 "raster-opacity": fi === current ? layer.opacity : 0,
-                // Instant frame flips and no tile fade-in — during playback a
+                // Instant frame flips and no tile fade-in - during playback a
                 // 300 ms cross-fade reads as "still loading".
                 "raster-opacity-transition": { duration: 0 },
                 "raster-fade-duration": 0,
@@ -162,6 +164,26 @@ function FrameStack({ layer }: { layer: MapLayer }) {
       )}
     </>
   );
+}
+
+// The MapLibre style-layer ids one store layer renders as, bottom-to-top.
+// Must stay in sync with the ids the components below hand to <Layer>.
+function styleLayerIds(l: MapLayer): string[] {
+  switch (l.kind) {
+    case "raster-mosaic":
+    case "raster-cogs":
+      return l.frames?.length
+        ? l.frames.flatMap((f) =>
+            f.tiles.map((_, i) => `${tsFrameSourceId(f.key, i)}:r`),
+          )
+        : l.tiles.map((_, i) => `${l.id}:${i}:r`);
+    case "geojson-mask":
+      return [`${l.id}-fill`];
+    case "vector-pmtiles":
+      return [`${l.id}-line`];
+    case "geojson-local":
+      return [`${l.id}-fill`, `${l.id}-line`, `${l.id}-circle`];
+  }
 }
 
 function VectorLayer({ layer }: { layer: MapLayer }) {
@@ -188,7 +210,7 @@ function VectorLayer({ layer }: { layer: MapLayer }) {
 
 // The raster clip mask (world polygon minus the uploaded boundaries, built by
 // buildClipMaskLayer): pinned between mask-slot and vector-slot so it covers
-// every data raster — including ones added after it — while admin outlines and
+// every data raster - including ones added after it - while admin outlines and
 // the uploaded boundary itself stay readable above. `opacity` is the dimming
 // strength; 1 hides the outside entirely (a hard clip).
 function MaskLayer({ layer }: { layer: MapLayer }) {
@@ -211,7 +233,7 @@ function MaskLayer({ layer }: { layer: MapLayer }) {
 
 // Locally-uploaded GeoJSON: one source feeding fill / line / circle layers so a
 // mixed collection (polygons, lines, points) all draws. Sits above vector-slot
-// so the user's data reads on top of the rasters. `data` is the parsed object —
+// so the user's data reads on top of the rasters. `data` is the parsed object -
 // MapLibre renders it inline, nothing is fetched.
 function GeojsonLayer({ layer }: { layer: MapLayer }) {
   const color = layer.color ?? "#e6550d";
@@ -278,6 +300,35 @@ export default function MapView() {
       { padding: 60, duration: 1400, maxZoom: 12 },
     );
   }, [view.nonce]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Enforce "most recently added / re-shown layer on top" within each anchor
+  // band: rasters stay pinned below mask-slot, masks below vector-slot, and
+  // vectors + uploaded GeoJSON above it - but inside each band the layers are
+  // re-sorted by stackRank. Runs after the children have rendered, so the
+  // MapLibre layers exist; getLayer() skips any still waiting on the style.
+  useEffect(() => {
+    const map = mapRef.current?.getMap();
+    if (!map || !map.getLayer("mask-slot")) return;
+    const byRank = (a: MapLayer, b: MapLayer) =>
+      (a.stackRank ?? 0) - (b.stackRank ?? 0);
+    // Moving each layer to the band's ceiling in ascending rank order leaves
+    // the highest rank on top.
+    const enforce = (group: MapLayer[], beforeId?: string) => {
+      for (const l of [...group].sort(byRank))
+        for (const id of styleLayerIds(l))
+          if (map.getLayer(id)) map.moveLayer(id, beforeId);
+    };
+    enforce(
+      layers.filter((l) => l.kind === "raster-mosaic" || l.kind === "raster-cogs"),
+      "mask-slot",
+    );
+    enforce(layers.filter((l) => l.kind === "geojson-mask"), "vector-slot");
+    enforce(
+      layers.filter(
+        (l) => l.kind === "vector-pmtiles" || l.kind === "geojson-local",
+      ),
+    );
+  }, [layers]);
 
   const rasters = layers.filter(
     (l) => l.kind === "raster-mosaic" || l.kind === "raster-cogs",

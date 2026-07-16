@@ -8,13 +8,13 @@ import { searchStac, type StacItemLite } from "./stac";
 import { describePasses, summarizePasses, type PassSummary } from "./passes";
 import type { Bbox, MapLayer } from "../state/mapStore";
 
-// Source id for one tile-source of a time-series frame — shared between
+// Source id for one tile-source of a time-series frame - shared between
 // MapView (which mounts the sources) and TimeSeries (which polls their load
 // state before advancing playback).
 export const tsFrameSourceId = (date: string, i: number) =>
   `ts-frame:${date}:${i}`;
 
-// Union of the items' bboxes — the footprint of a day's mosaic.
+// Union of the items' bboxes - the footprint of a day's mosaic.
 function unionBbox(items: StacItemLite[]): Bbox | undefined {
   let out: Bbox | undefined;
   for (const it of items) {
@@ -32,7 +32,7 @@ function unionBbox(items: StacItemLite[]): Bbox | undefined {
 }
 
 // A day's mosaic exists only for collections build_raster_mosaics.sh covers
-// (flood isn't among them yet) — probe with a HEAD and fall back to rendering
+// (flood isn't among them yet) - probe with a HEAD and fall back to rendering
 // each item's COG directly when absent.
 async function mosaicExists(url: string): Promise<boolean> {
   try {
@@ -63,7 +63,7 @@ export async function buildRasterLayer(
   const def = rasterDef(collection);
   if (!def) {
     throw new LayerBuildError(
-      `Unknown collection "${collection}" — the webmap styles: ${RASTER_DEFS.map(
+      `Unknown collection "${collection}" - the webmap styles: ${RASTER_DEFS.map(
         (r) => r.id,
       ).join(", ")}.`,
     );
@@ -90,7 +90,7 @@ export async function buildRasterLayer(
 
   if (!date) {
     throw new LayerBuildError(
-      `"${collection}" is a per-acquisition-date collection — pass a YYYY-MM-DD date (use search_catalog to find available dates).`,
+      `"${collection}" is a per-acquisition-date collection - pass a YYYY-MM-DD date (use search_catalog to find available dates).`,
     );
   }
 
@@ -109,7 +109,7 @@ export async function buildRasterLayer(
     return {
       id: `${collection}:${date}`,
       kind: "raster-mosaic",
-      label: `${def.label} — ${date}`,
+      label: `${def.label} - ${date}`,
       collection,
       date,
       tiles: [mosaicTileUrl(mosaic, def.titilerParams)],
@@ -122,17 +122,17 @@ export async function buildRasterLayer(
     };
   }
 
-  // No per-date mosaic — render that day's item COGs individually.
+  // No per-date mosaic - render that day's item COGs individually.
   const withCog = items.filter((i) => i.cogHref);
   if (!withCog.length) {
     throw new LayerBuildError(
-      `"${collection}" has no items on ${date} — use search_catalog to find dates with data.`,
+      `"${collection}" has no items on ${date} - use search_catalog to find dates with data.`,
     );
   }
   return {
     id: `${collection}:${date}`,
     kind: "raster-cogs",
-    label: `${def.label} — ${date}`,
+    label: `${def.label} - ${date}`,
     collection,
     date,
     tiles: withCog.map((i) => cogTileUrl(i.cogHref!, def.titilerParams)),

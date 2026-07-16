@@ -11,7 +11,7 @@
 // still call :free models), and on failure fall through a ranked list of
 // tool-capable free models fetched live from OpenRouter's catalog. A model
 // "fails" if its stream errors (rate limit, offline, credit) before producing
-// anything substantive — then the next candidate is tried transparently.
+// anything substantive - then the next candidate is tried transparently.
 //
 // Run:  npm run chat        (reads OPENROUTER_API_KEY from the repo-root .env)
 // Env:  GENAI_MODEL   OpenRouter model id tried first (default
@@ -30,7 +30,7 @@ import {
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { z } from "zod";
 
-// --- env: same convention as the pipelines — secrets live in repo-root .env --
+// --- env: same convention as the pipelines - secrets live in repo-root .env --
 function loadRepoRootEnv() {
   let dir = dirname(fileURLToPath(import.meta.url));
   while (dir !== dirname(dir)) {
@@ -114,7 +114,7 @@ async function freeToolModels() {
 }
 
 // The models to try for one request, in order: configured default first, then
-// the ranked free list (deduped). Length-capped — each retry costs a round trip.
+// the ranked free list (deduped). Length-capped - each retry costs a round trip.
 async function candidateModels() {
   const free = await freeToolModels();
   return [DEFAULT_MODEL, ...free.filter((id) => id !== DEFAULT_MODEL)].slice(
@@ -123,7 +123,7 @@ async function candidateModels() {
   );
 }
 
-// Chunk types that prove the model is actually answering — an error before
+// Chunk types that prove the model is actually answering - an error before
 // any of these means "try the next model"; an error after them streams to the
 // user (can't cleanly retry a half-delivered answer).
 const SUBSTANTIVE = new Set([
@@ -136,7 +136,7 @@ const SUBSTANTIVE = new Set([
   "tool-input-available",
 ]);
 
-// Tool schemas only — execution happens in the browser (src/ai/executeTool.ts).
+// Tool schemas only - execution happens in the browser (src/ai/executeTool.ts).
 const tools = {
   list_collections: {
     description:
@@ -145,7 +145,7 @@ const tools = {
   },
   resolve_region: {
     description:
-      "Resolve a Philippine place name (region, province, city/municipality) to its bounding box using the official admin-boundary index. ALWAYS use this for place names — never guess coordinates.",
+      "Resolve a Philippine place name (region, province, city/municipality) to its bounding box using the official admin-boundary index. ALWAYS use this for place names - never guess coordinates.",
     inputSchema: z.object({
       query: z.string().describe("Place name, e.g. 'Central Luzon' or 'Pampanga'"),
       level: z
@@ -159,7 +159,7 @@ const tools = {
   },
   resolve_point: {
     description:
-      "Convert an explicit coordinate the user supplied (WGS84 latitude/longitude in decimal degrees) into a bounding box for search_catalog and set_view. Use this — NOT resolve_region — whenever the user gives raw coordinates instead of a place name. radius_km sets the half-size of the square box around the point (default 5).",
+      "Convert an explicit coordinate the user supplied (WGS84 latitude/longitude in decimal degrees) into a bounding box for search_catalog and set_view. Use this - NOT resolve_region - whenever the user gives raw coordinates instead of a place name. radius_km sets the half-size of the square box around the point (default 5).",
     inputSchema: z.object({
       lat: z.number().min(-90).max(90).describe("Latitude in decimal degrees (Philippines is ~5–20°N)"),
       lon: z.number().min(-180).max(180).describe("Longitude in decimal degrees (Philippines is ~117–127°E)"),
@@ -187,7 +187,7 @@ const tools = {
   },
   search_catalog: {
     description:
-      "Search the STAC catalog for imagery/data items. Filter by collections, a bounding box, and/or a datetime range. Returns matched items grouped by acquisition date; when nothing matches the date range it returns each collection's available dates instead — offer the nearest to the user.",
+      "Search the STAC catalog for imagery/data items. Filter by collections, a bounding box, and/or a datetime range. Returns matched items grouped by acquisition date; when nothing matches the date range it returns each collection's available dates instead - offer the nearest to the user.",
     inputSchema: z.object({
       collections: z
         .array(z.string())
@@ -207,7 +207,7 @@ const tools = {
   },
   get_available_dates: {
     description:
-      "List every acquisition date available in one collection (sorted ascending). Cheaper than search_catalog when you only need dates. Also returns multi_pass_dates: dates whose per-date mosaic combines several satellite passes (different orbit/look geometry) — warn the user those aren't a single coherent observation.",
+      "List every acquisition date available in one collection (sorted ascending). Cheaper than search_catalog when you only need dates. Also returns multi_pass_dates: dates whose per-date mosaic combines several satellite passes (different orbit/look geometry) - warn the user those aren't a single coherent observation.",
     inputSchema: z.object({
       collection: z.string(),
     }),
@@ -247,40 +247,40 @@ const tools = {
   },
   set_view: {
     description:
-      "Fly the map to a bounding box [west, south, east, north] — typically the bbox from resolve_region after adding layers there.",
+      "Fly the map to a bounding box [west, south, east, north] - typically the bbox from resolve_region after adding layers there.",
     inputSchema: z.object({
       bbox: z.array(z.number()).length(4),
     }),
   },
 };
 
-const SYSTEM_PROMPT = `You are the map assistant for the PhilSA POC geospatial platform — a STAC catalog of Earth-observation data over the Philippines, shown on an interactive web map that you control through tools.
+const SYSTEM_PROMPT = `You are the map assistant for the PhilSA POC geospatial platform - a STAC catalog of Earth-observation data over the Philippines, shown on an interactive web map that you control through tools.
 
 The user can also drive the map manually; you both mutate the same layer state, which is provided to you each turn as "Current map state".
 
 Data collections you can display (ids for search_catalog / add_layers):
-- sentinel1-flood — radar-derived open-water/flood mask. POC proxy, NOT a validated flood product; for real decisions point users to Copernicus EMS/GFM.
-- sentinel1-sar — Sentinel-1 VV backscatter (grayscale radar; works through cloud).
-- sentinel1-ratio — radar vegetation index (VH/VV ratio; rises with crop canopy, works through cloud — use for crop/vegetation questions in cloudy weeks when NDVI has no clear view).
-- sentinel2-truecolor — natural-colour Sentinel-2 imagery.
-- sentinel2-ndvi — vegetation greenness index.
-- esri-10m-lulc — annual land-cover classes (date-independent: no date needed).
-Other catalog collections (diwata-2, mula, planetscope, skysat) are metadata-only references — searchable but not displayable as map layers.
+- sentinel1-flood - radar-derived open-water/flood mask. POC proxy, NOT a validated flood product; for real decisions point users to Copernicus EMS/GFM.
+- sentinel1-sar - Sentinel-1 VV backscatter (grayscale radar; works through cloud).
+- sentinel1-ratio - radar vegetation index (VH/VV ratio; rises with crop canopy, works through cloud - use for crop/vegetation questions in cloudy weeks when NDVI has no clear view).
+- sentinel2-truecolor - natural-colour Sentinel-2 imagery.
+- sentinel2-ndvi - vegetation greenness index.
+- esri-10m-lulc - annual land-cover classes (date-independent: no date needed).
+Other catalog collections (diwata-2, mula, planetscope, skysat) are metadata-only references - searchable but not displayable as map layers.
 
 How to fulfil a display request like "show flood data for <place> between <dates>":
-1. resolve_region for the place name (never guess coordinates). If several plausible matches, pick the best and mention the choice. If the user instead gives an explicit coordinate (latitude/longitude), use resolve_point — not resolve_region — to turn it into a bbox.
+1. resolve_region for the place name (never guess coordinates). If several plausible matches, pick the best and mention the choice. If the user instead gives an explicit coordinate (latitude/longitude), use resolve_point - not resolve_region - to turn it into a bbox.
 2. search_catalog with the collection(s), the bbox, and the datetime range.
-3. add_layers for the date(s) found — prefer the most relevant few, not all.
+3. add_layers for the date(s) found - prefer the most relevant few, not all.
 4. set_view to the region's bbox (the bbox from resolve_region or resolve_point).
 Then summarize in one or two sentences what is now on the map, including the acquisition date(s).
 
-If the user simply asks where a place is (no data to display), resolve it and call highlight_location with the bbox, then set_view — that marks the spot without adding any raster. You may also highlight_location alongside a data display so the focus area is obvious.
+If the user simply asks where a place is (no data to display), resolve it and call highlight_location with the bbox, then set_view - that marks the spot without adding any raster. You may also highlight_location alongside a data display so the focus area is obvious.
 
 Rules:
-- Ground every factual claim in tool results or the map state — never invent dates, coverage, or place names.
+- Ground every factual claim in tool results or the map state - never invent dates, coverage, or place names.
 - If the requested date range has no data, say so and offer the nearest available dates (search_catalog returns them).
 - Interpretive claims about ground conditions get a brief caveat: this is a proof-of-concept, not for navigation or emergency response.
-- Be concise. Plain text with simple dashes for lists — no markdown headings or tables.
+- Be concise. Plain text with simple dashes for lists - no markdown headings or tables.
 - Dates are ISO (YYYY-MM-DD); the map covers the Philippines only.`;
 
 const CORS = {
@@ -332,7 +332,7 @@ async function handleChat(req, res) {
       messages: modelMessages,
       tools,
       temperature: 0.2,
-      // the candidate chain IS the retry — don't also retry per model, and
+      // the candidate chain IS the retry - don't also retry per model, and
       // don't let the SDK dump full stack traces (we log one line ourselves)
       maxRetries: 0,
       onError: () => {},
@@ -348,7 +348,7 @@ async function handleChat(req, res) {
     let failText = "";
     while (peeked.length < 20) {
       const { value, done } = await reader.read();
-      if (done) break; // ended without substance — treat as failure
+      if (done) break; // ended without substance - treat as failure
       peeked.push(value);
       if (value.type === "error") {
         failText = value.errorText ?? "unknown model error";
@@ -362,7 +362,7 @@ async function handleChat(req, res) {
 
     if (!ok) {
       lastError = failText || "stream ended without output";
-      console.warn(`[chat] ${model} failed (${lastError}) — trying next`);
+      console.warn(`[chat] ${model} failed (${lastError}) - trying next`);
       reader.cancel().catch(() => {});
       continue;
     }

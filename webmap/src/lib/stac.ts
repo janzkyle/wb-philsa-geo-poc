@@ -1,4 +1,4 @@
-// Thin client over the pgSTAC API — shared by the layer panel and the AI's
+// Thin client over the pgSTAC API - shared by the layer panel and the AI's
 // search_catalog tool. Responses are trimmed to what either driver needs;
 // tool results in particular must stay token-light.
 
@@ -105,7 +105,7 @@ export async function searchStac(p: SearchParams): Promise<StacItemLite[]> {
 
 // All items of one collection, following pgSTAC's `next` links so a growing
 // archive doesn't silently truncate the date lists. Page cap bounds the worst
-// case (20 × 200 = 4,000 items) — raise it if a collection ever outgrows that.
+// case (20 × 200 = 4,000 items) - raise it if a collection ever outgrows that.
 export async function collectionItems(
   collection: string,
 ): Promise<StacItemLite[]> {
@@ -138,7 +138,7 @@ export async function collectionDates(collection: string): Promise<string[]> {
 
 // Satellite passes behind each acquisition date. A date with >1 pass is one
 // whose per-date mosaic combines separate overpasses (different satellite/orbit/
-// look geometry) — callers use this to warn that the mosaic isn't a single
+// look geometry) - callers use this to warn that the mosaic isn't a single
 // coherent observation.
 export async function collectionPassesByDate(
   collection: string,

@@ -44,7 +44,7 @@
   font-size: 12px;
 }
 
-/* "Reference consumer" footer — signals the map draws from a public API. */
+/* "Reference consumer" footer - signals the map draws from a public API. */
 .apisource {
   margin-top: 22px;
   padding-top: 12px;
@@ -168,8 +168,8 @@
   flex-shrink: 0;
 }
 
-/* Wrap layer names up to two lines before clamping — long labels like
-   "Sentinel-1 flood mask — 2026-06-05" stay readable instead of truncating. */
+/* Wrap layer names up to two lines before clamping - long labels like
+   "Sentinel-1 flood mask - 2026-06-05" stay readable instead of truncating. */
 .layerhead label span {
   display: -webkit-box;
   -webkit-box-orient: vertical;

@@ -4,7 +4,7 @@
 export const STAC_API =
   import.meta.env.VITE_STAC_API ?? "http://localhost:8082";
 
-// TiTiler — dynamic raster tiler for the silver COGs (compose.viz.yml, port 8083).
+// TiTiler - dynamic raster tiler for the silver COGs (compose.viz.yml, port 8083).
 export const TITILER =
   import.meta.env.VITE_TITILER ?? "http://localhost:8083";
 
@@ -27,12 +27,12 @@ export const stacBrowserCollectionUrl = (collection: string): string =>
 
 // This webmap is a *reference consumer* of PhilSA's open-data endpoints: it uses
 // only the public STAC API (discovery) + TiTiler (tiles) that any external agency
-// can call themselves — there is no private PhilSA backend behind it. These are
+// can call themselves - there is no private PhilSA backend behind it. These are
 // the canonical base URLs an integrator points their own app at; the footer in
 // LayerPanel surfaces them so a visiting developer sees the map is drawing from
 // an API they can also consume. See PHILSA_INTEROP_API.md.
 export const DATA_SOURCE = {
-  stacApi: STAC_API, // STAC 1.0 landing/catalog root — browse /collections, POST /search
+  stacApi: STAC_API, // STAC 1.0 landing/catalog root - browse /collections, POST /search
   titiler: TITILER, // dynamic COG/MosaicJSON raster tiler
   browser: STAC_BROWSER, // human catalog explorer
 };
@@ -48,7 +48,7 @@ const SILVER_PREFIX = "02-silver";
 // Public R2 URL of the per-date MosaicJSON for a raster collection. Built by
 // `pipelines/02-silver/build_raster_mosaics.sh`; each one stitches a single
 // day's COG granules into a seamless layer TiTiler serves via /mosaicjson.
-// Not every collection has mosaics (flood doesn't yet) — callers must fall
+// Not every collection has mosaics (flood doesn't yet) - callers must fall
 // back to per-item COG tiles when this 404s. `date` is YYYY-MM-DD.
 export function mosaicJsonUrl(collection: string, date: string): string {
   return `${R2_PUBLIC_BASE}/${SILVER_PREFIX}/${collection}/mosaics/${collection}_${date}.mosaicjson`;
@@ -129,7 +129,7 @@ export const ADMIN_LAYERS: AdminLayerDef[] = [
 // the STAC API at runtime; `titilerParams` controls styling and must stay in
 // step with the `renders` metadata in pipelines/03-gold/catalog_silver.py.
 // The same params are also published for external agencies in
-// INTEGRATION_GUIDE.md §2/§6 and copied into partner-template/index.html —
+// INTEGRATION_GUIDE.md §2/§6 and copied into partner-template/index.html -
 // change them together, or partner maps drift from this reference webmap.
 export interface RasterDef {
   id: string; // == STAC collection id
@@ -142,7 +142,7 @@ export interface RasterDef {
   // e.g. annual LULC) render all their COGs at once.
   temporal: boolean;
   // Unit label for zonal means of this collection (time-series window average
-  // + CSV export). Only single-band physical/index layers get one — RGB and
+  // + CSV export). Only single-band physical/index layers get one - RGB and
   // categorical layers omit it, which hides the averaging UI for them.
   statsUnit?: string;
 }
@@ -151,7 +151,7 @@ export const RASTER_DEFS: RasterDef[] = [
   {
     id: "sentinel2-truecolor",
     label: "Natural-Colour Satellite Imagery",
-    // 8-bit RGB TCI COG — TiTiler auto-detects the 3 bands.
+    // 8-bit RGB TCI COG - TiTiler auto-detects the 3 bands.
     titilerParams: "",
     temporal: true,
     description:
@@ -160,7 +160,7 @@ export const RASTER_DEFS: RasterDef[] = [
   {
     id: "sentinel2-ndvi",
     label: "Vegetation Health (NDVI)",
-    // single-band float32 — needs a stretch + colormap or it renders black.
+    // single-band float32 - needs a stretch + colormap or it renders black.
     titilerParams: "rescale=-0.2,0.9&colormap_name=rdylgn",
     temporal: true,
     statsUnit: "NDVI",
@@ -179,7 +179,7 @@ export const RASTER_DEFS: RasterDef[] = [
   {
     id: "sentinel1-sar",
     label: "All-Weather Radar Imagery",
-    // single-band float32 VV backscatter (dB) — grayscale; rescale ≈ mean ±2σ.
+    // single-band float32 VV backscatter (dB) - grayscale; rescale ≈ mean ±2σ.
     // NoData (-9999) is declared in the COG, so TiTiler masks it automatically.
     titilerParams: "rescale=20,52",
     temporal: true,
@@ -196,14 +196,14 @@ export const RASTER_DEFS: RasterDef[] = [
   {
     id: "sentinel1-ratio",
     label: "Radar Vegetation Index (VH/VV)",
-    // single-band float32 cross-ratio in dB — needs a stretch + colormap.
+    // single-band float32 cross-ratio in dB - needs a stretch + colormap.
     // Colourblind-safe sequential ramp: pale = bare/water, dark green = canopy.
     // stretch = p2–p98 of the first built scene (2026-07-07): −13.9…−2.4 dB.
     titilerParams: "rescale=-14,-2&colormap_name=ylgn",
     temporal: true,
     statsUnit: "dB (VH/VV)",
     description:
-      "Radar vegetation index (Sentinel-1 VH/VV ratio, dB). Rises with crop canopy growth and sees through cloud — NDVI's wet-season sibling. Index layer, not a calibrated crop product.",
+      "Radar vegetation index (Sentinel-1 VH/VV ratio, dB). Rises with crop canopy growth and sees through cloud - NDVI's wet-season sibling. Index layer, not a calibrated crop product.",
     legend: {
       kind: "ramp",
       stops: [
@@ -228,7 +228,7 @@ export const RASTER_DEFS: RasterDef[] = [
     )}`,
     temporal: true,
     description:
-      "Open-water / flood mask derived from Sentinel-1 radar. POC proxy — NOT a validated flood product; pair with Copernicus EMS/GFM for anything real.",
+      "Open-water / flood mask derived from Sentinel-1 radar. POC proxy - NOT a validated flood product; pair with Copernicus EMS/GFM for anything real.",
     legend: {
       kind: "classes",
       items: [
@@ -240,7 +240,7 @@ export const RASTER_DEFS: RasterDef[] = [
   {
     id: "esri-10m-lulc",
     label: "ESRI Land Cover (10 m, 2025)",
-    // Categorical uint8 class codes — needs a DISCRETE colormap (class → RGBA),
+    // Categorical uint8 class codes - needs a DISCRETE colormap (class → RGBA),
     // not rescale + colormap_name. Impact Observatory 9-class palette; nodata=0
     // is declared in the COG so TiTiler masks tile overlap automatically.
     titilerParams: `colormap=${encodeURIComponent(

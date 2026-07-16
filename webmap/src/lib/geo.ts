@@ -1,4 +1,4 @@
-// Small geodesy helpers shared by the AI tools. Kept dependency-free — the map
+// Small geodesy helpers shared by the AI tools. Kept dependency-free - the map
 // only needs approximate boxes, not geodesic precision.
 
 import type { FeatureCollection } from "geojson";
@@ -71,7 +71,7 @@ export function buildHighlightLayer(bbox: Bbox, label?: string): MapLayer {
     label: label ? `Highlight: ${label}` : "Highlight",
     tiles: [],
     geojson: fc,
-    color: "#ff5722", // deep orange — reads over both light and satellite basemaps
+    color: "#ff5722", // deep orange - reads over both light and satellite basemaps
     opacity: 1,
     visible: true,
     description: label

@@ -1,6 +1,6 @@
 // Name → bbox lookup over the PH admin index (adm0–adm3, ~1,700 units) that
 // build_admin_search_index.py publishes to public R2. Fetched once, cached.
-// This is the whole implementation of the AI's resolve_region tool — region
+// This is the whole implementation of the AI's resolve_region tool - region
 // knowledge lives in this data, not in the model.
 
 import { ADMIN_INDEX_URL } from "../config";

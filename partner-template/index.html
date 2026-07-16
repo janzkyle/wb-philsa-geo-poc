@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Partner Agency × PhilSA — starter template</title>
+<title>Partner Agency × PhilSA - starter template</title>
 
 <!-- MapLibre GL JS from CDN. Swap for a local/npm copy if your agency bundles. -->
 <link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet" />
@@ -37,7 +37,7 @@
 <div id="app">
   <div id="panel">
     <h1>Partner Agency portal</h1>
-    <p class="sub">Starter template — your data over PhilSA satellite layers.</p>
+    <p class="sub">Starter template - your data over PhilSA satellite layers.</p>
 
     <h2>PhilSA layer</h2>
     <label for="layer">Satellite layer</label>
@@ -54,7 +54,7 @@
     <h2>Your data</h2>
     <p class="hint">
       This starter shows PhilSA's layers only. To make it your agency's map, add
-      your own GeoJSON (farms, assets, claims…) — set <code>MY_DATA</code> in the
+      your own GeoJSON (farms, assets, claims…) - set <code>MY_DATA</code> in the
       source and it's drawn on top of the satellite layers.
     </p>
 
@@ -72,7 +72,7 @@
 
 <script>
 /* ═══════════════════════════════════════════════════════════════════════════
-   1. CONFIG — the only thing you edit to point at PhilSA.
+   1. CONFIG - the only thing you edit to point at PhilSA.
    These are the always-on gateway URLs. If PhilSA later moves to custom domains
    (e.g. stac.philsa.gov.ph), swap only the hosts here.
    ═══════════════════════════════════════════════════════════════════════════ */
@@ -83,7 +83,7 @@ const PHILSA = {
 };
 
 // The PhilSA layers + the render params that make each look right. Copied from
-// the canonical cheat-sheet in INTEGRATION_GUIDE.md §2 (colormaps: §6) — if a
+// the canonical cheat-sheet in INTEGRATION_GUIDE.md §2 (colormaps: §6) - if a
 // layer looks different from the PhilSA webmap, re-sync from there.
 // Categorical layers use a colormap object.
 const LAYERS = {
@@ -100,7 +100,7 @@ const LAYERS = {
 };
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   2. YOUR DATA (optional) — your agency's own GeoJSON, drawn on top of the
+   2. YOUR DATA (optional) - your agency's own GeoJSON, drawn on top of the
    PhilSA layers. Left null so this starter shows PhilSA's layers only. To
    overlay your data, set MY_DATA to a GeoJSON FeatureCollection, e.g.:
      const MY_DATA = { type: "FeatureCollection", features: [ …your parcels… ] };
@@ -173,7 +173,7 @@ async function renderPhilSA() {
   try {
     const tiles = await philsaTiles(collection, date);
     // A slow request (cold origin) can resolve AFTER the user has already picked
-    // another layer/date — without this check it would repaint the stale layer.
+    // another layer/date - without this check it would repaint the stale layer.
     if (seq !== renderSeq) return;
     clearPhilSA();
     if (!tiles.length) { setStatus("No imagery for that layer/date.", true); return; }
@@ -220,7 +220,7 @@ map.on("error", (e) => { if (e && e.error) setStatus("Map error: " + e.error.mes
 map.on("load", async () => {
   // ── ADD YOUR OWN DATA (optional) ──────────────────────────────────────────
   // If MY_DATA is set (top of file), draw it on top of the PhilSA layers. Fill +
-  // outline only — no text, so no glyphs/font setup is needed. This is also where
+  // outline only - no text, so no glyphs/font setup is needed. This is also where
   // you'd wire a parcel click to your backend (see INTEGRATION_GUIDE.md §5d).
   if (MY_DATA) {
     map.addSource("mydata", { type: "geojson", data: MY_DATA });

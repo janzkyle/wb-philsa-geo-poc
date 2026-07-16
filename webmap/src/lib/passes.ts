@@ -2,10 +2,10 @@
 //
 // A per-date mosaic stitches every granule acquired that day into one layer.
 // Adjacent frames of the SAME overpass (seconds apart) are contiguous and merge
-// seamlessly — that's the point of the mosaic. But a single calendar date can
+// seamlessly - that's the point of the mosaic. But a single calendar date can
 // also hold granules from DIFFERENT passes: another satellite (S1A vs S1D), a
 // different orbit, or an ascending-vs-descending overpass. SAR backscatter
-// depends on look geometry, so those are not directly comparable — one "date"
+// depends on look geometry, so those are not directly comparable - one "date"
 // is then really several observations. Summarising the passes behind a date
 // lets both drivers (the layer panel and the AI) make the user aware of that.
 

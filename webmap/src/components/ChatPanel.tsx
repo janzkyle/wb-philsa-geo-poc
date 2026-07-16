@@ -120,7 +120,7 @@ export default function ChatPanel() {
         {messages.length === 0 && (
           <div className="chatempty">
             <p>
-              Ask for data in plain language — the assistant finds it in the
+              Ask for data in plain language - the assistant finds it in the
               catalog and puts it on the map.
             </p>
             {SUGGESTIONS.map((s) => (

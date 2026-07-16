@@ -1,6 +1,6 @@
 // The single source of truth for what's on the map. Both drivers mutate it:
 // the layer panel (human clicks) and the AI's client-executed tools. Keeping
-// every layer a plain serializable object is what makes the map AI-drivable —
+// every layer a plain serializable object is what makes the map AI-drivable -
 // `snapshot()` is sent with each chat turn so the model sees the live state.
 
 import { create } from "zustand";
@@ -33,9 +33,9 @@ export interface MapLayer {
   label: string;
   collection?: string; // STAC collection (raster layers)
   date?: string; // YYYY-MM-DD acquisition date (temporal rasters)
-  tiles: string[]; // XYZ templates — one per MapLibre source
+  tiles: string[]; // XYZ templates - one per MapLibre source
   // Source bounds ([w,s,e,n], aligned with `tiles`): keeps MapLibre from
-  // requesting tiles outside each COG/mosaic footprint — for a single granule
+  // requesting tiles outside each COG/mosaic footprint - for a single granule
   // that's most of the viewport.
   tileBounds?: (Bbox | undefined)[];
   // Time-series playback (the "timeseries" layer only): every date of the play
@@ -59,9 +59,13 @@ export interface MapLayer {
   legend?: Legend;
   description?: string;
   // Satellite passes stitched into this date's mosaic. >1 means the date mixes
-  // observations (different satellite/orbit/look geometry) — surfaced so users
+  // observations (different satellite/orbit/look geometry) - surfaced so users
   // aren't misled into treating the mosaic as a single coherent acquisition.
   passes?: PassSummary[];
+  // Stacking order within the layer's anchor band (see MapView): higher draws
+  // on top. Assigned by the store - bumped on add and whenever the layer goes
+  // hidden -> visible, so the most recently added/shown layer is topmost.
+  stackRank?: number;
 }
 
 export type Bbox = [number, number, number, number]; // [w, s, e, n]
@@ -95,6 +99,10 @@ interface MapStore {
   snapshot: () => MapSnapshot;
 }
 
+// Monotonic stacking counter: every add / re-show takes the next value, so
+// ranks never collide and "most recent on top" falls out of a simple sort.
+let stackSeq = 0;
+
 // Admin outlines are ordinary store layers, seeded at startup, so "hide the
 // province outlines" works the same whether a human or the AI asks for it.
 const seedLayers: MapLayer[] = ADMIN_LAYERS.map((a) => ({
@@ -109,6 +117,7 @@ const seedLayers: MapLayer[] = ADMIN_LAYERS.map((a) => ({
   minzoom: a.minzoom,
   opacity: 1,
   visible: a.defaultOn,
+  stackRank: ++stackSeq,
 }));
 
 let currentViewport: Bbox | undefined;
@@ -120,13 +129,16 @@ export const useMapStore = create<MapStore>((set, get) => ({
   addLayer: (layer) =>
     set((s) => {
       // Replace-on-same-id keeps adds idempotent. The replacement happens IN
-      // PLACE (same array index) so React keeps the mounted Source — MapLibre
-      // then swaps the tiles via setTiles instead of remove+re-add, and
-      // refreshing a layer can't hoist it above the other rasters.
+      // PLACE (same array index) so React keeps the mounted Source - MapLibre
+      // then swaps the tiles via setTiles instead of remove+re-add. The fresh
+      // stackRank is what hoists the layer: MapView's ordering effect moves
+      // the highest rank to the top of its band, so an added (or re-added)
+      // layer always surfaces above its siblings.
+      const ranked = { ...layer, stackRank: ++stackSeq };
       const i = s.layers.findIndex((l) => l.id === layer.id);
-      if (i === -1) return { layers: [...s.layers, layer] };
+      if (i === -1) return { layers: [...s.layers, ranked] };
       const layers = s.layers.slice();
-      layers[i] = layer;
+      layers[i] = ranked;
       return { layers };
     }),
 
@@ -140,7 +152,18 @@ export const useMapStore = create<MapStore>((set, get) => ({
     const found = get().layers.some((l) => l.id === id);
     if (found) {
       set((s) => ({
-        layers: s.layers.map((l) => (l.id === id ? { ...l, ...patch } : l)),
+        layers: s.layers.map((l) =>
+          l.id === id
+            ? {
+                ...l,
+                ...patch,
+                // Re-checking a hidden layer surfaces it, same as a fresh add.
+                ...(patch.visible === true && !l.visible
+                  ? { stackRank: ++stackSeq }
+                  : null),
+              }
+            : l,
+        ),
       }));
     }
     return found;

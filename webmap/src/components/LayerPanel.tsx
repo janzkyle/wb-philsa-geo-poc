@@ -92,7 +92,7 @@ function AddRow({
           target="_blank"
           rel="noopener noreferrer"
           title="Dataset details in the STAC catalog"
-          aria-label={`${label} — dataset details in the STAC catalog`}
+          aria-label={`${label} - dataset details in the STAC catalog`}
         >
           i
         </a>
@@ -123,10 +123,10 @@ function AddRow({
   );
 }
 
-// Load a local GeoJSON file and render it client-side — no server round-trip,
+// Load a local GeoJSON file and render it client-side - no server round-trip,
 // mirroring TerriaJS' "Add data > upload". Reads the file in the browser, parses
-// it, drops it in the store as a geojson-local layer, flies to its extent and —
-// when the file contains polygons — adds a clip mask so the rasters read only
+// it, drops it in the store as a geojson-local layer, flies to its extent and -
+// when the file contains polygons - adds a clip mask so the rasters read only
 // inside the uploaded boundaries (its layer row un-clips: opacity / hide / ✕).
 function UploadRow({ onError }: { onError: (msg: string) => void }) {
   const addLayer = useMapStore((s) => s.addLayer);
@@ -202,12 +202,12 @@ export default function LayerPanel() {
 
   return (
     <div className="panel layerpanel">
-      <h1>PhilSA POC — AI webmap</h1>
+      <h1>PhilSA POC - Geo webmap</h1>
 
       <h2>On the map</h2>
       {rasters.length === 0 && (
         <p className="hint">
-          No data layers yet — add one below, or just ask the assistant.
+          No data layers yet - add one below, or just ask the assistant.
         </p>
       )}
       {rasters.map((l) => (
@@ -262,7 +262,7 @@ export default function LayerPanel() {
               }
               title={
                 l.passes.length > 1
-                  ? "This date stitches multiple satellite passes (different orbit/look geometry) into one mosaic — backscatter across them is not directly comparable."
+                  ? "This date stitches multiple satellite passes (different orbit/look geometry) into one mosaic - backscatter across them is not directly comparable."
                   : undefined
               }
             >
@@ -351,7 +351,7 @@ export default function LayerPanel() {
       <div className="apisource">
         <span className="apisource-label">Data via PhilSA Open Data API</span>
         <p className="hint">
-          This map is a reference consumer — it draws every layer from public
+          This map is a reference consumer - it draws every layer from public
           standards-based endpoints any agency can call. Point your own map or
           pipeline at the same URLs.
         </p>

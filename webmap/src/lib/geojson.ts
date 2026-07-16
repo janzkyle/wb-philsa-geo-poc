@@ -1,6 +1,6 @@
 // Client-side GeoJSON ingest: parse a file the user picked, normalise it to a
 // FeatureCollection, and turn it into a store MapLayer. Nothing here touches the
-// network — the parsed features live in the browser and MapLibre renders them
+// network - the parsed features live in the browser and MapLibre renders them
 // inline (see GeojsonLayer in MapView), the same "upload data" behaviour TerriaJS
 // offers for local files.
 
@@ -29,11 +29,11 @@ export function parseGeoJson(text: string): FeatureCollection {
   try {
     obj = JSON.parse(text);
   } catch {
-    throw new GeoJsonError("Not valid JSON — is this a GeoJSON file?");
+    throw new GeoJsonError("Not valid JSON - is this a GeoJSON file?");
   }
 
   if (!obj || typeof obj !== "object" || !("type" in obj)) {
-    throw new GeoJsonError("Missing a GeoJSON \"type\" — not a GeoJSON object.");
+    throw new GeoJsonError("Missing a GeoJSON \"type\" - not a GeoJSON object.");
   }
 
   const type = (obj as { type: unknown }).type;
@@ -108,7 +108,7 @@ export function geojsonBbox(fc: FeatureCollection): Bbox | undefined {
 }
 
 // --- polygon area ------------------------------------------------------------
-// Spherical-excess ring area (the same approximation turf.area uses) — accurate
+// Spherical-excess ring area (the same approximation turf.area uses) - accurate
 // to well under a percent at parcel scale, and dependency-free.
 
 const EARTH_R = 6371008.8; // mean Earth radius, metres
@@ -187,7 +187,7 @@ const WORLD_RING: Position[] = [
   [-180, -85.051129],
 ];
 
-// Outer rings of every polygon in the geometry — these become the mask's holes.
+// Outer rings of every polygon in the geometry - these become the mask's holes.
 // Polygon holes (donuts) are ignored: the whole outer extent stays unmasked.
 function collectOuterRings(g: Geometry | null): Position[][] {
   if (!g) return [];
@@ -206,7 +206,7 @@ function collectOuterRings(g: Geometry | null): Position[][] {
 // "Clip" the rasters to an uploaded boundary: a world-covering polygon with
 // each uploaded outer ring punched out as a hole. MapView renders it above the
 // raster stack (MaskLayer, pinned under `vector-slot`) so imagery reads only
-// inside the boundaries — MapLibre can't cut raster tiles to a polygon, so this
+// inside the boundaries - MapLibre can't cut raster tiles to a polygon, so this
 // inverse mask is the client-side clip, same idea as the TerriaJS dashboard's
 // spotlight focus mask. Returns undefined when the upload contains no polygons
 // (nothing to clip to). An ordinary store layer: the panel's opacity slider sets

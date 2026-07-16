@@ -1,19 +1,19 @@
-# Integrating PhilSA Earth-observation data — developer guide
+# Integrating PhilSA Earth-observation data - developer guide
 
 This guide shows how to display or analyse PhilSA's satellite layers inside
 **your own** maps and pipelines. You do not need any PhilSA-specific library,
-account, or key for the open layers — PhilSA publishes its data on international
+account, or key for the open layers - PhilSA publishes its data on international
 open standards (STAC + Cloud-Optimized GeoTIFF + XYZ tiles), so you integrate it
 with tools you already use.
 
 The deal in one line: **PhilSA hosts and serves the Earth-observation layers; you
 render them over your own data** (farm parcels, road networks, admin units,
-claims). Nothing here re-hosts PhilSA data — you point your app at PhilSA's URLs.
+claims). Nothing here re-hosts PhilSA data - you point your app at PhilSA's URLs.
 
 _Last updated: 2026-07-14_
 
 > This file is the **canonical copy**. A webpage version ships with the partner
-> template (`partner-template/guide.html`) with the markdown embedded verbatim —
+> template (`partner-template/guide.html`) with the markdown embedded verbatim -
 > after editing this file, re-embed it there (command in that file's header
 > comment).
 
@@ -25,11 +25,11 @@ Two endpoints do everything:
 
 | # | Endpoint | Standard | Use it to… |
 |---|---|---|---|
-| **STAC API** | *discovery* | STAC 1.0 / OGC API Features | Ask "what layers exist, where, on which dates?" — JSON over plain HTTP. |
+| **STAC API** | *discovery* | STAC 1.0 / OGC API Features | Ask "what layers exist, where, on which dates?" - JSON over plain HTTP. |
 | **TiTiler** | *tiles* | XYZ `/{z}/{x}/{y}.png` | Turn any layer into map tiles your slippy-map library drops straight in. |
 
 Plus a public object store (Cloudflare R2) that holds the raw **COGs** and the
-per-date **mosaics** — you rarely call it directly; the tiler reads it for you.
+per-date **mosaics** - you rarely call it directly; the tiler reads it for you.
 
 ### Base URLs
 
@@ -40,25 +40,25 @@ Public R2  https://pub-17ab60a2ca7142a48ae8e2685cd853f7.r2.dev
 ```
 
 > **The STAC and tile URLs are an always-on edge gateway** (Cloudflare, in front
-> of the services) — stable and cached. If PhilSA later publishes custom domains
-> (e.g. `stac.philsa.gov.ph`), **swap only the host** — every path, parameter, and
+> of the services) - stable and cached. If PhilSA later publishes custom domains
+> (e.g. `stac.philsa.gov.ph`), **swap only the host** - every path, parameter, and
 > recipe below is identical. Treat these three constants as your only configuration.
 
 Two things to know up front:
 
 - **Read-only & open.** These endpoints only ever *read*. No key is required for
-  the open layers. (A future *restricted* tier — licensed imagery — will need a
+  the open layers. (A future *restricted* tier - licensed imagery - will need a
   key; the open layers below never will.)
 - **Always-on edge, but cold origins behind it.** The gateway itself never sleeps
   and caches repeat requests, but the free-tier services behind it sleep after
-  ~15 min idle — so the *first uncached* request can take ~30–60 s while the origin
+  ~15 min idle - so the *first uncached* request can take ~30–60 s while the origin
   wakes. Expected for a POC; retry once.
 
 ---
 
 ## 2. The catalog at a glance
 
-Each layer is a STAC **collection**. This table is your cheat-sheet — the
+Each layer is a STAC **collection**. This table is your cheat-sheet - the
 `collection id` goes into every STAC and tile URL, and the **render params** are
 what make a layer look right (skip them and a single-band layer renders black).
 It is the **canonical copy** for integrators: the PhilSA webmap
@@ -67,12 +67,12 @@ are kept in step with the `renders` metadata the catalog publishes.
 
 | Collection id | What it is | Dated? | Render params (TiTiler query string) | Value unit |
 |---|---|---|---|---|
-| `sentinel2-truecolor` | Natural-colour optical (Sentinel-2, 10 m) | yes | *(none — RGB auto-detected)* | — |
+| `sentinel2-truecolor` | Natural-colour optical (Sentinel-2, 10 m) | yes | *(none - RGB auto-detected)* | - |
 | `sentinel2-ndvi` | Vegetation health / greenness | yes | `rescale=-0.2,0.9&colormap_name=rdylgn` | NDVI |
 | `sentinel1-ratio` | Radar vegetation index (VH/VV, sees through cloud) | yes | `rescale=-14,-2&colormap_name=ylgn` | dB (VH/VV) |
 | `sentinel1-sar` | Radar backscatter (VV, all-weather) | yes | `rescale=20,52` | dB (VV) |
-| `sentinel1-flood` | Open-water / flood mask ⚠️ POC proxy | yes | `colormap=` *(categorical, see §6)* | — |
-| `esri-10m-lulc` | Annual land cover (10 m, 2025) | no | `colormap=` *(categorical, see §6)* | — |
+| `sentinel1-flood` | Open-water / flood mask ⚠️ POC proxy | yes | `colormap=` *(categorical, see §6)* | - |
+| `esri-10m-lulc` | Annual land cover (10 m, 2025) | no | `colormap=` *(categorical, see §6)* | - |
 
 - **Dated?** "yes" = a per-acquisition-date collection; you pick a `YYYY-MM-DD`
   and get that day's image. "no" = a single date-independent layer (annual LULC).
@@ -123,7 +123,7 @@ That's the whole discovery surface: `GET /collections`,
   box. The exception is the public R2 store: until PhilSA applies its read CORS
   policy to the bucket (`deploy/r2/apply-cors.sh`, PhilSA-side, one-time), a
   browser can't probe the per-date mosaics directly, and the §5 recipes silently
-  fall back from the single-source mosaic to per-item COGs — still correct, just
+  fall back from the single-source mosaic to per-item COGs - still correct, just
   a few more tile sources.
 
 ---
@@ -186,7 +186,7 @@ tiles.forEach(url =>
 
 Two ways in:
 
-- **As an XYZ tile layer** — Browser panel ▸ right-click **XYZ Tiles** ▸ **New
+- **As an XYZ tile layer** - Browser panel ▸ right-click **XYZ Tiles** ▸ **New
   Connection**, and paste a full tile URL with the placeholders left literal, e.g.
   NDVI via the per-date mosaic:
 
@@ -194,15 +194,15 @@ Two ways in:
   https://philsa-tiles-gateway.philsa.workers.dev/mosaicjson/tiles/WebMercatorQuad/{z}/{x}/{y}.png?tilesize=512&url=https://pub-17ab60a2ca7142a48ae8e2685cd853f7.r2.dev/02-silver/sentinel2-ndvi/mosaics/sentinel2-ndvi_2026-07-07.mosaicjson&rescale=-0.2,0.9&colormap_name=rdylgn
   ```
 
-- **As a STAC catalog** — install the **STAC API Browser** plugin, add
+- **As a STAC catalog** - install the **STAC API Browser** plugin, add
   `https://philsa-stac-gateway.philsa.workers.dev` as a connection, search a collection, and
   load an item's `data` (COG) asset directly. COGs are public, so QGIS streams
   only the pixels in view.
 
 ### 5d. Python (server-side: zonal stats over your own parcels)
 
-This is the pattern for computing a per-parcel index — e.g. average NDVI over each
-insured farm polygon — straight into your own database.
+This is the pattern for computing a per-parcel index - e.g. average NDVI over each
+insured farm polygon - straight into your own database.
 
 ```python
 # pip install pystac-client rasterio shapely
@@ -229,7 +229,7 @@ for it in items:
         # filled=False returns a MASKED array: pixels outside the parcel and the
         # COG's declared nodata are masked, whatever the nodata convention. Then
         # masked_invalid() also drops NaN pixels (COGs that mark nodata as NaN
-        # without a tag) — never compare against np.nan, NaN != NaN.
+        # without a tag) - never compare against np.nan, NaN != NaN.
         arr, _ = rasterio.mask.mask(src, [farm], crop=True, filled=False)
         data = np.ma.masked_invalid(arr[0].astype("float32"))
         valid = data.compressed()            # 1-D array of in-parcel, valid pixels
@@ -246,7 +246,7 @@ silently trusted.
 
 ## 6. Building tile URLs precisely
 
-Every TiTiler tile URL is the same shape — a base path, the `url=` of what to
+Every TiTiler tile URL is the same shape - a base path, the `url=` of what to
 render, and the **render params** from §2:
 
 ```
@@ -284,21 +284,21 @@ const params = "colormap=" + encodeURIComponent(JSON.stringify(
   {"1":[33,102,204,255], "2":[120,170,230,255]}));   // → sentinel1-flood tiles
 ```
 
-`esri-10m-lulc` is **date-independent**: it has no per-date mosaic — search its
+`esri-10m-lulc` is **date-independent**: it has no per-date mosaic - search its
 items (`POST /search` with just `{"collections":["esri-10m-lulc"]}`) and render
 each `assets.data.href` COG with the categorical `colormap` above.
 
 ---
 
-## 7. Overlaying your own data — the integration pattern
+## 7. Overlaying your own data - the integration pattern
 
 The point of all this is to draw PhilSA's layers *underneath or beside your own*.
 The division of labour:
 
-- **PhilSA provides** the EO layers (this guide) — and, if useful, PH admin
+- **PhilSA provides** the EO layers (this guide) - and, if useful, PH admin
   boundaries as vector **PMTiles** on the same public R2
   (`…/02-silver/ph-admin-boundaries/pmtiles/phl_adm{0..4}.pmtiles`).
-- **You provide** your own vectors — farm parcels, claims, assets, road networks —
+- **You provide** your own vectors - farm parcels, claims, assets, road networks -
   as your own GeoJSON/vector layers in the same map.
 
 So a typical agency map is: your parcels on top → PhilSA NDVI/flood tiles below →
@@ -311,7 +311,7 @@ your geometries × PhilSA COGs → your numbers in your database.
 ## 8. Rules of the road
 
 - **Read-only.** The API never accepts writes. Don't build a workflow that expects
-  to push data back — you pull and render.
+  to push data back - you pull and render.
 - **Open now, restricted later.** Everything in §2 is open (no key). A future
   licensed/sensitive tier will require an API key and use short-lived signed URLs;
   it won't change how the open layers work.
@@ -319,7 +319,7 @@ your geometries × PhilSA COGs → your numbers in your database.
   don't hammer `POST /search` in tight loops, and prefer the per-date **mosaic**
   (one source) over many per-item COG sources when a mosaic exists.
 - **Expect cold starts** (~30–60 s after idle) and retry once.
-- **Attribute.** Credit **PhilSA** (and the underlying mission — Sentinel /
+- **Attribute.** Credit **PhilSA** (and the underlying mission - Sentinel /
   Copernicus, ESRI/Impact Observatory for LULC) on maps and derived products.
 - **Mind the caveats.** `sentinel1-flood` is a POC proxy; NDVI/SAR indices are not
   calibrated crop products; optical layers are cloud- and daylight-limited (use
@@ -330,9 +330,9 @@ your geometries × PhilSA COGs → your numbers in your database.
 
 ## 9. Where to look
 
-- **Browse the catalog visually** — the STAC Browser and the PhilSA webmap render
+- **Browse the catalog visually** - the STAC Browser and the PhilSA webmap render
   exactly these endpoints; use them to eyeball a layer/date before you wire it up.
-- **Every collection's metadata** — `GET /collections/{id}` returns its extent,
+- **Every collection's metadata** - `GET /collections/{id}` returns its extent,
   license, and description.
-- **Questions / a restricted-tier key / a new layer** — contact the PhilSA
+- **Questions / a restricted-tier key / a new layer** - contact the PhilSA
   geospatial platform team.

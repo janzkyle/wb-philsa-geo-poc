@@ -1,7 +1,7 @@
 // Time-series driver: pick a temporal collection and a start/end date window,
 // then scrub or animate through the acquisition dates inside that window. It
 // reuses the same layer factory as everything else, but pins the result to ONE
-// stable layer id ("timeseries") whose `frames` carry every window date —
+// stable layer id ("timeseries") whose `frames` carry every window date -
 // MapView pre-mounts those as hidden raster layers (FrameStack), so stepping a
 // date is an opacity flip instead of a tile refetch. Playback is load-gated:
 // each frame dwells FRAME_MS, then waits for the next frame's tiles to finish
@@ -78,11 +78,11 @@ export default function TimeSeries({
   const armedHiRef = useRef(0);
   const armedWindowRef = useRef(""); // window signature the mark belongs to
 
-  // Whether our layer is currently in the store — used to notice when another
+  // Whether our layer is currently in the store - used to notice when another
   // driver (panel ✕, AI remove_layers) takes it off the map.
   const tsOnMap = useMapStore((s) => s.layers.some((l) => l.id === TS_ID));
 
-  // dates[collection] is referentially stable once loaded — safe as an effect dep
+  // dates[collection] is referentially stable once loaded - safe as an effect dep
   // (unlike `?? []`, which would mint a new array every render).
   const dateList = collection ? dates[collection] : undefined;
   const def = temporalDefs.find((d) => d.id === collection);
@@ -121,7 +121,7 @@ export default function TimeSeries({
   // frame (what the panel and AI snapshot see), `frames` carries the window's
   // dates so MapView pre-mounts the armed ones hidden. Re-runs as builds land
   // (cacheVersion), filling frames in while scrubbing or playing. Until the
-  // current frame is built the previous one stays visible — no blank flash.
+  // current frame is built the previous one stays visible - no blank flash.
   useEffect(() => {
     if (!collection || !date || !dateList) return;
     const cur = cacheRef.current.get(`${collection}:${date}`);
@@ -146,7 +146,7 @@ export default function TimeSeries({
     addLayer({
       ...cur,
       id: TS_ID,
-      label: `${defLabel} — ${date}`,
+      label: `${defLabel} - ${date}`,
       frames,
       frameIndex: rel,
     });
@@ -235,7 +235,7 @@ export default function TimeSeries({
     [removeLayers],
   );
 
-  // Drop any computed/in-flight average — the collection, window, or AOI it
+  // Drop any computed/in-flight average - the collection, window, or AOI it
   // was computed over has changed.
   const invalidateStats = () => {
     statsRunRef.current++;
@@ -304,7 +304,7 @@ export default function TimeSeries({
   // --- per-AOI window average -----------------------------------------------
   // Mean of the index over EACH area (upload feature) for every date in the
   // window (TiTiler statistics over the COGs), plus each area's across-dates
-  // average — one row per AOI, exported as an area × date CSV. The AOI is
+  // average - one row per AOI, exported as an area × date CSV. The AOI is
   // either an uploaded polygon layer (many areas) or the current viewport (one).
 
   const uploads = layers.filter((l) => l.kind === "geojson-local" && l.geojson);
@@ -403,7 +403,7 @@ export default function TimeSeries({
       <div className="addrow">
         <span className="addlabel">Collection</span>
         <select value={collection} onChange={(e) => choose(e.target.value)}>
-          <option value="">— choose —</option>
+          <option value="">- choose -</option>
           {temporalDefs.map((d) => (
             <option key={d.id} value={d.id}>
               {d.label}
@@ -501,7 +501,7 @@ export default function TimeSeries({
                   className="ts-statslabel"
                   title="Averages the index over each AOI's footprint for every date in the window (one row per AOI per date), then exports the area × date table as CSV. Upload your AOI polygons under Add data; the current map view works as a single area."
                 >
-                  Per-AOI average — areas
+                  Per-AOI average - areas
                 </span>
                 <div className="ts-statsrow">
                   <select
@@ -540,7 +540,7 @@ export default function TimeSeries({
                         <span>
                           {areas.length === 1 ? (
                             <>
-                              mean <b>{avgs.length ? avgs[0].toFixed(2) : "—"}</b>{" "}
+                              mean <b>{avgs.length ? avgs[0].toFixed(2) : "-"}</b>{" "}
                               {statsResult.unit} · {covered[0]?.rows.length ?? 0}/
                               {statsResult.stats.dates.length} dates
                             </>
