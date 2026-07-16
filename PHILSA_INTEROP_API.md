@@ -1,8 +1,9 @@
 # PhilSA Open-Data Interoperability API — architecture & rollout
 
-How other agencies (PCIC, DA, PAGASA, NDRRMC, LGUs) integrate PhilSA
-Earth-observation data into **their own** systems, and how the webmap is
-positioned as a **reference consumer** that proves the integration.
+How other agencies (crop-insurance, agriculture, disaster-response, weather,
+local governments) integrate PhilSA Earth-observation data into **their own**
+systems, and how the webmap is positioned as a **reference consumer** that proves
+the integration.
 
 _Last updated: 2026-07-14_
 
@@ -26,8 +27,9 @@ standards**, and each agency integrates it themselves against tools they already
 own. This is the difference between N bespoke pipelines and one standard surface.
 
 The webmap is the existence proof: it is *already* nothing more than an external
-consumer of these three endpoints. A "PCIC site" is the same webmap pointed at
-the same public endpoints, rendering PhilSA layers over PCIC's own farm parcels.
+consumer of these three endpoints. An agency site is the same webmap pointed at
+the same public endpoints, rendering PhilSA layers over that agency's own farm
+parcels.
 
 ---
 
@@ -72,7 +74,7 @@ handling) is **`INTEGRATION_GUIDE.md` §5c–d**.
                                     │ (download_copphil_eodata.py → NDVI · SAR flood · …)
                                     ▼
                         ┌──────────────────── external agencies ────────────────────┐
-                        │  PCIC portal   DA app   PAGASA   NDRRMC   QGIS/ArcGIS   pystac │
+                        │  insurance  agriculture  weather  disaster  QGIS/ArcGIS  pystac│
                         └───────┬───────────┬────────┬────────┬────────┬───────────┬────┘
                                 │ browser    │        │ server-side       │
                                 ▼            ▼        ▼        ▼          ▼
@@ -195,7 +197,7 @@ Standards only pay off if agency developers can copy-paste. Ship:
   `pystac-client` (incl. per-parcel zonal stats). Kept separate from the CopPhil
   knowledge base — PhilSA-owned, versioned with this repo.
 - **The webmap, reframed as a reference consumer** — see next section.
-- Optionally a **standalone minimal "PCIC" sample page** (one self-contained
+- Optionally a **standalone minimal agency sample page** (one self-contained
   HTML file, no build) that renders a PhilSA layer over farm parcels, as the
   "integrate in an afternoon" proof.
 
@@ -217,7 +219,7 @@ just doesn't *say so*. To make it read as "the sample an agency could build":
   already thin, standard STAC/TiTiler clients with no PhilSA-private assumptions —
   they double as **worked examples** for agency developers. Preserve that: no
   private endpoints, no undocumented params, in the consumer path.
-- **PCIC overlay = the agency's own data.** The upload-GeoJSON farm-parcel flow
+- **Agency overlay = the agency's own data.** The upload-GeoJSON farm-parcel flow
   (see `PCIC_WEBMAP_USE_CASES.md`) is precisely the pattern an agency follows:
   **PhilSA supplies the EO layers via the API; the agency supplies its own
   vectors** (farms, claims) and renders them together. This is the integration

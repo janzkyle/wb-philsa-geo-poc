@@ -1,3 +1,110 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>PhilSA integration guide — developer docs</title>
+
+<!--
+  Webpage version of ../INTEGRATION_GUIDE.md — same zero-build philosophy as
+  index.html: the guide's markdown is embedded verbatim in the
+  <script type="text/markdown"> block below and rendered client-side.
+
+  ── KEEP IN SYNC ─────────────────────────────────────────────────────────────
+  ../INTEGRATION_GUIDE.md is the canonical copy. After editing it, re-embed:
+
+    python3 - <<'EOF'
+    import re, pathlib
+    md   = pathlib.Path('INTEGRATION_GUIDE.md').read_text()
+    page = pathlib.Path('partner-template/guide.html')
+    html = page.read_text()
+    html = re.sub(r'(<script type="text/markdown" id="guide-md">\n).*?(\n</script>)',
+                  lambda m: m.group(1) + md + m.group(2), html, flags=re.S)
+    page.write_text(html)
+    EOF
+
+  (run from the repo root; the guide contains no "</script" sequences, which is
+  what makes the verbatim embed safe — re-check if you add raw HTML to the md.)
+  ─────────────────────────────────────────────────────────────────────────────
+-->
+
+<!-- marked (markdown → HTML) from CDN, same zero-setup trade-off as MapLibre
+     in index.html. If the CDN is unreachable the page falls back to showing
+     the raw markdown, which is still perfectly readable. -->
+<script src="https://unpkg.com/marked@12.0.2/marked.min.js"></script>
+
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; font: 15px/1.6 system-ui, sans-serif; color: #24292f; background: #fff; }
+  a { color: #0038a8; }
+
+  header {
+    background: #0038a8; color: #fff; padding: 14px 22px;
+    display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap;
+  }
+  header .title { font-size: 16px; font-weight: 600; }
+  header .sub { font-size: 12px; opacity: .85; }
+  header a { color: #cfe0ff; font-size: 12px; margin-left: auto; }
+
+  #layout { display: flex; max-width: 1200px; margin: 0 auto; align-items: flex-start; }
+  nav#toc {
+    position: sticky; top: 0; width: 240px; flex: none;
+    max-height: 100vh; overflow-y: auto; padding: 26px 10px 26px 22px;
+    font-size: 13px;
+  }
+  nav#toc .toc-head { font-size: 11px; text-transform: uppercase; letter-spacing: .07em;
+                      color: #6b7686; margin: 0 0 8px; }
+  nav#toc a { display: block; padding: 3px 8px; border-radius: 4px;
+              color: #444; text-decoration: none; }
+  nav#toc a:hover { background: #eef3ff; color: #0038a8; }
+  main {
+    flex: 1; min-width: 0; padding: 26px 26px 80px;
+    border-left: 1px solid #eef1f6;
+  }
+  @media (max-width: 860px) {
+    #layout { display: block; }
+    nav#toc { position: static; width: auto; max-height: none;
+              border-bottom: 1px solid #eef1f6; padding: 18px 22px; }
+    main { border-left: none; }
+  }
+
+  /* rendered markdown */
+  main h1 { font-size: 26px; line-height: 1.3; margin: 0 0 10px; }
+  main h2 { font-size: 20px; margin: 38px 0 12px; padding-bottom: 6px;
+            border-bottom: 1px solid #eef1f6; }
+  main h3 { font-size: 16px; margin: 26px 0 10px; }
+  main h2 .anchor, main h3 .anchor { opacity: 0; text-decoration: none; margin-left: 6px; }
+  main h2:hover .anchor, main h3:hover .anchor { opacity: .6; }
+  main code { background: #f3f5f9; border-radius: 3px; padding: 1px 5px;
+              font-size: 13px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  main pre { background: #f6f8fa; border: 1px solid #eef1f6; border-radius: 6px;
+             padding: 14px; overflow-x: auto; }
+  main pre code { background: none; padding: 0; font-size: 12.5px; line-height: 1.55; }
+  main table { border-collapse: collapse; display: block; overflow-x: auto;
+               max-width: 100%; font-size: 13.5px; }
+  main th, main td { border: 1px solid #dfe4ec; padding: 6px 10px; text-align: left; }
+  main th { background: #f6f8fa; }
+  main blockquote { margin: 0; padding: 2px 16px; border-left: 4px solid #cfe0ff;
+                    color: #57606a; background: #f8faff; border-radius: 0 6px 6px 0; }
+  main hr { border: none; border-top: 1px solid #eef1f6; margin: 34px 0; }
+  main img { max-width: 100%; }
+</style>
+</head>
+<body>
+
+<header>
+  <span class="title">PhilSA Earth-observation data — integration guide</span>
+  <span class="sub">for developers at partner agencies</span>
+  <a href="index.html">← back to the starter map</a>
+</header>
+
+<div id="layout">
+  <nav id="toc"><p class="toc-head">On this page</p></nav>
+  <main id="content"><p>Rendering guide…</p></main>
+</div>
+
+<!-- ═══ EMBEDDED GUIDE (verbatim copy of ../INTEGRATION_GUIDE.md) ═══ -->
+<script type="text/markdown" id="guide-md">
 # Integrating PhilSA Earth-observation data — developer guide
 
 **Audience: developers at partner agencies** — crop-insurance, agriculture,
@@ -338,3 +445,44 @@ your geometries × PhilSA COGs → your numbers in your database.
   license, and description.
 - **Questions / a restricted-tier key / a new layer** — contact the PhilSA
   geospatial platform team.
+
+</script>
+
+<script>
+(function () {
+  const md = document.getElementById("guide-md").textContent.trim();
+  const main = document.getElementById("content");
+
+  // CDN blocked / offline → raw markdown is still a usable guide.
+  if (typeof marked === "undefined") {
+    const pre = document.createElement("pre");
+    pre.style.whiteSpace = "pre-wrap";
+    pre.textContent = md;
+    main.replaceChildren(pre);
+    return;
+  }
+
+  main.innerHTML = marked.parse(md);
+
+  // Give h2/h3 stable ids (marked v5+ dropped automatic header ids) and build
+  // the table of contents from the h2s.
+  const toc = document.getElementById("toc");
+  const slugCounts = {};
+  for (const h of main.querySelectorAll("h2, h3")) {
+    let slug = h.textContent.toLowerCase().replace(/[^\w]+/g, "-").replace(/^-+|-+$/g, "");
+    if (slugCounts[slug] != null) slug += "-" + ++slugCounts[slug]; else slugCounts[slug] = 0;
+    h.id = slug;
+    const a = document.createElement("a");
+    a.className = "anchor"; a.href = "#" + slug; a.textContent = "#";
+    h.appendChild(a);
+    if (h.tagName === "H2") {
+      const link = document.createElement("a");
+      link.href = "#" + slug;
+      link.textContent = h.textContent.replace(/#$/, "");
+      toc.appendChild(link);
+    }
+  }
+})();
+</script>
+</body>
+</html>

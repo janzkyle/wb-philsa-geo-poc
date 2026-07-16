@@ -1,10 +1,14 @@
 # Partner Agency starter template
 
-A **forkable, single-file** starting point for an agency (PCIC, DA, PAGASA,
-NDRRMC, an LGU…) that wants its own web map showing **PhilSA's satellite layers
-under its own data**. Not a demo to admire — a scaffold to clone and make yours.
+A **forkable, single-file** starting point for an agency (crop-insurance,
+agriculture, disaster-response, weather, a local government…) that wants its own
+web map showing **PhilSA's satellite layers under its own data**. Not a demo to
+admire — a scaffold to clone and make yours.
 
 It's one `index.html` with no build step: open it in a browser and it works.
+Next to it, **`guide.html`** is the full developer integration guide as a
+browsable webpage (a rendered copy of `../INTEGRATION_GUIDE.md`), so a forked
+template carries its own docs.
 
 ## Run it
 
@@ -45,10 +49,12 @@ opacity) already works and needs no changes.
 
 ## Where to go deeper
 
-- **`../INTEGRATION_GUIDE.md`** — the full developer guide: every collection's
-  render params, Leaflet/QGIS/Python recipes, per-parcel zonal statistics, and the
-  rules of the road (read-only, rate limits, attribution, the flood-is-a-proxy
-  caveat).
+- **`guide.html`** (also linked from the map's panel) — the full developer guide
+  as a webpage: every collection's render params, Leaflet/QGIS/Python recipes,
+  per-parcel zonal statistics, and the rules of the road (read-only, rate limits,
+  attribution, the flood-is-a-proxy caveat). It embeds a verbatim copy of
+  **`../INTEGRATION_GUIDE.md`** (the canonical source, kept in the repo root);
+  the re-embed command lives in `guide.html`'s header comment.
 - **The PhilSA webmap** — the full-featured reference app if you want to see the
   layers in a richer UI before wiring your own.
 
