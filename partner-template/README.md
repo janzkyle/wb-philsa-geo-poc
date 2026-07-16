@@ -17,6 +17,24 @@ python3 -m http.server -d partner-template 8000
 Or just double-click `index.html` (the CDN MapLibre + PhilSA endpoints are all
 remote, so `file://` works too).
 
+## Deploy it (GitHub Pages)
+
+Because it's one self-contained `index.html` with only absolute/CDN URLs, it
+hosts anywhere static — including GitHub Pages.
+
+This repo ships a workflow (`.github/workflows/deploy-partner-template.yml`) that
+publishes **only** the `partner-template/` folder. To turn it on:
+
+1. In your fork: **Settings → Pages → Build and deployment → Source →
+   GitHub Actions**.
+2. Push a change under `partner-template/` to `main` (or run the workflow
+   manually from the **Actions** tab — it has a `workflow_dispatch` trigger).
+3. The site publishes at `https://<user>.github.io/<repo>/`; the workflow prints
+   the exact URL in its summary.
+
+No subpath fix-ups are needed — every URL in `index.html` is absolute, so it
+works the same served from a repo subpath as it does locally.
+
 ## Make it yours — two edits
 
 Both are at the top of `index.html`, clearly marked:
