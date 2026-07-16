@@ -64,7 +64,7 @@ version. Keep both honest.
         `pipelines/03-gold/catalog_silver.py`): S2 NDVI, S2 true-colour, S1 VV
         backscatter as STAC collections + items (asset hrefs → public R2)
     - [ ] also catalog ph-admin-boundaries GeoParquet (vector item) — follow-on
-- [ ] **CopPhil S3 — Sentinel-3 drought / heat-stress** (`COP`): the PCIC-facing
+- [ ] **CopPhil S3 — Sentinel-3 drought / heat-stress** (`COP`): the insurance-facing
       complement to the S1 flood + S2 NDVI layers. Ingest SLSTR LST
       (`SL_2_LST`, land-surface temperature → drought/heat-stress index) and
       OLCI land (`OL_2_LFR`, ~300 m near-daily vegetation — fills S2's monsoon
@@ -157,7 +157,7 @@ tools, not in the chat model's weights.
 ## Frontend — MapLibre webmap (ACTIVE track)
 
 **Decision (2026-07-10): the webmap is the single active frontend.** It owns the
-AI chat layer, the whole PCIC-alignment roadmap targets it, and it deploys as a
+AI chat layer, the whole insurance-alignment roadmap targets it, and it deploys as a
 plain static Vite build. The TerriaJS dashboard is **frozen at demoable** (see
 its own section below) as the "integrates with PhilSA's existing Terria stack"
 exhibit — no new feature work there.
@@ -208,16 +208,17 @@ exhibit — no new feature work there.
       GeoParquet = canonical source (silver), PMTiles = single web derivative. Still
       to do: other vector layers; restricted layers via presigned (separate from
       admin boundaries).
-### PCIC alignment — the webmap priority queue (2026-07-10 code review)
+### Insurance alignment — the webmap priority queue (2026-07-10 code review)
 
-Feature gaps between the webmap and the PCIC parametric-insurance use cases
+Feature gaps between the webmap and the parametric crop-insurance use cases
 (`PCIC_WEBMAP_USE_CASES.md`), ordered by leverage. The common thread: every
-PCIC process (underwriting · post-plant · claims) needs zone-level *numbers*,
+insurance process (underwriting · post-plant · claims) needs zone-level *numbers*,
 and today the webmap can only show pixels, not measure them.
 
 Each item is tagged by audience: `[generic]` = valuable to any agency on the
-platform (DA, NDRRMC/OCD, DENR, PAGASA, LGUs); `[PCIC]` = parametric-insurance
-specific. Only the trigger console is truly PCIC-shaped — and even there, build
+platform (agriculture, disaster-response, environment, weather, local
+governments); `[insurance]` = parametric-insurance specific. Only the trigger
+console is truly insurance-shaped — and even there, build
 the threshold-exceedance engine generic and keep the insurance vocabulary
 (UAI, payout, policy count) in a thin presentation layer.
 
@@ -251,7 +252,7 @@ the threshold-exceedance engine generic and keep the insurance vocabulary
         or max-NDVI per zone), never single scenes — standard index-insurance
         practice; also what the Sentinel-3 OLCI ingest (Ingest section) and
         SAR fallback are for when the monsoon gap is too long.
-- [ ] `[generic core · PCIC framing]` **Zone index-history chart** (underwriting
+- [ ] `[generic core · insurance framing]` **Zone index-history chart** (underwriting
       / burn-cost): NDVI or flood-% per date over a selected zone, plotted with
       a draggable threshold line — the visual "how risky is this barangay"
       answer. The time-series-over-a-zone part is generic (drought monitoring,
@@ -261,16 +262,16 @@ the threshold-exceedance engine generic and keep the insurance vocabulary
 - [ ] `[generic]` **Compare mode** (post-plant / pre-post event): swipe or
       side-by-side of two dates of one collection. Cheap on the existing layer
       factory.
-- [ ] `[PCIC]` **Trigger console** (claims): pick event date + threshold →
+- [ ] `[insurance]` **Trigger console** (claims): pick event date + threshold →
       compute breach per zone → choropleth + exportable CSV of breaching zones.
       The exceedance engine itself doubles as a generic early-warning /
-      alert-prioritization report; only the payout semantics are PCIC.
+      alert-prioritization report; only the payout semantics are insurance-specific.
 - [ ] `[generic]` **Permalink / report export** (transparent evidence): URL-encoded map
       state so a view is shareable, and a printable snapshot (map + stats +
       dates) as the payout justification. Today a refresh loses everything.
 - [ ] `[generic]` **Chat server hardening before any external demo**: auth or shared
       secret + rate limiting on `/api/chat`, pin `CHAT_ALLOW_ORIGIN`, and a
-      deliberate model choice — the free-model fallback chain routes PCIC
+      deliberate model choice — the free-model fallback chain routes insurance
       queries (places/dates of interest ≈ claims activity) to arbitrary
       third-party providers.
 - [ ] `[generic]` **Shared tool schemas** between `server/chat.mjs` and
@@ -353,6 +354,7 @@ abandoned. Fixes only if a demo breaks.
   - [ ] Surface the **flood layers** in the dashboard (our derived S1 + EMS/GFM).
         S1 `sentinel1-flood` is now cataloged (1 scene) but not yet added to
         `build_catalog_from_stac.py`'s `RASTER` map; EMS/GFM not built yet.
+  - [ ] When picking a date in the dropdown, show the same date or nearest available in the other layers (NDVI, SAR, LULC)
 
 ## Deployment / hosting (free-tier)
 
@@ -360,22 +362,26 @@ Goal: lift the whole POC off `localhost` onto free-tier hosting for a shareable
 demo. The stack is a managed DB + two Docker web services (STAC API, TiTiler) +
 three static frontends + R2. Component → free-tier pick:
 
-- [ ] **pgSTAC database (Postgres + PostGIS)** — pgSTAC is pure SQL schema +
-      functions, so any Postgres ≥14 with PostGIS can host it via
-      `pypgstac migrate`. **Neon** recommended (free tier, **no auto-pause**,
+- [x] **pgSTAC database (Postgres + PostGIS)** — **live on Neon (prod).** pgSTAC
+      is pure SQL schema + functions, so any Postgres ≥14 with PostGIS can host it
+      via `pypgstac migrate`. **Neon** chosen (free tier, **no auto-pause**,
       PostGIS, branching); **Supabase** free works too (PostGIS + a nice console)
       but **pauses after ~7 days idle** and needs care with pgSTAC roles/grants.
-- [ ] **STAC API (`stac-fastapi-pgstac`)** — Docker web service pointed at the
-      managed Postgres. **Render** free web service (your pick) or **Fly.io** free
-      allowance. Heads-up: free tiers **spin down on idle** (Render ~15 min) →
-      cold start on first request; fine for a demo (optionally a keep-alive ping).
-- [ ] **TiTiler** — Docker web service next to the STAC API (Render/Fly), reading
-      COGs from R2 (public `r2.dev` or the authenticated endpoint — see *Tile-
-      serving robustness*). Memory is the constraint: 512 MB free is borderline
-      under heavy requests but OK for POC traffic.
-- [ ] **Static frontends — TerriaJS dashboard, MapLibre webmap, STAC Browser** —
-      build to static and host on **Cloudflare Pages** (recommended: generous free
-      tier, unlimited bandwidth, **same vendor as R2**) or Netlify / Vercel /
+- [x] **STAC API (`stac-fastapi-pgstac`)** — **live on Render** (`philsa-stac-api`,
+      read-only, behind the gateway), Docker web service pointed at the managed
+      Postgres. Heads-up: free tiers **spin down on idle** (Render ~15 min) → cold
+      start on first request (see *Interoperability → keep-warm the origins* for
+      the fix).
+- [x] **TiTiler** — **live on Render** (`philsa-titiler`, behind the gateway),
+      Docker web service next to the STAC API, reading COGs from R2 (public
+      `r2.dev` or the authenticated endpoint — see *Tile-serving robustness*).
+      Memory is the constraint: 512 MB free is borderline under heavy requests but
+      OK for POC traffic.
+- [~] **Static frontends — TerriaJS dashboard, MapLibre webmap, STAC Browser** —
+      **webmap + STAC Browser live as Render static sites** (repointed to the
+      gateway URLs; auto-deploy + `buildFilter` on). Dashboard still local
+      (frozen). Alternative host for the statics is **Cloudflare Pages** (generous
+      free tier, unlimited bandwidth, **same vendor as R2**) or Netlify / Vercel /
       GitHub Pages. For the dashboard, prefer a pure-static `gulp release` relying
       on `corsDomains` + CORS headers from the hosted STAC/TiTiler, so the
       `terriajs-server` proxy isn't needed; if a proxy turns out unavoidable, run
@@ -392,6 +398,81 @@ Caveats to design around (none block a POC demo): free web tiers **sleep on idle
 (cold starts); Supabase free DB **pauses** on inactivity (Neon doesn't); keep
 TiTiler requests light. Secrets (R2 keys) stay out of static builds — only the
 server-side TiTiler needs them.
+
+## Interoperability API — external-agency access (gateway)
+
+How other agencies (crop-insurance, agriculture, disaster-response, weather,
+local governments) consume PhilSA data from
+**their own** systems: the POC's STAC + TiTiler + R2, fronted by one governed
+edge gateway, published on open standards so there's no bespoke client to build.
+Architecture + rollout in `PHILSA_INTEROP_API.md`; the external developer guide
+is `INTEGRATION_GUIDE.md`; `partner-template/` is a runnable single-file sample.
+**Phases 0–2 done; Phase 3 (govern) is next.**
+
+- [x] **Phase 1 — declare the contract** (2026-07-15): explicit open-data CORS
+      pinned in `render.yaml` (`CORS_ORIGINS`/`CORS_METHODS` — note the pgstac
+      settings take **no** `STAC_FASTAPI_` prefix, unlike TiTiler's `TITILER_API_*`);
+      `INTEGRATION_GUIDE.md` (base URLs, collection cheat-sheet, MapLibre/Leaflet/
+      QGIS/pystac recipes, per-parcel zonal stats); webmap surfaces a "Data via
+      PhilSA Open Data API" footer (`LayerPanel` + `DATA_SOURCE` in `config.ts`).
+- [x] **Phase 2 — front + cache** (2026-07-15): Cloudflare Worker gateway
+      (`deploy/gateway/`) deployed as two envs on `philsa.workers.dev` —
+      `philsa-stac-gateway` (fronts stac-api) + `philsa-tiles-gateway` (fronts
+      titiler). Read-only allowlist (blocks writes at the edge; POST only for
+      `/search`+`/aggregate`), open-data CORS, edge cache (tiles 24 h / STAC 60 s —
+      verified `cf-cache-status: HIT`), Host-rewrite so Render routes correctly +
+      stac-fastapi self-links point at the gateway, CORS'd 502 on origin
+      cold-start, Workers Logs on. **Frontends + docs repointed** to the gateway
+      URLs (`render.yaml` `VITE_*`/`SB_catalogUrl`, partner template, both guides);
+      webmap + STAC Browser redeployed and verified serving the gateway.
+- [x] Prod STAC write access **CLOSED** (2026-07-15): public origin runs
+      `ENABLE_TRANSACTIONS_EXTENSIONS=false`; the gateway re-blocks writes; ingest
+      moved to a private, ephemeral transactions API bound to Neon
+      (`prod-ingest.sh`), and every STAC writer refuses a read-only target
+      (`pipelines/lib/stac_write.py` `ensure_writable` + `--silver-only` targeted
+      reload). Nothing writable is internet-reachable.
+- [x] Render **auto-deploy on commit** + per-service `buildFilter` (2026-07-15)
+      so a push only rebuilds the service whose paths changed.
+
+**Next — POC polish (cheap, removes the visible warts):**
+- [ ] **Keep-warm the origins** — the free-tier Render STAC API + TiTiler sleep
+      after ~15 min idle, so the first uncached request is ~30–60 s (the one
+      visible wart in a demo). Add a **Cloudflare Cron Trigger** to the gateway
+      worker: a `scheduled()` handler that pings its `ORIGIN` every ~10 min. Free,
+      same account, no new service. (A custom domain would NOT fix this; only a
+      warm/paid origin does.)
+- [ ] **Apply R2 CORS** (`deploy/r2/apply-cors.sh`) — the public bucket ships with
+      no CORS, so browsers can't HEAD-probe the per-date mosaics and the webmap/
+      partner template fall back to per-item COGs. One command (needs `.env` R2
+      creds) activates the single-source mosaic fast-path.
+- [ ] **Enable the rate-limit binding** — uncomment the `RATE_LIMITER` block in
+      `deploy/gateway/wrangler.toml` (the worker already calls it and no-ops if
+      absent). Confirm it's available on the account plan first.
+- [ ] **Smoke-test the prod ingest path** — run `prod-ingest.sh prod --silver-only`
+      on the next catalog refresh to exercise the read-only guards +
+      `ensure_writable` conformance check end-to-end (needs Docker + Neon; couldn't
+      be run at review time).
+
+**Next — Phase 3 (govern it; only once an agency actually commits):**
+- [ ] **API keys** for server/restricted consumers — the per-key hook is stubbed
+      in `worker.js`. A key identifies the agency, not a person; open collections
+      stay anonymous.
+- [ ] **Usage metrics / attribution** — with Workers Logs on, aggregate
+      who-pulled-what for reporting + capacity planning.
+- [ ] **Restricted-data tier** — presigned-URL path for the private R2 bucket
+      (see *Storage → private bucket / presigned* and *Auth & governance*). Blocked
+      on the private bucket existing; today "restricted" is a design, not a
+      capability.
+
+**Next — Phase 4 (graduate; only if adoption warrants the ops cost):**
+- [ ] Custom domains (`stac.philsa.gov.ph`) — worker code + consumer URLs move,
+      nothing else. Full API-management (APISIX/Kong), SLAs, per-agency quotas.
+
+**Next — adoption (the actual point):**
+- [ ] **Get one agency (a crop-insurer) to fork `partner-template/`** — the "integrate in an
+      afternoon" existence proof the whole story rests on. To make it land harder,
+      ship the template with real sample Central-Luzon parcels + a click-popup
+      (today it's `MY_DATA = null`; the README was trimmed to match).
 
 ## Auth & governance
 

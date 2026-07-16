@@ -124,7 +124,11 @@ def re_dated(src, slot, new_date):
         "geometry": src["geometry"],
         "bbox": src.get("bbox"),
         "properties": {
+            # single acquisition instant → start == end == datetime, so each item
+            # shows a Time of Data Start and End.
             "datetime": f"{new_date.isoformat()}{tod}",
+            "start_datetime": f"{new_date.isoformat()}{tod}",
+            "end_datetime": f"{new_date.isoformat()}{tod}",
             "platform": "mula",
             "instruments": ["truecolour-imager"],
             "gsd": 5,

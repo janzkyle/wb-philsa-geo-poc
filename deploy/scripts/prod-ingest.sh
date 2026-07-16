@@ -30,7 +30,9 @@ shift || true
 
 INGEST_PORT="${INGEST_PORT:-8092}"          # distinct from local dev's 8082
 CONTAINER="philsa-ingest-api-${ENV_NAME}"
-IMAGE="stac-utils/stac-fastapi-pgstac"
+# Dedicated tag for the ingest image so we don't clobber the local-dev compose
+# image (stac-utils/stac-fastapi-pgstac).
+IMAGE="philsa-stac-api-ingest"
 INGEST_STAC_API="http://localhost:${INGEST_PORT}"
 
 command -v docker >/dev/null 2>&1 || die "docker is required for prod-ingest."
@@ -39,8 +41,15 @@ command -v docker >/dev/null 2>&1 || die "docker is required for prod-ingest."
 cleanup() { docker rm -f "$CONTAINER" >/dev/null 2>&1 || true; }
 trap cleanup EXIT
 
-info "building the STAC API image (if needed) …"
-docker compose -f "$REPO_ROOT/stac-fastapi-pgstac/compose.yml" build app >/dev/null
+# Build the SAME pinned image as prod (deploy/stac-api/Dockerfile), NOT the
+# submodule's own Dockerfile. The submodule's `pip install .[server,catalogs]`
+# resolves a newer stac-fastapi-extensions (6.3+) that moved `core.fields`, so
+# the app crashes at import with `ModuleNotFoundError:
+# stac_fastapi.extensions.core.fields`. The pinned Dockerfile reproduces the
+# known-good 6.2.1 set. Context is the submodule root (COPYs are relative to it).
+info "building the pinned STAC API image (same known-good deps as prod) …"
+docker build -q -f "$DEPLOY_DIR/stac-api/Dockerfile" -t "$IMAGE" \
+  "$REPO_ROOT/stac-fastapi-pgstac" >/dev/null
 
 info "starting PRIVATE transactions-enabled API on $INGEST_STAC_API, bound to '$ENV_NAME' DB (PGHOST=$PGHOST) …"
 cleanup

@@ -189,10 +189,22 @@ def iter_items(cid, limit, max_items):
         url = nxt[0] if nxt and feats else None
 
 
+def augment_item(f):
+    """Give each mirrored item a Time of Data Start/End. Upstream items carry a
+    single sensing instant (`datetime`) with no start/end; mirror that instant to
+    start == end so every item shows both, without inventing a fake window."""
+    p = f.setdefault("properties", {})
+    dtv = p.get("datetime")
+    if dtv and not p.get("start_datetime") and not p.get("end_datetime"):
+        p["start_datetime"] = dtv
+        p["end_datetime"] = dtv
+    return f
+
+
 def mirror_items(cid, limit, max_items, dry):
     counts = {"created": 0, "updated": 0, "error": 0, "dry-run": 0}
     for f in iter_items(cid, limit, max_items):
-        f = normalize(rewrite_links(f))
+        f = augment_item(normalize(rewrite_links(f)))
         f["collection"] = cid
         iid = f.get("id")
         res = upsert(

@@ -190,12 +190,28 @@ def bbox_from_geom(geom):
     return [min(xs), min(ys), max(xs), max(ys)]
 
 
+def _iso(d, t):
+    return f"{d[:4]}-{d[4:6]}-{d[6:8]}T{t[:2]}:{t[2:4]}:{t[4:6]}Z"
+
+
 def parse_dt(name):
     m = re.search(r"(\d{8})T(\d{6})", name)
     if not m:
         return None
-    d, t = m.group(1), m.group(2)
-    return f"{d[:4]}-{d[4:6]}-{d[6:8]}T{t[:2]}:{t[2:4]}:{t[4:6]}Z"
+    return _iso(m.group(1), m.group(2))
+
+
+def acquisition_window(name, platform, dt0):
+    """(start_datetime, end_datetime) for the granule. Sentinel-1 IW GRD names
+    carry two sensing timestamps (acquisition start + stop, ~25 s apart) — use
+    both. Sentinel-2 (and anything else) is a single sensing instant; its second
+    filename timestamp is the processing time, not a sensing stop, so
+    start == end == datetime."""
+    if dt0 and platform.startswith("sentinel-1"):
+        stamps = re.findall(r"(\d{8})T(\d{6})", name)
+        if len(stamps) >= 2:
+            return _iso(*stamps[0]), _iso(*stamps[1])
+    return dt0, dt0
 
 
 # Silver product suffixes appended to the source-granule basename by the
@@ -223,8 +239,10 @@ def build_item(prod, key, info, href, extra_links=None):
     geom = info["wgs84Extent"]
     stac = info.get("stac", {})
     platform, constellation = platform_from_name(name, prod["platform"])
-    props = {"datetime": parse_dt(name), "platform": platform,
-             "constellation": constellation,
+    dt0 = parse_dt(name)
+    start_dt, end_dt = acquisition_window(name, platform, dt0)
+    props = {"datetime": dt0, "start_datetime": start_dt, "end_datetime": end_dt,
+             "platform": platform, "constellation": constellation,
              "instruments": prod.get("instruments"), "gsd": prod.get("gsd")}
     # proj:projjson deliberately not copied — proj:epsg carries the same CRS in
     # a few bytes instead of ~2 KB per item.

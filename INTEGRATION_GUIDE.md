@@ -1,12 +1,10 @@
 # Integrating PhilSA Earth-observation data — developer guide
 
-**Audience: developers at partner agencies** — crop-insurance, agriculture,
-disaster-response, weather, and local-government teams — who
-want to show or analyse PhilSA's satellite layers inside **your own** maps and
-pipelines. You do not need any PhilSA-specific library, account, or key for the
-open layers — PhilSA publishes its data on international open standards (STAC +
-Cloud-Optimized GeoTIFF + XYZ tiles), so you integrate it with tools you already
-use.
+This guide shows how to display or analyse PhilSA's satellite layers inside
+**your own** maps and pipelines. You do not need any PhilSA-specific library,
+account, or key for the open layers — PhilSA publishes its data on international
+open standards (STAC + Cloud-Optimized GeoTIFF + XYZ tiles), so you integrate it
+with tools you already use.
 
 The deal in one line: **PhilSA hosts and serves the Earth-observation layers; you
 render them over your own data** (farm parcels, road networks, admin units,
