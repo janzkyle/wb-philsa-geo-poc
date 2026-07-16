@@ -223,6 +223,36 @@
 
 /* --- Add-data rows ---------------------------------------------------------- */
 
+/* Single Date / Time Series tabs under the Add data heading. */
+.addtabs {
+  display: flex;
+  gap: 2px;
+  margin: 0 0 8px;
+  border-bottom: 1px solid #eef1f6;
+}
+
+.addtabs button {
+  border: none;
+  background: none;
+  font-size: 12px;
+  padding: 5px 10px;
+  color: #6b7686;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  cursor: pointer;
+  transition: color 0.15s;
+}
+
+.addtabs button.active {
+  color: #0038a8;
+  border-bottom-color: #0038a8;
+  font-weight: 600;
+}
+
+.addtabs button:hover:not(.active) {
+  color: #3c4656;
+}
+
 /* Two-line rows: the label owns the first line (wrapping, never truncated),
    the date select + button flow beneath it and share the width. */
 .addrow {

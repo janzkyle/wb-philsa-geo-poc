@@ -38,24 +38,38 @@ function useAvailableDates() {
   return dates;
 }
 
+// Effective date for one collection's dropdown given the shared pick: the
+// picked date itself when this collection has it, otherwise the nearest more
+// recent one, falling back to the latest available. ISO dates sort lexically.
+function resolveDate(dates: string[], picked: string): string {
+  if (!dates.length) return "";
+  if (!picked) return dates[dates.length - 1]; // no pick yet = latest
+  if (dates.includes(picked)) return picked;
+  return dates.find((d) => d > picked) ?? dates[dates.length - 1];
+}
+
 function AddRow({
   defId,
   label,
   temporal,
   dates,
+  sharedDate,
+  onPickDate,
   onError,
 }: {
   defId: string;
   label: string;
   temporal: boolean;
   dates: string[];
+  sharedDate: string;
+  onPickDate: (date: string) => void;
   onError: (msg: string) => void;
 }) {
   const addLayer = useMapStore((s) => s.addLayer);
-  // empty = "latest available" — an explicit pick overrides it
-  const [pickedDate, setPickedDate] = useState("");
   const [busy, setBusy] = useState(false);
-  const date = pickedDate || (dates.length ? dates[dates.length - 1] : "");
+  // One date pick drives every dropdown: choosing here re-seeds the others to
+  // the same date (or their nearest more recent one) via the shared state.
+  const date = resolveDate(dates, sharedDate);
 
   const add = async () => {
     setBusy(true);
@@ -85,7 +99,7 @@ function AddRow({
       </span>
       {temporal ? (
         dates.length ? (
-          <select value={date} onChange={(e) => setPickedDate(e.target.value)}>
+          <select value={date} onChange={(e) => onPickDate(e.target.value)}>
             {dates.map((d) => (
               <option key={d} value={d}>
                 {d}
@@ -162,9 +176,10 @@ function UploadRow({ onError }: { onError: (msg: string) => void }) {
         </button>
       </div>
       <p className="hint">
-        Each uploaded polygon is treated as one farm: pick the file as the area
-        under “Time series” to average an index (e.g. radar vegetation) over
-        every farm across dates and export the per-farm table as CSV.
+        Each uploaded polygon is treated as one area of interest (AOI): pick the
+        file as the area under “Time series” to average an index (e.g. radar
+        vegetation) over every AOI across dates and export the per-AOI table as
+        CSV.
       </p>
     </>
   );
@@ -177,6 +192,10 @@ export default function LayerPanel() {
   const dates = useAvailableDates();
   const [error, setError] = useState("");
   const [legendOpen, setLegendOpen] = useState<Record<string, boolean>>({});
+  const [addTab, setAddTab] = useState<"single" | "series">("single");
+  // Shared across every Single Date dropdown: picking a date in one row
+  // pre-selects the same date (or the nearest more recent one) everywhere.
+  const [sharedDate, setSharedDate] = useState("");
 
   const rasters = layers.filter((l) => l.kind !== "vector-pmtiles");
   const vectors = layers.filter((l) => l.kind === "vector-pmtiles");
@@ -261,20 +280,60 @@ export default function LayerPanel() {
           {error}
         </p>
       )}
-      {RASTER_DEFS.map((d) => (
+      <div className="addtabs" role="tablist">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={addTab === "single"}
+          className={addTab === "single" ? "active" : ""}
+          onClick={() => setAddTab("single")}
+        >
+          Single Date
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={addTab === "series"}
+          className={addTab === "series" ? "active" : ""}
+          onClick={() => setAddTab("series")}
+        >
+          Time Series
+        </button>
+      </div>
+      {/* Both tabs stay mounted (hidden, not unmounted) so switching away from
+          Time Series doesn't tear down its layer and playback state. */}
+      <div hidden={addTab !== "single"}>
+        {RASTER_DEFS.filter((d) => d.temporal).map((d) => (
+          <AddRow
+            key={d.id}
+            defId={d.id}
+            label={d.label}
+            temporal={d.temporal}
+            dates={dates[d.id] ?? []}
+            sharedDate={sharedDate}
+            onPickDate={setSharedDate}
+            onError={setError}
+          />
+        ))}
+      </div>
+      <div hidden={addTab !== "series"}>
+        <TimeSeries dates={dates} onError={setError} />
+      </div>
+      <UploadRow onError={setError} />
+
+      <h2>ESRI</h2>
+      {RASTER_DEFS.filter((d) => !d.temporal).map((d) => (
         <AddRow
           key={d.id}
           defId={d.id}
           label={d.label}
           temporal={d.temporal}
           dates={dates[d.id] ?? []}
+          sharedDate={sharedDate}
+          onPickDate={setSharedDate}
           onError={setError}
         />
       ))}
-      <UploadRow onError={setError} />
-
-      <h2>Time series</h2>
-      <TimeSeries dates={dates} onError={setError} />
 
       <h2>Boundaries</h2>
       {vectors.map((l) => (

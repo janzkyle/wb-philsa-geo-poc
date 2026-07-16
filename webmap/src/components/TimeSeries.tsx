@@ -301,11 +301,11 @@ export default function TimeSeries({
     setIndex((i) => Math.min(endIdx, Math.max(startIdx, i + delta)));
   };
 
-  // --- per-farm window average ----------------------------------------------
-  // Mean of the index over EACH farm (upload feature) for every date in the
-  // window (TiTiler statistics over the COGs), plus each farm's across-dates
-  // average — PCIC's per-farm index unit, exported as a farm × date CSV. AOI is
-  // either an uploaded polygon layer (many farms) or the current viewport (one).
+  // --- per-AOI window average -----------------------------------------------
+  // Mean of the index over EACH area (upload feature) for every date in the
+  // window (TiTiler statistics over the COGs), plus each area's across-dates
+  // average — one row per AOI, exported as an area × date CSV. The AOI is
+  // either an uploaded polygon layer (many areas) or the current viewport (one).
 
   const uploads = layers.filter((l) => l.kind === "geojson-local" && l.geojson);
   // Fall back to the viewport if the selected upload has been removed.
@@ -381,7 +381,7 @@ export default function TimeSeries({
         .replace(/[^a-z0-9]+/g, "-")
         .replace(/^-|-$/g, "") || "aoi";
     downloadCsv(
-      `${collection}_${slug}_${dateList[startIdx]}_${dateList[endIdx]}_per-farm.csv`,
+      `${collection}_${slug}_${dateList[startIdx]}_${dateList[endIdx]}_per-aoi.csv`,
       csv,
     );
   };
@@ -499,9 +499,9 @@ export default function TimeSeries({
               <div className="ts-stats">
                 <span
                   className="ts-statslabel"
-                  title="Averages the index over each farm's footprint for every date in the window (one row per farm per date), then exports the farm × date table as CSV. Upload your farm polygons under Add data; the current map view works as a single area."
+                  title="Averages the index over each AOI's footprint for every date in the window (one row per AOI per date), then exports the area × date table as CSV. Upload your AOI polygons under Add data; the current map view works as a single area."
                 >
-                  Per-farm average — farms
+                  Per-AOI average — areas
                 </span>
                 <div className="ts-statsrow">
                   <select
@@ -522,23 +522,23 @@ export default function TimeSeries({
                     type="button"
                     onClick={computeStats}
                     disabled={statsBusy}
-                    title="Average the index over each farm's footprint for every date in the window"
+                    title="Average the index over each AOI's footprint for every date in the window"
                   >
                     {statsBusy ? `${statsDone}/${statsTotal}…` : "Compute"}
                   </button>
                 </div>
                 {statsResult &&
                   (() => {
-                    const { farms } = statsResult.stats;
-                    const covered = farms.filter((f) => f.rows.length > 0);
-                    const uncovered = farms.length - covered.length;
-                    const avgs = covered.map((f) => f.average);
+                    const { areas } = statsResult.stats;
+                    const covered = areas.filter((a) => a.rows.length > 0);
+                    const uncovered = areas.length - covered.length;
+                    const avgs = covered.map((a) => a.average);
                     const lo = avgs.length ? Math.min(...avgs) : NaN;
                     const hi = avgs.length ? Math.max(...avgs) : NaN;
                     return (
                       <div className="ts-statsresult">
                         <span>
-                          {farms.length === 1 ? (
+                          {areas.length === 1 ? (
                             <>
                               mean <b>{avgs.length ? avgs[0].toFixed(2) : "—"}</b>{" "}
                               {statsResult.unit} · {covered[0]?.rows.length ?? 0}/
@@ -546,7 +546,7 @@ export default function TimeSeries({
                             </>
                           ) : (
                             <>
-                              <b>{farms.length}</b> farms ·{" "}
+                              <b>{areas.length}</b> areas ·{" "}
                               {statsResult.stats.dates.length} dates · mean{" "}
                               <b>
                                 {lo.toFixed(2)}–{hi.toFixed(2)}
@@ -559,7 +559,7 @@ export default function TimeSeries({
                         <button
                           type="button"
                           onClick={exportCsv}
-                          title="Download the per-farm, per-date means (and each farm's average) as CSV"
+                          title="Download the per-AOI, per-date means (and each area's average) as CSV"
                         >
                           Export CSV
                         </button>

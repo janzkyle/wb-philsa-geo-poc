@@ -251,11 +251,11 @@ export function buildGeojsonLayer(
     totalHa > 0
       ? ` · ${totalHa.toLocaleString(undefined, { maximumFractionDigits: 1 })} ha`
       : "";
-  // Polygon uploads double as the per-farm AOI for the time-series average
-  // (each polygon = one farm).
+  // Polygon uploads double as the AOI for the time-series average
+  // (each polygon = one area).
   const statsNote =
     totalHa > 0
-      ? " Pick it under “Time series” to average an index over each farm across dates and export the per-farm CSV."
+      ? " Pick it under “Time series” to average an index over each area across dates and export the per-AOI CSV."
       : "";
   return {
     id: `upload:${name}:${Date.now()}`,

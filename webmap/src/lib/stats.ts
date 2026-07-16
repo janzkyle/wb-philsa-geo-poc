@@ -1,9 +1,9 @@
-// Per-farm temporal zonal statistics for the time-series "Window average"
-// feature: the mean of a single-band index over EACH uploaded farm (its polygon
-// or MultiPolygon), once per acquisition date, plus that farm's across-dates
-// average. This is PCIC's index unit — the index is measured over each insured
-// farm's own geometry, never blended across farms — so the result is a
-// farm × date matrix, one row per farm per date, exported as CSV.
+// Per-AOI temporal zonal statistics for the time-series "Window average"
+// feature: the mean of a single-band index over EACH uploaded area (its polygon
+// or MultiPolygon), once per acquisition date, plus that area's across-dates
+// average. The index is measured over each area's own geometry, never blended
+// across areas — so the result is an area × date matrix, one row per area per
+// date, exported as CSV.
 //
 // Computed by TiTiler's /cog/statistics endpoint straight from the silver COGs
 // on R2 (no backend of ours involved). Nodata (declared in the COGs) is masked
@@ -11,11 +11,11 @@
 // as reduced coverage.
 //
 // A date may stitch several granule COGs; each granule is queried with only the
-// farms its bbox intersects (a polygon fully outside a COG would fail the whole
-// TiTiler request), and a farm split across granules (or a MultiPolygon whose
+// areas its bbox intersects (a polygon fully outside a COG would fail the whole
+// TiTiler request), and an area split across granules (or a MultiPolygon whose
 // fields fall in different granules) is pooled back together, weighted by
 // valid-pixel count. TiTiler already returns one statistics block per feature,
-// so keeping farms separate is free — we simply don't merge them.
+// so keeping areas separate is free — we simply don't merge them.
 
 import type { Feature, FeatureCollection, MultiPolygon, Polygon } from "geojson";
 import { TITILER } from "../config";
@@ -25,48 +25,48 @@ import type { Bbox } from "../state/mapStore";
 
 export class StatsError extends Error {}
 
-// One acquisition date's statistics for ONE farm over its footprint.
-export interface FarmDateStat {
+// One acquisition date's statistics for ONE area over its footprint.
+export interface AreaDateStat {
   date: string;
   mean: number;
   min: number;
   max: number;
   std: number;
-  // Valid-data coverage of the farm on this date (0–100): how much of the
+  // Valid-data coverage of the area on this date (0–100): how much of the
   // footprint the swath actually observed (cloud/swath gaps drop it). A
   // decimation-robust ratio from TiTiler's valid_percent, not a raw pixel
-  // count — see the module note on why counts aren't comparable across farms.
+  // count — see the module note on why counts aren't comparable across areas.
   coveragePct: number;
   granules: number; // COGs that contributed valid pixels
 }
 
-// One farm's whole time series over the window.
-export interface FarmStats {
-  id: string; // from the feature's id / a property / else farm_N
-  areaHa?: number; // sum-insured context, when the upload carries it
-  rows: FarmDateStat[]; // dates WITH coverage, ascending
+// One area's whole time series over the window.
+export interface AreaStats {
+  id: string; // from the feature's id / a property / else aoi_N
+  areaHa?: number; // area context, when the upload carries it
+  rows: AreaDateStat[]; // dates WITH coverage, ascending
   average: number; // mean of rows' means (dates weigh equally); NaN if never covered
-  skipped: string[]; // window dates with no coverage for this farm
+  skipped: string[]; // window dates with no coverage for this area
 }
 
 export interface TemporalStats {
-  farms: FarmStats[]; // one per input polygon/MultiPolygon feature, input order
+  areas: AreaStats[]; // one per input polygon/MultiPolygon feature, input order
   dates: string[]; // the requested window, ascending
 }
 
-// Soft cap on farm count: TiTiler computes stats per feature per COG, so
-// thousands of farms × dates would grind for minutes server-side.
-const MAX_FARMS = 500;
+// Soft cap on area count: TiTiler computes stats per feature per COG, so
+// thousands of areas × dates would grind for minutes server-side.
+const MAX_AREAS = 500;
 // Dates processed in parallel. Each date is 1–3 statistics POSTs, so this keeps
 // at most ~9 requests in flight against the single-process tiler.
 const DATE_CONCURRENCY = 3;
 // Cap the raster read per request — TiTiler decimates through the COG overviews,
-// keeping large-farm requests fast at negligible cost to the mean.
+// keeping large-area requests fast at negligible cost to the mean.
 const MAX_READ_SIZE = 1024;
 
-// Property keys checked (in order) for a stable farm identifier before falling
+// Property keys checked (in order) for a stable area identifier before falling
 // back to a positional label.
-const ID_KEYS = ["farm_id", "parcel_id", "policy_id", "id", "name", "label", "OBJECTID", "fid"];
+const ID_KEYS = ["aoi_id", "parcel_id", "id", "name", "label", "OBJECTID", "fid"];
 
 function featureId(f: Feature, i: number): string {
   if (f.id !== undefined && f.id !== null && f.id !== "") return String(f.id);
@@ -75,7 +75,7 @@ function featureId(f: Feature, i: number): string {
     const v = p[k];
     if (v !== undefined && v !== null && v !== "") return String(v);
   }
-  return `farm_${i + 1}`;
+  return `aoi_${i + 1}`;
 }
 
 function featureAreaHa(f: Feature): number | undefined {
@@ -83,7 +83,7 @@ function featureAreaHa(f: Feature): number | undefined {
   return typeof v === "number" && Number.isFinite(v) ? v : undefined;
 }
 
-interface Farm {
+interface Area {
   feature: Feature<Polygon | MultiPolygon>;
   bbox: Bbox;
   id: string;
@@ -131,7 +131,7 @@ async function granuleStats(
   });
 }
 
-// Running pool of one farm's granule stats for a single date.
+// Running pool of one area's granule stats for a single date.
 interface Accum {
   wSum: number;
   sqSum: number;
@@ -143,33 +143,33 @@ interface Accum {
   granules: number;
 }
 
-// Per-farm pooled statistics for one date, aligned with `farms` (null where a
-// farm had no valid pixels that day — swath missed it or it was fully masked).
+// Per-area pooled statistics for one date, aligned with `areas` (null where an
+// area had no valid pixels that day — swath missed it or it was fully masked).
 async function statsForDate(
   collection: string,
   date: string,
-  farms: Farm[],
+  areas: Area[],
   aoiBbox: Bbox,
-): Promise<(FarmDateStat | null)[]> {
+): Promise<(AreaDateStat | null)[]> {
   const items = await searchStac({ collections: [collection], datetime: date, limit: 100 });
   const granules = items.filter(
     (i) => i.cogHref && (!i.bbox || boxesIntersect(i.bbox, aoiBbox)),
   );
 
-  // Query each granule with only the farms it covers, in parallel, then fold
-  // the per-feature results back onto their farm index.
+  // Query each granule with only the areas it covers, in parallel, then fold
+  // the per-feature results back onto their area index.
   const perGranule = await Promise.all(
     granules.map(async (g) => {
-      const idxs = farms
+      const idxs = areas
         .map((_, i) => i)
-        .filter((i) => !g.bbox || boxesIntersect(farms[i].bbox, g.bbox!));
+        .filter((i) => !g.bbox || boxesIntersect(areas[i].bbox, g.bbox!));
       if (!idxs.length) return { idxs, stats: [] as (BandStats | null)[] };
-      const stats = await granuleStats(g.cogHref!, idxs.map((i) => farms[i].feature));
+      const stats = await granuleStats(g.cogHref!, idxs.map((i) => areas[i].feature));
       return { idxs, stats };
     }),
   );
 
-  const acc: (Accum | null)[] = farms.map(() => null);
+  const acc: (Accum | null)[] = areas.map(() => null);
   for (const { idxs, stats } of perGranule) {
     idxs.forEach((fi, k) => {
       const s = stats[k];
@@ -212,9 +212,9 @@ async function statsForDate(
   });
 }
 
-// Per-farm zonal mean of `collection` for every date in the window. Throws
+// Per-area zonal mean of `collection` for every date in the window. Throws
 // StatsError with a user-readable reason when the AOI is unusable or nothing
-// overlaps any farm.
+// overlaps any area.
 export async function computeTemporalStats(opts: {
   collection: string;
   dates: string[]; // the window, ascending
@@ -226,22 +226,22 @@ export async function computeTemporalStats(opts: {
     (f): f is Feature<Polygon | MultiPolygon> =>
       f.geometry?.type === "Polygon" || f.geometry?.type === "MultiPolygon",
   );
-  if (polys.length > MAX_FARMS) {
+  if (polys.length > MAX_AREAS) {
     throw new StatsError(
-      `${polys.length} farms is too many for on-the-fly statistics (max ${MAX_FARMS}) — split the file or narrow the selection.`,
+      `${polys.length} areas is too many for on-the-fly statistics (max ${MAX_AREAS}) — split the file or narrow the selection.`,
     );
   }
-  const farms: Farm[] = [];
+  const areas: Area[] = [];
   polys.forEach((f, i) => {
     const bbox = geojsonBbox({ type: "FeatureCollection", features: [f] });
-    if (bbox) farms.push({ feature: f, bbox, id: featureId(f, i), areaHa: featureAreaHa(f) });
+    if (bbox) areas.push({ feature: f, bbox, id: featureId(f, i), areaHa: featureAreaHa(f) });
   });
-  if (!farms.length) {
+  if (!areas.length) {
     throw new StatsError(
-      "The chosen area contains no polygons — per-farm statistics need polygon footprints.",
+      "The chosen area contains no polygons — per-AOI statistics need polygon footprints.",
     );
   }
-  const aoiBbox = farms.reduce<Bbox>(
+  const aoiBbox = areas.reduce<Bbox>(
     (acc, a) => [
       Math.min(acc[0], a.bbox[0]),
       Math.min(acc[1], a.bbox[1]),
@@ -251,8 +251,8 @@ export async function computeTemporalStats(opts: {
     [Infinity, Infinity, -Infinity, -Infinity],
   );
 
-  // perDate[dateIdx][farmIdx] — filled by a small pool of date workers.
-  const perDate: (FarmDateStat | null)[][] = new Array(opts.dates.length);
+  // perDate[dateIdx][areaIdx] — filled by a small pool of date workers.
+  const perDate: (AreaDateStat | null)[][] = new Array(opts.dates.length);
   let next = 0;
   let done = 0;
   const worker = async () => {
@@ -260,7 +260,7 @@ export async function computeTemporalStats(opts: {
       if (opts.isCancelled?.()) throw new StatsError("cancelled");
       const i = next++;
       try {
-        perDate[i] = await statsForDate(opts.collection, opts.dates[i], farms, aoiBbox);
+        perDate[i] = await statsForDate(opts.collection, opts.dates[i], areas, aoiBbox);
       } catch (e) {
         next = opts.dates.length; // stop the other workers pulling new dates
         throw e;
@@ -272,9 +272,9 @@ export async function computeTemporalStats(opts: {
     Array.from({ length: Math.min(DATE_CONCURRENCY, opts.dates.length) }, worker),
   );
 
-  // Transpose date-major results into one time series per farm.
-  const out: FarmStats[] = farms.map((farm, fi) => {
-    const rows: FarmDateStat[] = [];
+  // Transpose date-major results into one time series per area.
+  const out: AreaStats[] = areas.map((area, fi) => {
+    const rows: AreaDateStat[] = [];
     const skipped: string[] = [];
     opts.dates.forEach((d, di) => {
       const s = perDate[di]?.[fi] ?? null;
@@ -282,25 +282,25 @@ export async function computeTemporalStats(opts: {
       else skipped.push(d);
     });
     return {
-      id: farm.id,
-      areaHa: farm.areaHa,
+      id: area.id,
+      areaHa: area.areaHa,
       rows,
       average: rows.length ? rows.reduce((x, r) => x + r.mean, 0) / rows.length : NaN,
       skipped,
     };
   });
 
-  if (out.every((f) => f.rows.length === 0)) {
+  if (out.every((a) => a.rows.length === 0)) {
     throw new StatsError(
-      "No valid pixels over any farm on any date in the window — the imagery may not cover this area.",
+      "No valid pixels over any area on any date in the window — the imagery may not cover this area.",
     );
   }
-  return { farms: out, dates: opts.dates };
+  return { areas: out, dates: opts.dates };
 }
 
-// Render the result as CSV: `#` metadata lines, then one row per farm per
-// window date (blank stats where that date had no coverage, so every farm × date
-// cell is explicit), then a per-farm summary block. Four decimals — well past
+// Render the result as CSV: `#` metadata lines, then one row per area per
+// window date (blank stats where that date had no coverage, so every area × date
+// cell is explicit), then a per-AOI summary block. Four decimals — well past
 // the sensor noise floor of these indices.
 export function statsToCsv(meta: {
   collectionLabel: string;
@@ -310,14 +310,14 @@ export function statsToCsv(meta: {
 }): string {
   const f = (n: number) => (Number.isFinite(n) ? n.toFixed(4) : "");
   const c = (n: number) => (Number.isFinite(n) ? n.toFixed(1) : "");
-  const { farms, dates } = meta.stats;
-  const uncovered = farms.filter((fm) => fm.rows.length === 0).map((fm) => fm.id);
+  const { areas, dates } = meta.stats;
+  const uncovered = areas.filter((a) => a.rows.length === 0).map((a) => a.id);
 
   const lines = [
-    `# ${meta.collectionLabel} — per-farm zonal mean per acquisition date`,
+    `# ${meta.collectionLabel} — per-AOI zonal mean per acquisition date`,
     `# source: ${meta.aoiName}`,
     `# unit: ${meta.unit}`,
-    `# farms: ${farms.length} · dates: ${dates.length}`,
+    `# areas: ${areas.length} · dates: ${dates.length}`,
   ];
   if (meta.unit.includes("dB")) {
     lines.push(
@@ -325,22 +325,22 @@ export function statsToCsv(meta: {
     );
   }
   lines.push(
-    "# coverage_pct = valid-data % of the farm on that date (cloud/swath gaps lower it)",
+    "# coverage_pct = valid-data % of the area on that date (cloud/swath gaps lower it)",
   );
   if (uncovered.length) {
     lines.push(`# no coverage on any date: ${uncovered.join(", ")}`);
   }
 
-  // Full farm × date matrix.
-  lines.push("farm_id,area_ha,date,mean,min,max,std,coverage_pct,granules");
-  for (const fm of farms) {
-    const byDate = new Map(fm.rows.map((r) => [r.date, r]));
+  // Full area × date matrix.
+  lines.push("aoi_id,area_ha,date,mean,min,max,std,coverage_pct,granules");
+  for (const a of areas) {
+    const byDate = new Map(a.rows.map((r) => [r.date, r]));
     for (const d of dates) {
       const r = byDate.get(d);
       lines.push(
         [
-          fm.id,
-          fm.areaHa ?? "",
+          a.id,
+          a.areaHa ?? "",
           d,
           r ? f(r.mean) : "",
           r ? f(r.min) : "",
@@ -353,19 +353,19 @@ export function statsToCsv(meta: {
     }
   }
 
-  // Per-farm bottom line PCIC uses to set each farm's threshold.
+  // Per-AOI bottom line used to set each area's threshold.
   lines.push("");
-  lines.push("# per-farm summary");
-  lines.push("farm_id,area_ha,dates_covered,dates_total,average_mean,min_mean,max_mean");
-  for (const fm of farms) {
-    const means = fm.rows.map((r) => r.mean);
+  lines.push("# per-AOI summary");
+  lines.push("aoi_id,area_ha,dates_covered,dates_total,average_mean,min_mean,max_mean");
+  for (const a of areas) {
+    const means = a.rows.map((r) => r.mean);
     lines.push(
       [
-        fm.id,
-        fm.areaHa ?? "",
-        fm.rows.length,
+        a.id,
+        a.areaHa ?? "",
+        a.rows.length,
         dates.length,
-        f(fm.average),
+        f(a.average),
         means.length ? f(Math.min(...means)) : "",
         means.length ? f(Math.max(...means)) : "",
       ].join(","),
