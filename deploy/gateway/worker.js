@@ -11,7 +11,8 @@
 //   1. Read-only allowlist  — blocks every write/transaction method at the edge
 //      (defense-in-depth; the origin is ALSO read-only now that prod runs
 //      ENABLE_TRANSACTIONS_EXTENSIONS=false — see deploy/DEPLOYMENT.md). Only
-//      GET/HEAD/OPTIONS pass, plus POST to the STAC search endpoints.
+//      GET/HEAD/OPTIONS pass, plus the body-bearing READS in POST_READ_PATHS
+//      (STAC search; TiTiler statistics).
 //   2. Open-data CORS       — one consistent CORS contract for browser consumers.
 //   3. Edge caching         — GET responses (tiles especially) cached at the POP,
 //      so TiTiler doesn't re-render an identical tile for every agency.
@@ -32,10 +33,17 @@ const CORS = {
   "Access-Control-Max-Age": "86400",
 };
 
-// STAC endpoints that are READS but use POST (OGC API / STAC search family).
-// Everything else with a body-bearing method is a transaction (write) and is
-// refused. Matched against the pathname (trailing slash tolerated).
-const POST_READ_PATHS = [/^\/search\/?$/, /^\/aggregate\/?$/];
+// Endpoints that are READS but use POST, per origin kind. Everything else with a
+// body-bearing method is a transaction (write) and is refused. Matched against
+// the pathname (trailing slash tolerated).
+//   stac  — OGC API / STAC search family (query goes in the body).
+//   tiler — TiTiler statistics: the AOI geometry is POSTed as GeoJSON, but the
+//           call only READS the COGs (zonal stats for the per-area time-series
+//           CSV export). Matches /cog/statistics, /mosaicjson/statistics, etc.
+const POST_READ_PATHS = {
+  stac: [/^\/search\/?$/, /^\/aggregate\/?$/],
+  tiler: [/\/statistics\/?$/],
+};
 
 const isReadMethod = (m) => m === "GET" || m === "HEAD" || m === "OPTIONS";
 
@@ -73,7 +81,8 @@ export default {
     const method = request.method.toUpperCase();
     if (!isReadMethod(method)) {
       const isPostRead =
-        method === "POST" && kind === "stac" && POST_READ_PATHS.some((re) => re.test(url.pathname));
+        method === "POST" &&
+        (POST_READ_PATHS[kind] ?? []).some((re) => re.test(url.pathname));
       if (!isPostRead) {
         return deny(
           405,
