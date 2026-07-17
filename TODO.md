@@ -317,9 +317,9 @@ abandoned. Fixes only if a demo breaks.
         `ph_admin_geom_adm{0..3}.json`). Compiles + bundles cleanly. Still to do:
         verify render in-browser; optionally a **true raster clip** (server-side
         TiTiler polygon mask) instead of the visual dim.
-  - [~] **Tile-serving robustness** — *(shared infra, not dashboard-specific;
+  - [x] **Tile-serving robustness** — *(shared infra, not dashboard-specific;
         see Deployment / hosting → Tile-serving robustness for the full item —
-        `mosaic_tile_url` here now emits `s3://` too.)*
+        `mosaic_tile_url` here now emits `s3://` too. Done 2026-07-17.)*
   - [ ] **Deploy / host** the dashboard (static `gulp release` build behind a
         URL; wire `serverconfig.json` proxy + config for the hosted STAC/TiTiler,
         not just `localhost`) — *see the Deployment / hosting section below.*
@@ -373,8 +373,9 @@ three static frontends + R2. Component → free-tier pick:
       `r2.dev` or the authenticated endpoint — see *Tile-serving robustness*).
       Memory is the constraint: 512 MB free is borderline under heavy requests but
       OK for POC traffic.
-  - [~] **Tile-serving robustness** — finish the `r2.dev` → authenticated-endpoint
-        move (`r2.dev` is rate-limited, not for production tile traffic). TiTiler
+  - [x] **Tile-serving robustness** (done 2026-07-17) — finished the `r2.dev` →
+        authenticated-endpoint move (`r2.dev` is rate-limited, not for production
+        tile traffic). TiTiler
         itself already reads over the authenticated `*.r2.cloudflarestorage.com`
         endpoint in both deployments (`compose.viz.yml`, `philsa-titiler` in
         `render.yaml`); this item is about getting every URL *fed to* TiTiler
@@ -399,10 +400,24 @@ three static frontends + R2. Component → free-tier pick:
           Diwata-2's GCS COG) untouched. STAC asset hrefs in the catalog and
           all other client-side fetches (PMTiles, `ph_admin_index.json`,
           GeoParquet) intentionally stay on the public r2.dev base.
-    - [ ] **Operator action (needs R2 creds, not run here):** rerun
-          `build_raster_mosaics.sh` to regenerate + re-upload the mosaics with
-          `s3://` hrefs; redeploy `philsa-titiler` so the `boto3` image change
-          lands; redeploy the webmap static site.
+    - [x] Redeploys landed (verified 2026-07-17): `philsa-titiler` runs the
+          boto3 image, the live webmap bundle contains the `toR2S3Url` rewrite,
+          and prod TiTiler serves per-item `s3://` COGs (GDAL `/vsis3`,
+          `/cog/info` verified through the tiles gateway).
+    - [x] **boto3 needs its own endpoint var** (found + fixed 2026-07-17):
+          cogeo-mosaic's S3 backend ignores GDAL's `AWS_S3_ENDPOINT`, so prod
+          `/mosaicjson` `s3://` reads hit `s3.auto.amazonaws.com` and failed.
+          Fix = `AWS_ENDPOINT_URL_S3=https://<R2_ACCOUNT_ID>.r2.cloudflarestorage.com`
+          — added to `compose.viz.yml`, declared (`sync: false`) in
+          `render.yaml`, and set on `philsa-titiler` in the Render dashboard.
+    - [x] Mosaics regenerated + re-uploaded with `s3://` COG hrefs
+          (`build_raster_mosaics.sh` against the prod STAC gateway,
+          2026-07-17). **End-to-end verified in prod:** `/mosaicjson/info` and
+          a real NDVI mosaic tile render (200, image/png) through the tiles
+          gateway with the `s3://` mosaicjson URL. TiTiler-side reads no
+          longer touch `r2.dev`; only deliberate browser-side fetches
+          (PMTiles, `ph_admin_index.json`, mosaic existence probe) remain on
+          the public host.
 - [~] **Static frontends — TerriaJS dashboard, MapLibre webmap, STAC Browser** —
       **webmap + STAC Browser live as Render static sites** (repointed to the
       gateway URLs; auto-deploy + `buildFilter` on). Dashboard still local

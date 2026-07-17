@@ -115,6 +115,11 @@ services:
         sync: false
       - key: AWS_S3_ENDPOINT                  # <R2_ACCOUNT_ID>.r2.cloudflarestorage.com
         sync: false
+      # boto3 ignores GDAL's AWS_S3_ENDPOINT; cogeo-mosaic's S3 backend (the
+      # /mosaicjson s3:// reads) needs the boto3-native endpoint var, WITH the
+      # https:// scheme: https://<R2_ACCOUNT_ID>.r2.cloudflarestorage.com
+      - key: AWS_ENDPOINT_URL_S3
+        sync: false
       - key: AWS_VIRTUAL_HOSTING
         value: "FALSE"
       - key: AWS_DEFAULT_REGION
