@@ -8,10 +8,20 @@ export const STAC_API =
 export const TITILER =
   import.meta.env.VITE_TITILER ?? "http://localhost:8083";
 
-// Public R2 base that serves the admin-boundary PMTiles, MosaicJSON and COGs.
+// Public R2 base that serves the admin-boundary PMTiles, MosaicJSON and COGs
+// to the BROWSER (PMTiles, ph_admin_index.json, GeoParquet, and the existence
+// probe below). r2.dev is rate-limited and unsuitable for TiTiler's
+// server-side reads - see R2_BUCKET / mosaicUrlFor.
 export const R2_PUBLIC_BASE =
   import.meta.env.VITE_R2_PUBLIC_BASE ??
   "https://pub-17ab60a2ca7142a48ae8e2685cd853f7.r2.dev";
+
+// R2 bucket name, used to build s3:// URLs for TiTiler's server-side reads
+// over the authenticated *.r2.cloudflarestorage.com endpoint (AWS_S3_ENDPOINT
+// in compose.viz.yml / render.yaml). Never fetch s3:// from the browser -
+// only TiTiler's url= parameter should see it.
+export const R2_BUCKET =
+  import.meta.env.VITE_R2_BUCKET ?? "world-bank-philsa-geo";
 
 // Chat backend (server/chat.mjs). Vite proxies /api → :8087 in dev.
 export const CHAT_API = import.meta.env.VITE_CHAT_API ?? "/api/chat";
@@ -45,12 +55,22 @@ export const ADMIN_INDEX_URL = `${R2_PUBLIC_BASE}/02-silver/ph-admin-boundaries/
 const PMTILES_PREFIX = "02-silver/ph-admin-boundaries/pmtiles";
 const SILVER_PREFIX = "02-silver";
 
-// Public R2 URL of the per-date MosaicJSON for a raster collection. Built by
-// `pipelines/02-silver/build_raster_mosaics.sh`; each one stitches a single
-// day's COG granules into a seamless layer TiTiler serves via /mosaicjson.
-// Not every collection has mosaics (flood doesn't yet) - callers must fall
-// back to per-item COG tiles when this 404s. `date` is YYYY-MM-DD.
-export function mosaicJsonUrl(collection: string, date: string): string {
+// s3:// URL of the per-date MosaicJSON for a raster collection, for the tile
+// request handed to TiTiler - it resolves this server-side over the
+// authenticated R2 endpoint (AWS_S3_ENDPOINT), not the rate-limited r2.dev
+// host. Built by `pipelines/02-silver/build_raster_mosaics.sh`; each one
+// stitches a single day's COG granules into a seamless layer TiTiler serves
+// via /mosaicjson. `date` is YYYY-MM-DD. Not fetchable from the browser - see
+// mosaicPublicUrlFor for the existence probe.
+export function mosaicUrlFor(collection: string, date: string): string {
+  return `s3://${R2_BUCKET}/${SILVER_PREFIX}/${collection}/mosaics/${collection}_${date}.mosaicjson`;
+}
+
+// Public r2.dev URL of the same MosaicJSON, used ONLY to HEAD-probe whether a
+// per-date mosaic exists - the browser cannot read s3://. Not every
+// collection has mosaics (flood doesn't yet) - callers must fall back to
+// per-item COG tiles when this 404s.
+export function mosaicPublicUrlFor(collection: string, date: string): string {
   return `${R2_PUBLIC_BASE}/${SILVER_PREFIX}/${collection}/mosaics/${collection}_${date}.mosaicjson`;
 }
 

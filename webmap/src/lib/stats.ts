@@ -19,6 +19,7 @@
 
 import type { Feature, FeatureCollection, MultiPolygon, Polygon } from "geojson";
 import { TITILER } from "../config";
+import { toR2S3Url } from "./titiler";
 import { searchStac } from "./stac";
 import { geojsonBbox } from "./geojson";
 import type { Bbox } from "../state/mapStore";
@@ -111,7 +112,7 @@ async function granuleStats(
   cogUrl: string,
   features: Feature[],
 ): Promise<(BandStats | null)[]> {
-  const qs = `url=${encodeURIComponent(cogUrl)}&max_size=${MAX_READ_SIZE}`;
+  const qs = `url=${encodeURIComponent(toR2S3Url(cogUrl))}&max_size=${MAX_READ_SIZE}`;
   const res = await fetch(`${TITILER}/cog/statistics?${qs}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },

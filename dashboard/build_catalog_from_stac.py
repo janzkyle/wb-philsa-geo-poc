@@ -30,6 +30,11 @@ STAC_BROWSER = os.environ.get("STAC_BROWSER", "http://localhost:8080").rstrip("/
 R2_PUBLIC_BASE = os.environ.get(
     "R2_PUBLIC_BASE", "https://pub-17ab60a2ca7142a48ae8e2685cd853f7.r2.dev"
 ).rstrip("/")
+# R2 bucket name — used to build s3:// URLs for TiTiler's server-side reads
+# over the authenticated *.r2.cloudflarestorage.com endpoint (AWS_S3_ENDPOINT
+# in compose.viz.yml / render.yaml). R2_PUBLIC_BASE stays the base for direct
+# browser fetches (thumbnails, PMTiles) — not secret, just not for TiTiler.
+R2_BUCKET = os.environ.get("R2_BUCKET", "world-bank-philsa-geo")
 OUT = Path(__file__).parent / "wwwroot" / "init" / "philsa.json"
 
 # Collections with per-date MosaicJSON in R2 (built by build_raster_mosaics.sh).
@@ -274,16 +279,29 @@ def thumb_href(feat):
     return href if href.startswith("http") else None
 
 
+def to_r2_s3_url(href):
+    """Rewrite a public r2.dev asset href to the authenticated s3:// URL
+    TiTiler reads over AWS_S3_ENDPOINT — r2.dev is rate-limited and not for
+    production tile traffic. Hrefs on other hosts (e.g. the ESRI LULC Azure
+    blob, Diwata-2's GCS COG) pass through unchanged."""
+    host = urllib.parse.urlparse(href).netloc
+    if host.endswith(".r2.dev"):
+        return f"s3://{R2_BUCKET}{urllib.parse.urlparse(href).path}"
+    return href
+
+
 def tile_url(href, style):
-    enc = urllib.parse.quote(href, safe="")
+    enc = urllib.parse.quote(to_r2_s3_url(href), safe="")
     qs = f"url={enc}" + (f"&{style}" if style else "")
     return f"{TITILER}/cog/tiles/WebMercatorQuad/{{z}}/{{x}}/{{y}}.png?{qs}"
 
 
 def mosaic_tile_url(coll, date, style):
     """One combined layer for a (collection, date): TiTiler tiles the per-date
-    MosaicJSON that stitches that day's granules into a single seamless raster."""
-    murl = f"{R2_PUBLIC_BASE}/02-silver/{coll}/mosaics/{coll}_{date}.mosaicjson"
+    MosaicJSON that stitches that day's granules into a single seamless
+    raster, read over the authenticated R2 endpoint (s3://) rather than the
+    rate-limited public r2.dev host."""
+    murl = f"s3://{R2_BUCKET}/02-silver/{coll}/mosaics/{coll}_{date}.mosaicjson"
     enc = urllib.parse.quote(murl, safe="")
     qs = f"url={enc}" + (f"&{style}" if style else "")
     return f"{TITILER}/mosaicjson/tiles/WebMercatorQuad/{{z}}/{{x}}/{{y}}.png?{qs}"

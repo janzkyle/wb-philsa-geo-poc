@@ -2,7 +2,7 @@
 // This is the one place that knows how a STAC collection becomes tiles, so the
 // panel and the AI's add_layers tool produce byte-identical layers.
 
-import { mosaicJsonUrl, rasterDef, RASTER_DEFS } from "../config";
+import { mosaicPublicUrlFor, mosaicUrlFor, rasterDef, RASTER_DEFS } from "../config";
 import { cogTileUrl, mosaicTileUrl } from "./titiler";
 import { searchStac, type StacItemLite } from "./stac";
 import { describePasses, summarizePasses, type PassSummary } from "./passes";
@@ -104,15 +104,14 @@ export async function buildRasterLayer(
   });
   const passes = summarizePasses(items);
 
-  const mosaic = mosaicJsonUrl(collection, date);
-  if (await mosaicExists(mosaic)) {
+  if (await mosaicExists(mosaicPublicUrlFor(collection, date))) {
     return {
       id: `${collection}:${date}`,
       kind: "raster-mosaic",
       label: `${def.label} - ${date}`,
       collection,
       date,
-      tiles: [mosaicTileUrl(mosaic, def.titilerParams)],
+      tiles: [mosaicTileUrl(mosaicUrlFor(collection, date), def.titilerParams)],
       tileBounds: [unionBbox(items)],
       opacity: 1,
       visible: true,

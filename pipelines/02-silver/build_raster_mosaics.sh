@@ -95,9 +95,15 @@ for f in feats:
     n=$(wc -l < "$WORKDIR/hrefs.txt" | tr -d ' ')
     out="$WORKDIR/${coll}_${date}.mosaicjson"
 
+    # Rewrite each href to s3://$R2_BUCKET/<key> so the mosaic itself (and
+    # TiTiler serving it) reads over the authenticated endpoint, not whatever
+    # host the STAC item happened to publish (r2.dev or otherwise) - r2.dev
+    # is rate-limited and not for production tile traffic.
+    sed -E "s#^https?://[^/]+/#s3://${R2_BUCKET}/#" "$WORKDIR/hrefs.txt" > "$WORKDIR/hrefs.s3.txt"
+
     # Build the mosaic (local cogeo-mosaic or TiTiler exec, decided above);
     # hrefs over stdin (robust to spaces).
-    build_mosaic < "$WORKDIR/hrefs.txt" > "$out"
+    build_mosaic < "$WORKDIR/hrefs.s3.txt" > "$out"
 
     key="${DST_PREFIX}/${coll}/mosaics/${coll}_${date}.mosaicjson"
     aws s3 cp "$out" "s3://${R2_BUCKET}/${key}" --endpoint-url "$S3_ENDPOINT" \
