@@ -482,10 +482,10 @@ is `INTEGRATION_GUIDE.md`; `partner-template/` is a runnable single-file sample.
       worker: a `scheduled()` handler that pings its `ORIGIN` every ~10 min. Free,
       same account, no new service. (A custom domain would NOT fix this; only a
       warm/paid origin does.)
-- [ ] **Apply R2 CORS** (`deploy/r2/apply-cors.sh`) — the public bucket ships with
-      no CORS, so browsers can't HEAD-probe the per-date mosaics and the webmap/
-      partner template fall back to per-item COGs. One command (needs `.env` R2
-      creds) activates the single-source mosaic fast-path.
+- [x] **Apply R2 CORS** (`deploy/r2/apply-cors.sh`) — verified live 2026-07-17:
+      preflight 204 + `Access-Control-Allow-Origin: *` with ETag/Content-Range/
+      Accept-Ranges exposed, so browsers can HEAD-probe the per-date mosaics and
+      the webmap/partner template use the single-source mosaic fast-path.
 - [ ] **Enable the rate-limit binding** — uncomment the `RATE_LIMITER` block in
       `deploy/gateway/wrangler.toml` (the worker already calls it and no-ops if
       absent). Confirm it's available on the account plan first.
