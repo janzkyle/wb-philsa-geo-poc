@@ -24,3 +24,9 @@ phl_adm*.parquet
 # Python
 __pycache__/
 *.py[cod]
+
+# macOS
+.DS_Store
+
+# Wrangler local state/cache (Cloudflare Workers dev)
+.wrangler/

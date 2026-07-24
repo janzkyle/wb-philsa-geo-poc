@@ -7,5 +7,8 @@ FROM ghcr.io/developmentseed/titiler:latest
 # by cogeo-mosaic's S3 backend so /mosaicjson can read s3:// mosaicjson URLs;
 # GDAL's /vsis3 driver already handles s3:// COG hrefs without it.
 RUN python -m pip install --no-cache-dir boto3
+COPY serve.py /app/serve.py
 ENV PORT=8000
-CMD ["sh", "-c", "uvicorn titiler.application.main:app --host 0.0.0.0 --port ${PORT}"]
+# TITILER_MAX_CONCURRENT_RENDERS (default 1, see serve.py) caps concurrent tile
+# renders so a burst queues instead of OOMing the 512 MB free tier.
+CMD ["python", "/app/serve.py"]

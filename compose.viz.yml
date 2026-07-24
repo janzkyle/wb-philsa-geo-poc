@@ -15,7 +15,13 @@
 # Then TiTiler is at http://localhost:8083 (docs at /api.html).
 services:
   titiler:
-    image: ghcr.io/developmentseed/titiler:latest
+    # Built (not pulled) so we get the boto3 install from deploy/titiler/Dockerfile:
+    # the raw upstream image lacks boto3, which cogeo-mosaic's S3 backend needs to
+    # read s3:// mosaicjson files, so /mosaicjson/tiles crashes with an unhandled
+    # AssertionError before any response (including CORS headers) is sent — the
+    # browser then reports it as a CORS failure instead of a 500.
+    build:
+      context: ./deploy/titiler
     # .env supplies AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY / R2_ACCOUNT_ID / R2_BUCKET
     env_file:
       - .env
@@ -39,5 +45,5 @@ services:
       # average POSTs GeoJSON AOIs to /cog/statistics.
       TITILER_API_CORS_ALLOW_METHODS: "GET,POST"
     ports:
-      - "8083:80"
+      - "8083:8000"
     restart: unless-stopped
