@@ -23,8 +23,10 @@
 // presigned-R2 minting hangs — see the API_KEYS hook near the bottom.
 //
 // Config comes from wrangler.toml [env.*.vars]:
-//   ORIGIN  — the upstream service, e.g. https://philsa-stac-api.onrender.com
-//   KIND    — "stac" or "tiler" (controls POST-read allowlist + cache TTL)
+//   ORIGIN    — the upstream service, e.g. https://philsa-stac-api.onrender.com
+//   KIND      — "stac" or "tiler" (controls POST-read allowlist + cache TTL)
+//   WARM_PATH — (optional) lightweight health path the keep-warm cron pings;
+//               defaults per KIND (see WARM_PATHS). See scheduled() at the bottom.
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -50,6 +52,12 @@ const isReadMethod = (m) => m === "GET" || m === "HEAD" || m === "OPTIONS";
 // Cache TTL (seconds) by origin kind. Tiles are immutable per-URL → cache hard.
 // The STAC catalog changes on ingest → keep it short so new dates show up fast.
 const CACHE_TTL = { tiler: 86400, stac: 60 };
+
+// Lightweight health endpoint the keep-warm cron hits, by origin kind. Both
+// return 200 cheaply without touching R2 or the DB, so a ping is nearly free at
+// the origin. Overridable per env via the WARM_PATH var. (STAC's is the same
+// path render.yaml sets as its healthCheckPath.)
+const WARM_PATHS = { tiler: "/healthz", stac: "/_mgmt/ping" };
 
 function withCors(resp) {
   const h = new Headers(resp.headers);
@@ -167,5 +175,47 @@ export default {
       }));
       return deny(502, "Upstream service is unavailable or waking up — please retry in ~30–60 s.");
     }
+  },
+
+  // Keep-warm cron. The free-tier Render origins sleep after ~15 min idle, so the
+  // first real request after a lull eats a ~30–60 s cold start (the one visible
+  // wart in a demo — see the fetch() catch above). A Cloudflare Cron Trigger
+  // (wrangler.toml [env.*.triggers]) fires this every ~10 min to ping the origin's
+  // lightweight health endpoint, keeping it warm. Free, same account, no new
+  // service. NB: only a warm/paid origin removes cold starts — a custom domain or
+  // the edge cache would NOT (the cache serves hits without waking the origin, but
+  // the first miss still pays the wake cost).
+  async scheduled(event, env, ctx) {
+    if (!env.ORIGIN) {
+      console.error(JSON.stringify({ msg: "keep-warm skipped: ORIGIN unset", cron: event.cron }));
+      return;
+    }
+    const kind = env.KIND === "tiler" ? "tiler" : "stac";
+    const path = env.WARM_PATH ?? WARM_PATHS[kind] ?? "/";
+    const target = new URL(env.ORIGIN);
+    target.pathname = path;
+
+    ctx.waitUntil(
+      (async () => {
+        const t0 = Date.now();
+        try {
+          // cf.cacheTtl:0 so the warm-up always reaches the origin (a cached ping
+          // would wake nothing). Redirect-manual: a health 200 shouldn't redirect,
+          // but don't chase one if it does.
+          const resp = await fetch(target.toString(), {
+            method: "GET",
+            redirect: "manual",
+            cf: { cacheTtl: 0 },
+          });
+          console.log(JSON.stringify({
+            msg: "keep-warm ping", kind, path, status: resp.status, ms: Date.now() - t0,
+          }));
+        } catch (err) {
+          console.error(JSON.stringify({
+            msg: "keep-warm ping failed", kind, path, ms: Date.now() - t0, error: String(err),
+          }));
+        }
+      })(),
+    );
   },
 };

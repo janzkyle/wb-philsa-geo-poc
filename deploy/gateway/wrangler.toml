@@ -35,11 +35,22 @@ name = "philsa-stac-gateway"
 workers_dev = true
 vars = { ORIGIN = "https://philsa-stac-api.onrender.com", KIND = "stac" }
 
+# Keep-warm cron: ping the origin every 5 min so the free-tier Render service
+# never idles into a ~30–60 s cold start (worker.js scheduled()). Render sleeps
+# after ~15 min idle; a 5-min interval keeps warm even if a best-effort fire is
+# skipped (two misses = 15 min, still at the edge). Triggers are NOT inherited by
+# environments — each env needs its own block.
+[env.stac.triggers]
+crons = ["*/5 * * * *"]
+
 # --- TiTiler gateway ----------------------------------------------------------
 [env.tiles]
 name = "philsa-tiles-gateway"
 workers_dev = true
 vars = { ORIGIN = "https://philsa-titiler.onrender.com", KIND = "tiler" }
+
+[env.tiles.triggers]
+crons = ["*/5 * * * *"]
 
 # --- Optional: native rate limiting -------------------------------------------
 # Uncomment inside EACH env above (or here to share) to enforce per-IP limits

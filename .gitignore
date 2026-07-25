@@ -9,6 +9,10 @@
 # deployment: real per-environment env files hold secrets; templates stay tracked
 deploy/environments/*.env
 !deploy/environments/*.env.example
+# wrangler's local-secret file (`wrangler dev` reads it); real secrets in prod
+# go through `wrangler secret put`, never a tracked file
+.dev.vars
+.dev.vars.*
 # local venv the deploy scripts build for pypgstac
 deploy/.venv/
 

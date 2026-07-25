@@ -14,6 +14,7 @@ how you run things locally.
 | **Raster tiler** | TiTiler | **Render** web service (Docker) | Same platform, reads COGs straight from R2. |
 | **STAC Browser** | catalog explorer | **Render** static site | Free static hosting, build-time `SB_catalogUrl`. |
 | **Webmap** | MapLibre app | **Render** static site | Free static hosting, build-time `VITE_*`. |
+| **Chat backend** | map assistant (`webmap/server/`) | **Cloudflare Worker** (`chat/`) | Holds the OpenRouter key server-side. A Worker, not a Render service: always-on, so the first chat message of a demo doesn't eat a cold start. |
 | **Object storage** | COGs / PMTiles | **Cloudflare R2** | Already set up — no change. |
 
 Everything except the database is described in **`../render.yaml`** (one Blueprint),
@@ -137,6 +138,30 @@ redeploy the two static sites:
 
 Verify the API is live: open `https://<your-api>.onrender.com/collections`
 (first hit may be slow while it wakes).
+
+### Step 4b — Deploy the chat backend (map assistant)
+The webmap is a **static** site, so it has no backend of its own. The assistant's
+server must be deployed separately, and `philsa-webmap` must be told where it is —
+if `VITE_CHAT_API` is unset the frontend falls back to the relative `/api/chat`,
+which the static host answers with an **empty 200** and the chat silently does
+nothing (no error, no reply).
+
+```bash
+cd deploy/chat
+wrangler secret put OPENROUTER_API_KEY   # once — the key the browser must never see
+wrangler deploy                          # -> https://philsa-chat.<account>.workers.dev
+curl https://philsa-chat.<account>.workers.dev/health
+```
+
+`/health` returns `keyConfigured` and the model chain a real request would try —
+check it before blaming the frontend. Then confirm two things in
+`render.yaml` → `philsa-webmap`:
+- `VITE_CHAT_API` = `<worker URL>/api/chat` (redeploy the static site after any change)
+- the Worker's `CHAT_ALLOW_ORIGIN` (`deploy/chat/wrangler.toml`) lists the webmap's
+  real origin. It's a **CORS allowlist, not auth** — it stops a stray page from
+  spending your OpenRouter credits, but anyone who finds the URL can still call it
+  with curl. Keep the URL unadvertised, and see the hardening item in `TODO.md`
+  before any external demo.
 
 ### Step 5 — Ingest/migrate the catalog into prod
 

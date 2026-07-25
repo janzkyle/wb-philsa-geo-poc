@@ -1,0 +1,52 @@
+# Cloudflare Worker config for the PhilSA map-assistant chat backend.
+#
+# The Worker source lives with the rest of the chat code (webmap/server/), not
+# here: it shares chatCore.mjs with the dev Node server, and keeping one copy of
+# the tool schemas matters more than keeping deploy files together. `main` is
+# resolved relative to THIS file, and the npm deps (ai, @ai-sdk/*, zod) resolve
+# from webmap/node_modules — so run `npm ci` in webmap/ before deploying.
+#
+#   cd deploy/chat
+#   wrangler secret put OPENROUTER_API_KEY   # once, per environment
+#   wrangler deploy                          # -> https://philsa-chat.<account>.workers.dev
+#   wrangler deploy --dry-run                # bundle without shipping
+#   wrangler dev                             # local, uses .dev.vars for the key
+#
+# Then point the webmap at it: render.yaml sets VITE_CHAT_API on philsa-webmap
+# to <this worker URL>/api/chat and the static site is redeployed.
+#
+# Unlike the gateway workers (deploy/gateway/) this one has NO origin behind it —
+# it IS the origin, calling OpenRouter directly. So there's no keep-warm cron to
+# add: Workers don't cold-start the way the free Render tier does.
+
+name = "philsa-chat"
+main = "../../webmap/server/worker.mjs"
+compatibility_date = "2026-07-15"
+# The AI SDK reaches for a few Node built-ins (streams, async hooks) on some
+# code paths; nodejs_compat keeps those resolvable in the Workers runtime.
+compatibility_flags = ["nodejs_compat"]
+workers_dev = true            # serve on *.workers.dev (no custom domain in this POC)
+
+# Logs + traces (Workers Logs — free plan, with a daily cap a POC won't hit).
+# This is where you'll see model fallbacks ("fell back to …") and the one-line
+# failure log when every candidate model is down.
+[observability]
+enabled = true
+head_sampling_rate = 1
+
+[vars]
+# CORS allowlist — comma-separated, echoed back per-request (see corsHeaders in
+# chatCore.mjs). This is the ONLY thing standing between the OpenRouter key and
+# anyone who finds this URL, so it must not be "*" in prod. localhost is kept so
+# `npm run dev` can point VITE_CHAT_API here without a second deploy.
+CHAT_ALLOW_ORIGIN = "https://philsa-webmap.onrender.com,http://localhost:5173"
+
+# Optional: pin the first model tried. Unset = chatCore.DEFAULT_MODEL, with the
+# live free-model catalog as the fallback chain either way.
+# GENAI_MODEL = "nvidia/nemotron-3-super-120b-a12b:free"
+
+# --- Secrets (NOT set here — wrangler secret put, or the dashboard) -----------
+#   OPENROUTER_API_KEY   the key the browser must never see
+#
+# For `wrangler dev`, put it in deploy/chat/.dev.vars (gitignored):
+#   OPENROUTER_API_KEY=sk-or-...

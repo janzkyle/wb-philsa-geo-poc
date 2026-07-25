@@ -270,13 +270,19 @@ the threshold-exceedance engine generic and keep the insurance vocabulary
       state so a view is shareable, and a printable snapshot (map + stats +
       dates) as the payout justification. Today a refresh loses everything.
 - [ ] `[generic]` **Chat server hardening before any external demo**: auth or shared
-      secret + rate limiting on `/api/chat`, pin `CHAT_ALLOW_ORIGIN`, and a
-      deliberate model choice — the free-model fallback chain routes insurance
-      queries (places/dates of interest ≈ claims activity) to arbitrary
-      third-party providers.
-- [ ] `[generic]` **Shared tool schemas** between `server/chat.mjs` and
+      secret + rate limiting on `/api/chat`, and a deliberate model choice — the
+      free-model fallback chain routes insurance queries (places/dates of
+      interest ≈ claims activity) to arbitrary third-party providers.
+      `CHAT_ALLOW_ORIGIN` is now pinned to the webmap origin
+      (`deploy/chat/wrangler.toml`), but that is CORS, **not auth**: it stops a
+      stray page from spending the OpenRouter key, not a direct curl. The
+      endpoint is still unauthenticated and unmetered.
+- [ ] `[generic]` **Shared tool schemas** between `server/chatCore.mjs` and
       `src/ai/executeTool.ts` (today kept in sync by comment discipline; needs
       a small build step or a plain shared module the server can import).
+      The server side is already deduplicated — `chatCore.mjs` is the single
+      copy shared by the Node dev server and the prod Worker — so this is now
+      only the server↔browser half of the problem.
 
 ## Frontend — TerriaJS dashboard & STAC Browser (FROZEN at demoable)
 
@@ -476,12 +482,25 @@ is `INTEGRATION_GUIDE.md`; `partner-template/` is a runnable single-file sample.
       so a push only rebuilds the service whose paths changed.
 
 **Next — POC polish (cheap, removes the visible warts):**
-- [ ] **Keep-warm the origins** — the free-tier Render STAC API + TiTiler sleep
-      after ~15 min idle, so the first uncached request is ~30–60 s (the one
-      visible wart in a demo). Add a **Cloudflare Cron Trigger** to the gateway
-      worker: a `scheduled()` handler that pings its `ORIGIN` every ~10 min. Free,
-      same account, no new service. (A custom domain would NOT fix this; only a
-      warm/paid origin does.)
+- [x] **Keep-warm the origins** (done 2026-07-17) — the free-tier Render STAC
+      API + TiTiler sleep after ~15 min idle, so the first uncached request was
+      ~30–60 s (the one visible wart in a demo). Added a `scheduled()` handler to
+      the gateway `worker.js` that pings its origin's lightweight health endpoint
+      (`WARM_PATHS`: STAC `/_mgmt/ping`, TiTiler `/healthz`; overridable via the
+      `WARM_PATH` var) + a **Cloudflare Cron Trigger** (`[env.*.triggers]
+      crons = ["*/5 * * * *"]` — triggers aren't inherited, so each env has its
+      own). Free, same account, no new service. (A custom domain would NOT fix
+      this; only a warm/paid origin — or this cron — does.)
+    - **Gotcha (fixed 2026-07-17):** the tiles gateway's first cron registration
+      was **stuck** — deploy reported `schedule: */10` but the trigger never
+      fired (verified: `wrangler tail` showed STAC's scheduled events but none
+      for tiles across 4 windows; a clean 16-min idle test left the TiTiler
+      origin spun down → 7.6 s cold wake). A plain no-config redeploy didn't
+      fix it (wrangler no-op'd the "unchanged" trigger). **Changing the schedule
+      (`*/10` → `*/5`) forced a real re-registration** and it now fires — tail
+      shows `outcome: ok` + `keep-warm ping … status:200`. The 5-min interval
+      also survives a skipped best-effort fire better than 10 min did. STAC's
+      cron worked from the first deploy; the flaky registration was tiles-only.
 - [x] **Apply R2 CORS** (`deploy/r2/apply-cors.sh`) — verified live 2026-07-17:
       preflight 204 + `Access-Control-Allow-Origin: *` with ETag/Content-Range/
       Accept-Ranges exposed, so browsers can HEAD-probe the per-date mosaics and
