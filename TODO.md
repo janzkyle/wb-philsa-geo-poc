@@ -142,9 +142,6 @@ tools, not in the chat model's weights.
   - [ ] Add `tippecanoe` + `aws` CLI to the Dagster image so
         `silver/ph_admin_pmtiles` and `silver/raster_mosaics` run in-container
         (today they run best from the host).
-  - [ ] Fold the dashboard's `build_catalog_from_stac.py` daily refresh (see
-        Frontend → *Daily catalog refresh*) into a Dagster asset/schedule instead
-        of a separate cron — one orchestrator for the whole POC.
 
 ## Storage — Cloudflare R2
 
@@ -158,9 +155,8 @@ tools, not in the chat model's weights.
 
 **Decision (2026-07-10): the webmap is the single active frontend.** It owns the
 AI chat layer, the whole insurance-alignment roadmap targets it, and it deploys as a
-plain static Vite build. The TerriaJS dashboard is **frozen at demoable** (see
-its own section below) as the "integrates with PhilSA's existing Terria stack"
-exhibit — no new feature work there.
+plain static Vite build. *(The TerriaJS dashboard that once sat alongside it was
+frozen at demoable and has since been deleted — see git history.)*
 
 - [~] **MapLibre webmap (`webmap/`, AI-first rebuild)** — React+TS+Vite +
       react-map-gl/MapLibre + **Zustand + Vercel AI SDK**, replacing the Tier 1
@@ -169,7 +165,9 @@ exhibit — no new feature work there.
       collections, pick an acquisition date, legends, opacity) and a **chat
       assistant** whose client-side tools mutate the *same* store:
       `list_collections` · `resolve_region` (name→bbox from the R2
-      `ph_admin_index.json` the dashboard search already uses) · `search_catalog`
+      `ph_admin_index.json` built by
+      `pipelines/02-silver/ph-admin-boundaries/build_admin_search_index.py`) ·
+      `search_catalog`
       (pgSTAC `/search`; on zero hits reports each collection's nearest available
       dates) · `add_layers` / `remove_layers` / `update_layer` · `set_view`.
       "Show flood data for Central Luzon, first week of June" → resolve → search
@@ -189,8 +187,8 @@ exhibit — no new feature work there.
       **clip mask** layer (`buildClipMaskLayer` in `lib/geojson.ts` — world
       polygon minus the uploaded outer rings, rendered between the new
       `mask-slot` and `vector-slot` anchors in `MapView`) so rasters read only
-      inside the boundaries — client-side twin of the dashboard's spotlight
-      mask. It's an ordinary store layer ("Clip: <file>"): the panel's opacity
+      inside the boundaries — a client-side "spotlight" on the area of interest.
+      It's an ordinary store layer ("Clip: <file>"): the panel's opacity
       slider sets dimming strength (1 = hard clip), uncheck/✕ un-clips, and the
       AI can clear it via `remove_layers(["clip-mask"])`. Needs an in-browser
       eyeball. Follow-on: true server-side pixel clip (TiTiler `/cog/feature`)
@@ -199,11 +197,8 @@ exhibit — no new feature work there.
       Restricted COGs (presigned) still to do.
 - [x] Serve PMTiles — **open admin boundaries adm0–adm4 live on public R2**
       (`pipelines/02-silver/ph-admin-boundaries/build_ph_admin_pmtiles.sh`;
-      r2.dev serves them with CORS + range). **One web format for both frontends:**
-      the MapLibre webmap reads the `.pmtiles` directly, and the **TerriaJS
-      dashboard** now reads the *same* PMTiles via its `mvt` item (Terria's
-      Protomaps provider range-reads `.pmtiles` — the earlier "no PMTiles reader"
-      assumption was wrong), so the per-level GeoJSON shim was retired. All admin
+      r2.dev serves them with CORS + range). The MapLibre webmap reads the
+      `.pmtiles` directly, so the per-level GeoJSON shim was retired. All admin
       levels (adm0–adm4) are **open** data, none restricted. Format strategy:
       GeoParquet = canonical source (silver), PMTiles = single web derivative. Still
       to do: other vector layers; restricted layers via presigned (separate from
@@ -284,85 +279,24 @@ the threshold-exceedance engine generic and keep the insurance vocabulary
       copy shared by the Node dev server and the prod Worker — so this is now
       only the server↔browser half of the problem.
 
-## Frontend — TerriaJS dashboard & STAC Browser (FROZEN at demoable)
+## Frontend — STAC Browser (FROZEN at demoable)
 
-**Frozen 2026-07-10** — kept as the "we also integrate with PhilSA's existing
-Terria stack" exhibit; already demoable (branded, STAC-driven, admin boundaries,
-split-screen compare). No new feature work; items below are parked, not
-abandoned. Fixes only if a demo breaks.
+**Frozen 2026-07-10** — already demoable (PhilSA-branded, pointed at our STAC
+API). No new feature work; items below are parked, not abandoned. Fixes only if
+a demo breaks.
 
 - [x] Stand up STAC Browser end-to-end against the local API
 - [x] PhilSA-brand the catalog: STAC Browser (`config.js` — title, logo, favicon,
       blue accent) locked to our API only (`allowExternalAccess: false`); STAC API
       landing/docs branded via `STAC_FASTAPI_*` env in `compose.yml`
-- [~] TerriaJS dashboard (`dashboard/`, TerriaMap template, terriajs 8.12.2):
-      mirrors PhilSA's own stack but driven by **our STAC + TiTiler**. A
-      re-runnable generator (`build_catalog_from_stac.py`) reads the live STAC API
-      and emits a Terria catalog of `url-template-imagery` members tiled on the fly
-      by TiTiler; same-date granules are combined into one layer per date via
-      MosaicJSON. **Done:** S2 NDVI / true-colour, S1 SAR, ESRI LULC + Diwata-2
-      groups; per-layer workbench legends; PhilSA branding; 2D default; info-only
-      groups (skysat/planetscope); split-screen date compare. **STAC metadata is
-      now surfaced** — each group carries `info` sections (About / Coverage /
-      Source & licence) + a `metadataUrls` link to the STAC collection, and each
-      item shows acquisition date, platform/instrument, and a thumbnail where
-      present. **Admin boundaries (adm0–adm4, all open)** are in the catalog as
-      `mvt` outlines streaming the **same R2 PMTiles the webmap uses** (Terria's
-      Protomaps provider range-reads `.pmtiles`; click-to-read attributes), off by
-      default — no more local GeoJSON. NDVI stretch aligned to the webmap
-      (`-0.2…0.9`). Parked items:
-  - [~] **Admin-area filter (search → fly + spotlight)** — *built; needs in-browser
-        eyeball.* A custom **`LocationSearchProvider`**
-        (`lib/Models/PhilSAAdminSearchProvider.ts`, registered in `index.js`,
-        configured in `config.json`) searches a generated **name→bbox index**
-        (`build_admin_search_index.py` → `ph_admin_index.json`, ~1,700 adm0–adm3
-        units); picking a result flies the camera **and** drops a **spotlight focus
-        mask** (`philsaAdminFocusMask.ts`) that dims everything outside the unit so
-        the raster layers read only inside it (workbench "Focus area" item — toggle
-        opacity / remove to clear; unit geometry from on-demand
-        `ph_admin_geom_adm{0..3}.json`). Compiles + bundles cleanly. Still to do:
-        verify render in-browser; optionally a **true raster clip** (server-side
-        TiTiler polygon mask) instead of the visual dim.
-  - [x] **Tile-serving robustness** — *(shared infra, not dashboard-specific;
-        see Deployment / hosting → Tile-serving robustness for the full item —
-        `mosaic_tile_url` here now emits `s3://` too. Done 2026-07-17.)*
-  - [ ] **Deploy / host** the dashboard (static `gulp release` build behind a
-        URL; wire `serverconfig.json` proxy + config for the hosted STAC/TiTiler,
-        not just `localhost`) — *see the Deployment / hosting section below.*
-  - [ ] **Daily catalog refresh (cron)** — re-run `build_catalog_from_stac.py`
-        once a day so new STAC items appear in the dashboard automatically (the
-        generator is idempotent, so a scheduled re-run is safe). Best tech depends
-        on the deploy model above:
-    - **Co-located on the compose stack (recommended for the POC):** a small
-          **cron sidecar container** — base `python:3-slim` + `supercronic`
-          (container-friendly cron with proper logging; plain `crond` is awkward in
-          containers for env/stdout) — sharing the STAC network and the dashboard
-          `wwwroot` volume, regenerating `wwwroot/init/philsa.json` in place. No
-          public STAC needed; reaches `:8082` over the internal network.
-    - **Single VM host:** a **systemd timer** (preferred over raw crontab for
-          logging/retries via `journalctl`) running the script on a schedule.
-    - **Static site built + deployed from CI (chosen):** a **GitHub Actions
-          scheduled workflow** (`on: schedule`) that regenerates, commits
-          `philsa.json`, and redeploys — viable once STAC is **publicly reachable**
-          from the runner (delivered by the Deployment section below).
-          *(low effort once hosting is settled)*
-  - [ ] **Animated time-slider** — needs a time-aware service (WMS/WMTS facade)
-        over the date stack; today only split-screen compare *(blocked: WMS infra)*
-  - [~] **Click-to-read pixel values** — vector layers (admin boundaries) are
-        click-readable now; **raster** pixel read-out still needs WMS
-        `GetFeatureInfo` or a TiTiler `/cog/point` hook *(blocked: WMS infra)*
-  - [ ] **Restricted/authenticated layers** in the catalog *(blocked: needs the
-        private bucket + auth — see Auth & governance)*
-  - [ ] Surface the **flood layers** in the dashboard (our derived S1 + EMS/GFM).
-        S1 `sentinel1-flood` is now cataloged (1 scene) but not yet added to
-        `build_catalog_from_stac.py`'s `RASTER` map; EMS/GFM not built yet.
-  - [ ] When picking a date in the dropdown, show the same date or nearest available in the other layers (NDVI, SAR, LULC)
+- [x] **Tile-serving robustness** — *(shared infra; see Deployment / hosting →
+      Tile-serving robustness for the full item. Done 2026-07-17.)*
 
 ## Deployment / hosting (free-tier)
 
 Goal: lift the whole POC off `localhost` onto free-tier hosting for a shareable
 demo. The stack is a managed DB + two Docker web services (STAC API, TiTiler) +
-three static frontends + R2. Component → free-tier pick:
+two static frontends + R2. Component → free-tier pick:
 
 - [x] **pgSTAC database (Postgres + PostGIS)** — **live on Neon (prod).** pgSTAC
       is pure SQL schema + functions, so any Postgres ≥14 with PostGIS can host it
@@ -394,15 +328,13 @@ three static frontends + R2. Component → free-tier pick:
     - [x] `pipelines/02-silver/build_raster_mosaics.sh` rewrites each COG href
           to `s3://$R2_BUCKET/<key>` before `MosaicJSON.from_urls`, so emitted
           mosaicjson files reference COGs via the authenticated endpoint.
-    - [x] Mosaic consumers (`webmap/src/config.ts` `mosaicUrlFor`,
-          `dashboard/build_catalog_from_stac.py` `mosaic_tile_url`) point
+    - [x] Mosaic consumers (`webmap/src/config.ts` `mosaicUrlFor`) point
           TiTiler at the `s3://` mosaicjson URL; the webmap's browser-side
           existence probe stays on the public r2.dev URL
           (`mosaicPublicUrlFor`) since the browser can't read `s3://`.
     - [x] Per-item COG tile URLs fed to TiTiler get the same r2.dev → `s3://`
           rewrite (`webmap/src/lib/titiler.ts` `toR2S3Url`, reused by
-          `stats.ts`'s `/cog/statistics` calls; `dashboard/build_catalog_from_stac.py`
-          `to_r2_s3_url`), leaving non-R2 hrefs (ESRI LULC's Azure blob,
+          `stats.ts`'s `/cog/statistics` calls), leaving non-R2 hrefs (ESRI LULC's Azure blob,
           Diwata-2's GCS COG) untouched. STAC asset hrefs in the catalog and
           all other client-side fetches (PMTiles, `ph_admin_index.json`,
           GeoParquet) intentionally stay on the public r2.dev base.
@@ -424,22 +356,12 @@ three static frontends + R2. Component → free-tier pick:
           longer touch `r2.dev`; only deliberate browser-side fetches
           (PMTiles, `ph_admin_index.json`, mosaic existence probe) remain on
           the public host.
-- [~] **Static frontends — TerriaJS dashboard, MapLibre webmap, STAC Browser** —
-      **webmap + STAC Browser live as Render static sites** (repointed to the
-      gateway URLs; auto-deploy + `buildFilter` on). Dashboard still local
-      (frozen). Alternative host for the statics is **Cloudflare Pages** (generous
-      free tier, unlimited bandwidth, **same vendor as R2**) or Netlify / Vercel /
-      GitHub Pages. For the dashboard, prefer a pure-static `gulp release` relying
-      on `corsDomains` + CORS headers from the hosted STAC/TiTiler, so the
-      `terriajs-server` proxy isn't needed; if a proxy turns out unavoidable, run
-      `terriajs-server` as a small Render service too.
+- [x] **Static frontends — MapLibre webmap + STAC Browser** — both **live as
+      Render static sites** (repointed to the gateway URLs; auto-deploy +
+      `buildFilter` on). Alternative host for the statics is **Cloudflare Pages**
+      (generous free tier, unlimited bandwidth, **same vendor as R2**) or
+      Netlify / Vercel / GitHub Pages.
 - [x] **R2 object storage** — already on Cloudflare R2 free tier (10 GB).
-- [ ] **Catalog refresh via GitHub Actions** (preferred) — an `on: schedule`
-      workflow regenerates `philsa.json` against the **public** STAC URL (reachable
-      once the STAC API is deployed above), commits it, which triggers the
-      Cloudflare Pages rebuild. Supersedes the compose cron-sidecar once hosted;
-      store STAC/TiTiler URLs as repo **variables** (the generator reads nothing
-      secret). *(See "Daily catalog refresh" under the dashboard above.)*
 
 Caveats to design around (none block a POC demo): free web tiers **sleep on idle**
 (cold starts); Supabase free DB **pauses** on inactivity (Neon doesn't); keep

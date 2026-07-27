@@ -207,8 +207,8 @@ function collectOuterRings(g: Geometry | null): Position[][] {
 // each uploaded outer ring punched out as a hole. MapView renders it above the
 // raster stack (MaskLayer, pinned under `vector-slot`) so imagery reads only
 // inside the boundaries - MapLibre can't cut raster tiles to a polygon, so this
-// inverse mask is the client-side clip, same idea as the TerriaJS dashboard's
-// spotlight focus mask. Returns undefined when the upload contains no polygons
+// inverse mask is the client-side clip (a "spotlight" on the area of interest).
+// Returns undefined when the upload contains no polygons
 // (nothing to clip to). An ordinary store layer: the panel's opacity slider sets
 // the dimming strength, unchecking or removing it un-clips.
 export function buildClipMaskLayer(

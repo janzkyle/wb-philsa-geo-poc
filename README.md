@@ -3,7 +3,7 @@
 A proof-of-concept geospatial data platform for the Philippine Space Agency
 (PhilSA) / World Bank: a STAC-based catalog that **references** Earth-
 observation assets in place rather than re-hosting them, fronted by a STAC
-Browser, a MapLibre webmap, and a TerriaJS dashboard.
+Browser and a MapLibre webmap.
 
 The end-to-end target architecture is in **`poc-architecture.mmd`** (render the
 Mermaid diagram to see how the pieces connect). Contributing or working in this
@@ -133,8 +133,8 @@ inside the submodule, push to `origin`, then record the new gitlink as above.
   restricted assets.
 - ◐ **Frontend.** STAC Browser is up; the MapLibre webmap (rebuilt **AI-first**:
   a chat assistant drives the same layer store as the manual panel via STAC
-  tools — see `webmap/README.md`) and TerriaJS dashboard render the open layers
-  via TiTiler. Next: restricted/authenticated layers.
+  tools — see `webmap/README.md`) renders the open layers via TiTiler. Next:
+  restricted/authenticated layers.
 - 🔜 **Auth & governance.** Identity provider + RBAC, collection-level access
   control, and the open/restricted data-sharing policy.
 
