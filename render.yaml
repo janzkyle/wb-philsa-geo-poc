@@ -136,6 +136,15 @@ services:
         value: "TRUE"
       - key: TITILER_API_CORS_ORIGINS
         value: "*"
+      # Concurrent tile renders. A zoomed-out map makes MapLibre request a whole
+      # tile grid at once; each render peaks ~180 MB, so unbounded concurrency
+      # OOM-kills this service (free/starter = 512 MB). 1 keeps it alive by making
+      # the burst queue — slower under load, never a 5xx.
+      # Bump this WITH `plan:` above if you upgrade: ~2 on standard (2 GB/1 CPU),
+      # ~3 on pro (4 GB/2 CPU). CPU bounds it as much as RAM — renders are
+      # CPU-bound, so more memory alone doesn't buy more concurrency.
+      - key: TITILER_MAX_CONCURRENT_RENDERS
+        value: "1"
 
   # ------------------------------------------------------------ STAC Browser --
   # Static site: type=web + runtime=static. staticPublishPath is relative to the

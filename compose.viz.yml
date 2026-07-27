@@ -44,6 +44,10 @@ services:
       # CORS allows GET only by default; the webmap's time-series window
       # average POSTs GeoJSON AOIs to /cog/statistics.
       TITILER_API_CORS_ALLOW_METHODS: "GET,POST"
+      # Local dev has far more RAM than the 512 MB prod tier, so render in
+      # parallel and keep the map snappy. Prod sets its own value in render.yaml;
+      # the image defaults to 1 (safe anywhere) when neither sets it.
+      TITILER_MAX_CONCURRENT_RENDERS: "8"
     ports:
       - "8083:8000"
     restart: unless-stopped

@@ -63,7 +63,6 @@ version. Keep both honest.
   - [x] Catalog silver COGs in pgSTAC by reference (gold,
         `pipelines/03-gold/catalog_silver.py`): S2 NDVI, S2 true-colour, S1 VV
         backscatter as STAC collections + items (asset hrefs → public R2)
-    - [ ] also catalog ph-admin-boundaries GeoParquet (vector item) — follow-on
 - [ ] **CopPhil S3 — Sentinel-3 drought / heat-stress** (`COP`): the insurance-facing
       complement to the S1 flood + S2 NDVI layers. Ingest SLSTR LST
       (`SL_2_LST`, land-surface temperature → drought/heat-stress index) and
