@@ -17,12 +17,16 @@ environments.
 
 ## Repository layout
 
-| Path                                  | What it is                                                                                                                                                                                                                     |
-| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `pipelines/`                          | All data pipeline scripts, organized by medallion tier (`01-bronze` / `02-silver` / `03-gold`) plus a `reference/` lane for by-reference loaders: PhilSA mirror, ESRI LULC, CopPhil raw-Sentinel download, and the Sentinel silver derivatives (NDVI, true-colour, SAR backscatter, flood). See `pipelines/README.md`. |
-| `poc-architecture.mmd`                | Mermaid diagram of the target architecture.                                                                                                                                                                                    |
-| `stac-fastapi-pgstac/`                | **Git submodule** — the catalog API (brings up API + Postgres/pgSTAC locally). Points at our fork `janzkyle/wb-philsa-geo-stac-fastapi-pgstac`.                                                                                |
-| `stac-browser/`                       | **Git submodule** — the catalog explorer UI. Points at our fork `janzkyle/wb-philsa-geo-stac-browser`.                                                                                                                         |
+| Path                   | What it is                                                                                                                                                                |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pipelines/`           | All data pipeline scripts, filed by medallion tier (`01-bronze` / `02-silver` / `03-gold`), plus a `reference/` lane for by-reference loaders. See `pipelines/README.md`. |
+| `webmap/`              | The MapLibre webmap and chat assistant — one Zustand store, driven by both a layer panel and AI tools. See `webmap/README.md`.                                            |
+| `deploy/`              | Free-tier deployment: the Neon database, the Render Blueprint, the Worker chat backend, and R2/TiTiler config. See `deploy/DEPLOYMENT.md`.                                |
+| `partner-template/`    | Forkable **single-file** starter (`index.html`, no build step) for a partner agency. Auto-published to GitHub Pages.                                                      |
+| `poc-architecture.mmd` | Mermaid diagram of the target architecture.                                                                                                                               |
+| `stac-fastapi-pgstac/` | **Git submodule** — the catalog API (brings up API + Postgres/pgSTAC locally). Points at our fork `janzkyle/wb-philsa-geo-stac-fastapi-pgstac`.                           |
+| `stac-browser/`        | **Git submodule** — the catalog explorer UI. Points at our fork `janzkyle/wb-philsa-geo-stac-browser`.                                                                    |
+| `eodata/`              | Local cache of raw Sentinel scenes downloaded from CopPhil — **gitignored**, never committed.                                                                             |
 
 ## Setup
 

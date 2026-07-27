@@ -3,7 +3,7 @@
 A **forkable, single-file** starting point for an agency (crop-insurance,
 agriculture, disaster-response, weather, a local government…) that wants its own
 web map showing **PhilSA's satellite layers under its own data**. Not a demo to
-admire - a scaffold to clone and make yours.
+admire — a scaffold to clone and make yours.
 
 It's one `index.html` with no build step: open it in a browser and it works.
 Next to it, **`guide.html`** is the full developer integration guide as a
@@ -24,7 +24,7 @@ remote, so `file://` works too).
 ## Deploy it (GitHub Pages)
 
 Because it's one self-contained `index.html` with only absolute/CDN URLs, it
-hosts anywhere static - including GitHub Pages.
+hosts anywhere static — including GitHub Pages.
 
 This repo ships a workflow (`.github/workflows/deploy-partner-template.yml`) that
 publishes **only** the `partner-template/` folder. To turn it on:
@@ -32,22 +32,22 @@ publishes **only** the `partner-template/` folder. To turn it on:
 1. In your fork: **Settings → Pages → Build and deployment → Source →
    GitHub Actions**.
 2. Push a change under `partner-template/` to `main` (or run the workflow
-   manually from the **Actions** tab - it has a `workflow_dispatch` trigger).
+   manually from the **Actions** tab — it has a `workflow_dispatch` trigger).
 3. The site publishes at `https://<user>.github.io/<repo>/`; the workflow prints
    the exact URL in its summary.
 
-No subpath fix-ups are needed - every URL in `index.html` is absolute, so it
+No subpath fix-ups are needed — every URL in `index.html` is absolute, so it
 works the same served from a repo subpath as it does locally.
 
-## Make it yours - two edits
+## Make it yours — two edits
 
 Both are at the top of `index.html`, clearly marked:
 
-1. **`MY_DATA`** - ships as `null` (the starter shows PhilSA's layers only). Set
+1. **`MY_DATA`** — ships as `null` (the starter shows PhilSA's layers only). Set
    it to your own GeoJSON FeatureCollection (farms, assets, claims, road
    segments…) and it's drawn on top of the satellite layers. That's what turns
    this into *your* agency's map.
-2. **`PHILSA`** - the STAC + tiler base URLs. Leave as-is to use the current
+2. **`PHILSA`** — the STAC + tiler base URLs. Leave as-is to use the current
    endpoints; if PhilSA gives you gateway URLs (`…workers.dev`), swap only the
    hosts.
 
@@ -57,9 +57,9 @@ opacity) already works and needs no changes.
 ## What it demonstrates
 
 - Discovering PhilSA layers and dates via **STAC** (`/collections`, `/search`).
-- Rendering them as **tiles** through TiTiler - with the exact render params per
+- Rendering them as **tiles** through TiTiler — with the exact render params per
   layer, so it looks identical to the PhilSA webmap.
-- Drawing **your own vectors on top** (via `MY_DATA`) - the whole integration
+- Drawing **your own vectors on top** (via `MY_DATA`) — the whole integration
   pattern in ~40 lines of real logic. The `MY_DATA` block in `map.on("load")` is
   also the hook where you'd wire a parcel-click popup showing your attributes, or
   a per-parcel zonal-stats call to your backend (recipe in the integration
@@ -67,19 +67,19 @@ opacity) already works and needs no changes.
 
 ## Where to go deeper
 
-- **`guide.html`** (also linked from the map's panel) - the full developer guide
+- **`guide.html`** (also linked from the map's panel) — the full developer guide
   as a webpage: every collection's render params, Leaflet/QGIS/Python recipes,
   per-parcel zonal statistics, and the rules of the road (read-only, rate limits,
   attribution, the flood-is-a-proxy caveat). It embeds a verbatim copy of
   **`../INTEGRATION_GUIDE.md`** (the canonical source, kept in the repo root);
   the re-embed command lives in `guide.html`'s header comment.
-- **The PhilSA webmap** - the full-featured reference app if you want to see the
+- **The PhilSA webmap** — the full-featured reference app if you want to see the
   layers in a richer UI before wiring your own.
 
 ## Notes
 
 - **No PhilSA key needed** for these open layers; the endpoints are read-only.
-- **Cold starts:** the free-tier services sleep after idle - the first tile
+- **Cold starts:** the free-tier services sleep after idle — the first tile
   request can take ~30–60 s. The page shows a "loading…" status; just wait.
 - **CDN vs bundling:** this template loads MapLibre from a CDN for zero-setup. If
   your agency bundles its frontend, install `maplibre-gl` from npm instead and
@@ -90,7 +90,7 @@ opacity) already works and needs no changes.
   page prefers it (one tile source); it probes the mosaic with a browser `HEAD`
   first. The public R2 bucket doesn't currently send CORS headers, so that probe
   is blocked in the browser and the page falls back to rendering the date's
-  individual COGs - correct, just a few more sources. Run
+  individual COGs — correct, just a few more sources. Run
   `deploy/r2/apply-cors.sh` (PhilSA side, one-time) to add a read CORS policy to
   the bucket and activate the single-source fast-path; tiles themselves render
   either way.

@@ -61,7 +61,7 @@ The full CopPhil path is the clean medallion example:
 | **Sentinel-1 SAR** *(silver)* | Bronze S1 IW GRD, VV polarization | GCP warp → EPSG:4326, amplitude → dB → Float32 COG | Backscatter base layer (**not** a validated flood product); served grayscale (15…55 dB) |
 | **Sentinel-1 flood** *(silver)* | Silver S1 VV backscatter (dB) COG | Dark-water threshold (`sigma` = mean−k·std default; `otsu`/`fixed` options), block-wise → Byte mask (1=water, 0=land, 2=perm-water, 255=nodata) | POC flood **proxy** (**not** validated; uncalibrated dB); pairs with Copernicus EMS/GFM; served via flood colormap |
 | **Sentinel-1 VH/VV ratio** *(silver)* | Bronze S1 IW GRD, both polarisations | GCP warp both pols to one grid → `VH_dB − VV_dB` → Float32 COG | Radar vegetation index (rises with crop canopy, works through cloud — the SAR fallback for parametric triggers); ratio cancels the per-scene gain of the uncalibrated dB, so the fixed stretch reads consistently; served `ylgn` |
-| **STAC catalog** *(gold)* | All silver COGs already in R2 | `catalog_silver.py` registers collections + items **by reference** (reading COG metadata over the authenticated R2 endpoint), with render-extension hints (rescale + colormap) plus standards metadata — `providers`, `summaries`, `item_assets`, curated band/`classification` metadata, and `processing:lineage` + `rel=derived_from` provenance; **requires the STAC API's transactions extension enabled** (`ENABLE_TRANSACTIONS_EXTENSIONS=true`) or POST/PUT return 405 | What users discover/consume via the STAC API |
+| **STAC catalog** *(gold)* | All silver COGs already in R2 | `catalog_silver.py` registers collections + items **by reference**, reading COG metadata over the authenticated R2 endpoint; adds render hints + standards metadata. Needs a writable target — see [`../AGENTS.md`](../AGENTS.md) | What users discover/consume via the STAC API |
 
 The five silver Sentinel products are **single-/multi-band COGs in R2**; they're
 visualized through **TiTiler** (repo-root [`compose.viz.yml`](../compose.viz.yml),
@@ -238,25 +238,18 @@ in the header either way:
 - **Python** for scripts with real logic — HTTP auth, JSON/OData parsing, SigV4,
   retries: `mirror_philsa_catalog.py`, `download_copphil_eodata.py`.
 
-## Conventions (see [`../AGENTS.md`](../AGENTS.md) for the full set)
+## Conventions
 
-- **Catalog by reference** wherever possible; only the bronze→silver→gold path
-  re-hosts bytes (derived assets to R2).
-- **Idempotent upserts** into pgSTAC: POST, then PUT on `409 Conflict`.
-- **Standards-conformant, schema-valid metadata.** Records must pass the STAC
-  extension schemas — check with the vendored validator:
-  `stac-browser/node_modules/.bin/stac-node-validator <file-or-url>`. In practice:
-  collections carry `providers`, `summaries`, and `item_assets` (the last is
-  *required* by the render extension — omit it and the collection fails
-  validation); items carry a **non-null** `datetime` (pgSTAC drops a null on
-  output, which then fails the core item schema — use a midpoint and keep the
-  real span in `start`/`end_datetime`), plus `processing:lineage` and only
-  **curated** band metadata — declare the `eo`/`classification` extensions you
-  actually use, and don't ship gdalinfo's guessed `eo:bands` (`b1`/`Gray`).
-  Provenance is explicit: derived items link `rel=derived_from` to their source,
-  and the PhilSA mirror adds `rel=via` to the upstream record and normalizes
-  upstream `eo:bands.common_name` to the EO vocabulary.
-- **Skip-and-log**, don't fail, on missing / out-of-bbox / already-present items.
-- **Secrets via env** (single repo-root `.env`), never committed.
-- Scripts resolve repo-relative paths (e.g. `.env`, `eodata/`) to the **repo
-  root**, so they run from any working directory.
+The full rule set lives in **[`../AGENTS.md`](../AGENTS.md)** — catalog-by-
+reference, idempotent POST→PUT-on-409 upserts, skip-and-log, secrets handling,
+repo-root path resolution, and the four STAC-write traps (read-only prod,
+non-null `datetime`, required `item_assets`, curated band metadata) together with
+the vendored validator command. Read it before adding a script: it is the single
+source of truth, and this section deliberately doesn't restate it.
+
+Two details specific to the loaders here:
+
+- **Skip-and-log covers *already-present* items**, not just missing or
+  out-of-bbox ones — re-running a loader is the normal case and must stay quiet.
+- **The PhilSA mirror normalizes upstream `eo:bands.common_name`** to the EO
+  vocabulary as it copies records, so mirrored bands match our own.
