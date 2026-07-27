@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 """
-build_admin_search_index.py — emit a small name->bbox index for the dashboard's
-PhilSA admin-area search (the "fly to a region/province" filter).
+build_admin_search_index.py — emit a small name->bbox index for PhilSA
+admin-area search ("fly to a region/province").
 
-Why a separate index: the boundaries themselves render from PMTiles (mvt), but
-Terria's native feature-search is wired only to 3D Tiles, so the custom
-`philsa-admin-search-provider` needs a lightweight lookup of {name, tier, bbox}
-to zoom the camera. This derives that index from the canonical admin GeoParquet
-(silver tier) — it is metadata, not geometry, and is fully regenerable.
+Why a separate index: the boundaries themselves render from PMTiles (mvt), which
+is a tile format, not a queryable one — resolving a *name* to a camera target
+needs a lightweight lookup of {name, tier, bbox}. This derives that index from
+the canonical admin GeoParquet (silver tier) — it is metadata, not geometry, and
+is fully regenerable. The webmap's AI `resolve_region` tool reads the published
+`ph_admin_index.json` (see `webmap/src/config.ts` `ADMIN_INDEX_URL`).
 
 Levels: adm0 (country) .. adm3 (city/municipality). adm4 (≈42k barangays) is
 intentionally excluded — too many to be a usable search list.
@@ -17,10 +18,10 @@ intentionally excluded — too many to be a usable search list.
     # or straight from R2 over /vsis3 (needs repo-root .env creds):
     python3 build_admin_search_index.py
 
-Output: wwwroot/data/{ph_admin_index,ph_admin_geom_adm0..3}.json
+Output: $OUT_DIR/{ph_admin_index,ph_admin_geom_adm0..3}.json — OUT_DIR defaults
+to a fresh temp dir (same convention as build_ph_admin_pmtiles.sh's WORKDIR).
 
-The dashboard serves these from R2 (see the search provider's `url` /
-`geomBaseUrl` in wwwroot/config.json), so on completion this uploads them to
+R2 is the real destination, so on completion this uploads them to
 `s3://$R2_BUCKET/$DST_PREFIX/` via the `aws` CLI. Auto-upload is skipped (with a
 notice) when R2 creds / the aws CLI are absent; pass --no-upload to skip it
 explicitly, or set UPLOAD=0.
@@ -30,6 +31,7 @@ import os
 import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 
@@ -58,7 +60,8 @@ def load_env_file(path):
 # Load repo-root .env before reading any R2 config below (same as the pipelines).
 load_env_file(os.environ.get("ENV_FILE", os.path.join(_repo_root(), ".env")))
 
-OUT = Path(__file__).parent / "wwwroot" / "data" / "ph_admin_index.json"
+OUT_DIR = Path(os.environ.get("OUT_DIR") or tempfile.mkdtemp(prefix="ph-admin-index-"))
+OUT = OUT_DIR / "ph_admin_index.json"
 
 # level -> (human tier label, simplify tolerance in degrees for the bbox pass)
 LEVELS = {
@@ -72,7 +75,8 @@ SRC_DIR = os.environ.get("SRC_DIR", "").rstrip("/")
 R2_BUCKET = os.environ.get("R2_BUCKET", "")
 R2_ACCOUNT_ID = os.environ.get("R2_ACCOUNT_ID", "")
 SRC_PREFIX = os.environ.get("SRC_PREFIX", "02-silver/ph-admin-boundaries")
-# Where the generated JSON is uploaded — must match config.json's url/geomBaseUrl.
+# Where the generated JSON is uploaded — must match the consumers' base URL
+# (webmap `ADMIN_INDEX_URL` in src/config.ts).
 DST_PREFIX = os.environ.get("DST_PREFIX", SRC_PREFIX).strip("/")
 
 

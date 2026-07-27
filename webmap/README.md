@@ -26,7 +26,9 @@ drift apart:
   `deploy/chat/`; see `deploy/DEPLOYMENT.md` Step 4b).
 
 Tools: `list_collections` · `resolve_region` (name→bbox via the R2
-`ph_admin_index.json` the dashboard search uses) · `search_catalog` (pgSTAC
+`ph_admin_index.json` built by
+`pipelines/02-silver/ph-admin-boundaries/build_admin_search_index.py`) ·
+`search_catalog` (pgSTAC
 `/search`; on zero hits returns each collection's available dates) ·
 `get_available_dates` · `add_layers` · `remove_layers` · `update_layer` ·
 `set_view`.

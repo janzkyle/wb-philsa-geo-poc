@@ -57,7 +57,7 @@ PHILSA_CONTACTS = [{
 }]
 
 # MULA true-colour render: bands 4/2/1 of the borrowed 9-band TOA COG (matches the
-# dashboard's Diwata-2 style so the placeholder renders identically).
+# Diwata-2 style so the placeholder renders identically).
 MULA_RENDER = {
     "true-color": {
         "title": "True colour (5 m)",

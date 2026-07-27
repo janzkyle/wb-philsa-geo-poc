@@ -21,11 +21,6 @@ Everything except the database is described in **`../render.yaml`** (one Bluepri
 so the app tier deploys in a single action. The database is on Neon and is
 driven by the scripts in `scripts/`.
 
-> **Out of scope (for now):** the TerriaJS **dashboard** is a heavy CKAN/Terria
-> build that doesn't fit a free static tier cleanly. It's intentionally left out
-> of the Blueprint; deploy it separately later. The STAC Browser + webmap already
-> cover the "explore the catalog" demo surface.
-
 ### Why Render for the app tier
 One Blueprint file provisions all four app services, secrets are entered once and
 never touch git, and the two backends run the projects' **own** Dockerfiles, so
