@@ -15,9 +15,17 @@ from contextlib import asynccontextmanager
 import anyio.to_thread
 import uvicorn
 
+from gateway_guard import GatewayGuard
 from titiler.application.main import app
 
 MAX_CONCURRENT_RENDERS = int(os.environ.get("TITILER_MAX_CONCURRENT_RENDERS", "1"))
+
+# Origin guard — see gateway_guard.py for the full rationale. In short: this
+# service can read the PRIVATE R2 bucket and Render gives it a public hostname,
+# so without a shared secret from the edge gateway anyone could render restricted
+# imagery here and bypass every access check. Unset secret == fail open.
+GATEWAY_SHARED_SECRET = os.environ.get("GATEWAY_SHARED_SECRET", "")
+
 
 # The limiter is per-event-loop, so it can only be set once the loop is running.
 # Wrapping the existing lifespan (rather than @app.on_event, which is deprecated)
@@ -37,6 +45,16 @@ async def _lifespan(fastapi_app):
 
 app.router.lifespan_context = _lifespan
 
+# Wrap AFTER the lifespan swap above, so TiTiler's own startup still runs: the
+# guard passes non-HTTP scopes (including "lifespan") straight through.
+served_app = GatewayGuard(app, GATEWAY_SHARED_SECRET)
+
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=int(os.environ["PORT"]))
+    print(
+        "gateway guard: "
+        + ("ENFORCING (X-Gateway-Auth required)" if GATEWAY_SHARED_SECRET
+           else "OFF — GATEWAY_SHARED_SECRET unset, origin is publicly reachable"),
+        flush=True,
+    )
+    uvicorn.run(served_app, host="0.0.0.0", port=int(os.environ["PORT"]))

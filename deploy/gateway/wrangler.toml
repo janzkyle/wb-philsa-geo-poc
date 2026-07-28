@@ -47,6 +47,19 @@ head_sampling_rate = 1
 #
 # Only the STAC gateway signs URLs, so the tiles gateway needs no R2 secrets.
 #
+# ORIGIN_SHARED_SECRET (BOTH environments) is what proves to an origin that a
+# request came through this gateway. The origins get public *.onrender.com
+# hostnames, so without it anyone who knows the hostname skips every check here —
+# and TiTiler can read the private bucket. Set the same value as the origin's
+# GATEWAY_SHARED_SECRET (render.yaml):
+#
+#   wrangler secret put ORIGIN_SHARED_SECRET -e stac
+#   wrangler secret put ORIGIN_SHARED_SECRET -e tiles
+#
+# Safe rollout order: set it HERE first (the origin ignores the header until it
+# has the secret too), then set it on the origin. Reverse that and tiles 403 in
+# the window between.
+#
 # AUTH0_DOMAIN is intentionally EMPTY until the tenant exists. With it unset the
 # worker simply rejects bearer JWTs ("identity provider is not configured") and
 # falls back to anonymous — API-key auth keeps working, so the restricted tier is
