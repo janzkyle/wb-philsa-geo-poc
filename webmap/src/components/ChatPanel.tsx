@@ -13,8 +13,12 @@ import { CHAT_API } from "../config";
 import { executeTool } from "../ai/executeTool";
 import { useMapStore } from "../state/mapStore";
 
+// Keep these to things an anonymous visitor can actually do. Flood extent used
+// to lead this list, and now that it's in the restricted tier the first thing a
+// new user clicked was the one request that can't succeed — the assistant spent
+// ~10 tool calls discovering that before substituting a proxy layer.
 const SUGGESTIONS = [
-  "Show the flood extent on its latest available date",
+  "Show the latest radar imagery over Central Luzon",
   "What data is available over Central Luzon?",
   "Show NDVI in Nueva Ecija for June 2026",
 ];

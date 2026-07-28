@@ -6,6 +6,49 @@ import { STAC_API } from "../config";
 import { summarizePasses, type PassSummary } from "./passes";
 import type { Bbox } from "../state/mapStore";
 
+/**
+ * The catalog refused a collection because this caller may not see it — the
+ * restricted tier (see deploy/AUTH.md). A distinct type because "you need
+ * access" is a policy answer, not a fault: the UI should say so plainly rather
+ * than sit on a spinner forever or report an outage, and callers shouldn't
+ * retry. Anonymous browsers get this for restricted collections until a
+ * credential is passed on catalog requests.
+ */
+export class StacAccessDeniedError extends Error {
+  readonly status: number;
+  readonly collection?: string;
+
+  constructor(status: number, collection?: string) {
+    super(
+      collection
+        ? `Collection "${collection}" requires access (${status})`
+        : `Catalog request requires access (${status})`,
+    );
+    this.name = "StacAccessDeniedError";
+    this.status = status;
+    this.collection = collection;
+  }
+}
+
+/** Raise the right error type for a non-OK STAC response. */
+function throwForStatus(
+  status: number,
+  what: string,
+  collection?: string,
+): never {
+  if (status === 401 || status === 403) {
+    throw new StacAccessDeniedError(status, collection);
+  }
+  throw new Error(`STAC ${what} ${status}`);
+}
+
+/**
+ * Outcome of asking a collection for its dates. "restricted" is a policy
+ * answer, "unavailable" a genuine absence — the panel renders them differently
+ * so a governed layer never looks like a broken one.
+ */
+export type DateStatus = "loading" | "ready" | "restricted" | "unavailable";
+
 export interface StacItemLite {
   id: string;
   collection: string;
@@ -56,7 +99,7 @@ const COLLECTIONS_LIMIT = 1000;
 
 export async function listCollections(): Promise<CollectionLite[]> {
   const res = await fetch(`${STAC_API}/collections?limit=${COLLECTIONS_LIMIT}`);
-  if (!res.ok) throw new Error(`STAC /collections ${res.status}`);
+  if (!res.ok) throwForStatus(res.status, "/collections");
   const body = await res.json();
   interface StacCollection {
     id: string;
@@ -110,7 +153,9 @@ export async function searchStac(p: SearchParams): Promise<StacItemLite[]> {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
-  if (!res.ok) throw new Error(`STAC /search ${res.status}`);
+  // A search naming a restricted collection is refused outright; one naming
+  // none simply comes back filtered, so this only fires on an explicit ask.
+  if (!res.ok) throwForStatus(res.status, "/search", p.collections?.[0]);
   const fc = await res.json();
   return ((fc.features ?? []) as StacFeature[]).map((f) => toLite(f));
 }
@@ -126,7 +171,7 @@ export async function collectionItems(
     `${STAC_API}/collections/${collection}/items?limit=200`;
   for (let page = 0; url && page < 20; page++) {
     const res = await fetch(url);
-    if (!res.ok) throw new Error(`STAC ${collection}/items ${res.status}`);
+    if (!res.ok) throwForStatus(res.status, `${collection}/items`, collection);
     const fc = await res.json();
     out.push(
       ...((fc.features ?? []) as StacFeature[]).map((f) =>
