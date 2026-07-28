@@ -4,7 +4,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { DATA_SOURCE, RASTER_DEFS, stacBrowserCollectionUrl } from "../config";
-import { collectionDates } from "../lib/stac";
+import { collectionDates, StacAccessDeniedError } from "../lib/stac";
+import type { DateStatus } from "../lib/stac";
 import { buildRasterLayer, LayerBuildError } from "../lib/layers";
 import {
   buildClipMaskLayer,
@@ -19,23 +20,40 @@ import { useMapStore } from "../state/mapStore";
 import LegendView from "./LegendView";
 import TimeSeries from "./TimeSeries";
 
-// Available acquisition dates per temporal collection, fetched once.
+// Available acquisition dates per temporal collection, fetched once, plus how
+// that fetch turned out. The status matters because the panel lists collections
+// from the hardcoded RASTER_DEFS, not from the catalog: a collection the caller
+// may not see still gets a row, and without a status it sat on "loading dates…"
+// forever, which reads as a broken app rather than a governed layer.
 function useAvailableDates() {
+  const temporal = RASTER_DEFS.filter((d) => d.temporal);
   const [dates, setDates] = useState<Record<string, string[]>>({});
+  const [status, setStatus] = useState<Record<string, DateStatus>>(() =>
+    Object.fromEntries(temporal.map((d) => [d.id, "loading" as DateStatus])),
+  );
   useEffect(() => {
     let cancelled = false;
     for (const def of RASTER_DEFS.filter((d) => d.temporal)) {
       collectionDates(def.id)
         .then((ds) => {
-          if (!cancelled) setDates((s) => ({ ...s, [def.id]: ds }));
+          if (cancelled) return;
+          setDates((s) => ({ ...s, [def.id]: ds }));
+          setStatus((s) => ({ ...s, [def.id]: ds.length ? "ready" : "unavailable" }));
         })
-        .catch((e) => console.error(`dates(${def.id}):`, e));
+        .catch((e) => {
+          if (cancelled) return;
+          const denied = e instanceof StacAccessDeniedError;
+          // Being refused a restricted collection is the policy working, not a
+          // fault — don't log it as an error every page load.
+          if (!denied) console.error(`dates(${def.id}):`, e);
+          setStatus((s) => ({ ...s, [def.id]: denied ? "restricted" : "unavailable" }));
+        });
     }
     return () => {
       cancelled = true;
     };
   }, []);
-  return dates;
+  return { dates, status };
 }
 
 // Effective date for one collection's dropdown given the shared pick: the
@@ -53,6 +71,7 @@ function AddRow({
   label,
   temporal,
   dates,
+  status = "ready",
   sharedDate,
   onPickDate,
   onError,
@@ -61,6 +80,7 @@ function AddRow({
   label: string;
   temporal: boolean;
   dates: string[];
+  status?: DateStatus;
   sharedDate: string;
   onPickDate: (date: string) => void;
   onError: (msg: string) => void;
@@ -107,7 +127,23 @@ function AddRow({
             ))}
           </select>
         ) : (
-          <span className="muted">loading dates…</span>
+          <span
+            className="muted"
+            title={
+              status === "restricted"
+                ? `${label} is part of the PhilSA restricted tier. It needs a partner ` +
+                  `credential — open data stays available without one.`
+                : status === "unavailable"
+                  ? `No acquisitions are currently published for ${label}.`
+                  : undefined
+            }
+          >
+            {status === "restricted"
+              ? "restricted"
+              : status === "unavailable"
+                ? "unavailable"
+                : "loading dates…"}
+          </span>
         )
       ) : (
         <span className="muted">annual</span>
@@ -189,7 +225,7 @@ export default function LayerPanel() {
   const layers = useMapStore((s) => s.layers);
   const removeLayers = useMapStore((s) => s.removeLayers);
   const updateLayer = useMapStore((s) => s.updateLayer);
-  const dates = useAvailableDates();
+  const { dates, status: dateStatus } = useAvailableDates();
   const [error, setError] = useState("");
   const [legendOpen, setLegendOpen] = useState<Record<string, boolean>>({});
   const [addTab, setAddTab] = useState<"single" | "series">("single");
@@ -310,6 +346,7 @@ export default function LayerPanel() {
             label={d.label}
             temporal={d.temporal}
             dates={dates[d.id] ?? []}
+            status={dateStatus[d.id]}
             sharedDate={sharedDate}
             onPickDate={setSharedDate}
             onError={setError}
@@ -317,7 +354,7 @@ export default function LayerPanel() {
         ))}
       </div>
       <div hidden={addTab !== "series"}>
-        <TimeSeries dates={dates} onError={setError} />
+        <TimeSeries dates={dates} status={dateStatus} onError={setError} />
       </div>
       <UploadRow onError={setError} />
 
@@ -329,6 +366,7 @@ export default function LayerPanel() {
           label={d.label}
           temporal={d.temporal}
           dates={dates[d.id] ?? []}
+          status={dateStatus[d.id]}
           sharedDate={sharedDate}
           onPickDate={setSharedDate}
           onError={setError}

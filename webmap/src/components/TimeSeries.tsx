@@ -19,6 +19,7 @@ import {
   statsToCsv,
   type TemporalStats,
 } from "../lib/stats";
+import type { DateStatus } from "../lib/stac";
 import { useMapStore } from "../state/mapStore";
 import type { MapLayer } from "../state/mapStore";
 
@@ -33,9 +34,13 @@ const FRAME_LOOKAHEAD = 2;
 
 export default function TimeSeries({
   dates,
+  status = {},
   onError,
 }: {
   dates: Record<string, string[]>;
+  // Why a date list can be empty — see LayerPanel's useAvailableDates. Without
+  // it a restricted collection shows a spinner that never resolves.
+  status?: Record<string, DateStatus>;
   onError: (msg: string) => void;
 }) {
   const temporalDefs = RASTER_DEFS.filter((d) => d.temporal);
@@ -570,7 +575,13 @@ export default function TimeSeries({
             )}
           </div>
         ) : (
-          <span className="muted">loading dates…</span>
+          <span className="muted">
+            {status[collection] === "restricted"
+              ? "restricted - needs a partner credential"
+              : status[collection] === "unavailable"
+                ? "no acquisitions published"
+                : "loading dates…"}
+          </span>
         ))}
     </div>
   );
