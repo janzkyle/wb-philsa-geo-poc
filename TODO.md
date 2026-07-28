@@ -511,7 +511,7 @@ Operator guide + Auth0 tenant setup: **`deploy/AUTH.md`**.
       public bucket successfully (`206` with Range). **Blocked on one dashboard
       step:** the R2 API token in `.env` is scoped to `world-bank-philsa-geo`
       only, so URLs into the private bucket return `403 AccessDenied`. Issue a
-      token covering both buckets, re-set the Worker secrets, redeploy — see the
+      token covering both buckets — see the
       warning box in `deploy/AUTH.md`.
 - [ ] **Move the restricted bytes** — until this runs, the restriction is
       metadata only: `sentinel1-flood` COGs are still world-readable straight off

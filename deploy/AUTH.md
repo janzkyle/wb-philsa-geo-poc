@@ -232,14 +232,27 @@ Only the STAC gateway signs URLs, so the tiles gateway needs no R2 secrets.
 > it's a scope problem.
 >
 > **Fix (one time, dashboard only — there's no wrangler command for it):**
-> Cloudflare dashboard → **R2** → **Manage API Tokens** → create (or edit) a
-> token with **Object Read & Write** on *both* `world-bank-philsa-geo` and
-> `world-bank-philsa-geo-private`, then re-set the two secrets above and
-> `wrangler deploy -e stac`. Update the repo-root `.env` with the same pair so
-> `move-assets-private.sh` can write to the private bucket as well.
+> Cloudflare dashboard → **R2** → **Manage API Tokens** → give a token
+> **Object Read & Write** on *both* `world-bank-philsa-geo` and
+> `world-bank-philsa-geo-private`.
 >
-> Until that's done, `/assets/sign` returns a correctly-signed URL that R2 will
-> refuse. Nothing else in the auth layer depends on it.
+> **Whether you then have to touch the Worker depends on how you did it:**
+>
+> - **Widened the existing token's scope** — nothing else to do. R2 evaluates a
+>   token's permissions server-side on every request, so the same access-key pair
+>   simply starts working. The Worker's stored secrets are still correct.
+> - **Created a *new* token** — the key pair changed, so re-run the three
+>   `wrangler secret put` commands above with the new values.
+>
+> Either way there is **no redeploy**: `wrangler secret put` updates the live
+> Worker immediately. A `wrangler deploy` is only needed when *code* or a
+> `vars`/binding entry in `wrangler.toml` changes.
+>
+> Update the repo-root `.env` to match whichever token you use, so
+> `move-assets-private.sh` can write to the private bucket too.
+>
+> Until this is sorted, `/assets/sign` returns a correctly-signed URL that R2
+> refuses. Nothing else in the auth layer depends on it.
 
 ## What the gateway actually enforces
 
