@@ -19,7 +19,9 @@ REFERENCE_DIR = REPO_ROOT / "pipelines" / "reference"
 class PhilsaMirrorConfig(dg.Config):
     dry_run: bool = False  # report without writing
     only: str = ""  # space-separated collection ids; empty = all
-    max_items: int = 0  # cap items per collection; 0 = all
+    # Cap on items mirrored per collection. -1 leaves it to the script (20 most
+    # recent); 0 means EVERY item — ~387k upstream, hours of runtime.
+    max_items: int = -1
     collections_only: bool = False  # skip items
 
 
@@ -33,8 +35,10 @@ class EsriLulcConfig(dg.Config):
     group_name="reference",
     kinds={"python"},
     description=(
-        "PhilSA Satellite Imagery Catalog (Diwata-2, SkySat, PlanetScope) "
-        "mirrored into pgSTAC by reference (mirror_philsa_catalog.py)."
+        "PhilSA STAC (stac.infra.copphil.philsa.gov.ph — Copernicus Sentinel "
+        "collections) mirrored into pgSTAC by reference "
+        "(mirror_philsa_catalog.py). Collections in full; items capped per "
+        "collection — set max_items=0 to mirror every item."
     ),
 )
 def philsa_catalog(
@@ -47,7 +51,7 @@ def philsa_catalog(
         cmd.append("--dry-run")
     if config.only:
         cmd += ["--only", *config.only.split()]
-    if config.max_items:
+    if config.max_items >= 0:
         cmd += ["--max-items", str(config.max_items)]
     if config.collections_only:
         cmd.append("--collections-only")

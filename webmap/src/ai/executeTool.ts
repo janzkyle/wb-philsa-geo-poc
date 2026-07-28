@@ -102,13 +102,30 @@ export async function executeTool(
     switch (toolName) {
       case "list_collections": {
         const cols = await listCollections();
+        // Collections mirrored by reference from the PhilSA STAC keep their
+        // assets upstream (s3://eodata/…), so they're discoverable but not
+        // renderable here. They also outnumber the POC's own layers ~10:1, so
+        // they go last with a trimmed description and an explicit flag — the
+        // assistant should reach for a renderable layer first.
+        const own = cols.filter((c) => !c.mirroredFrom);
+        const mirrored = cols.filter((c) => c.mirroredFrom);
         return {
-          collections: cols.map((c) => ({
-            id: c.id,
-            title: c.title,
-            description: c.description?.slice(0, 200),
-            temporal_extent: c.extent?.temporal?.[0],
-          })),
+          collections: [
+            ...own.map((c) => ({
+              id: c.id,
+              title: c.title,
+              description: c.description?.slice(0, 200),
+              temporal_extent: c.extent?.temporal?.[0],
+            })),
+            ...mirrored.map((c) => ({
+              id: c.id,
+              title: c.title,
+              description: c.description?.slice(0, 100),
+              temporal_extent: c.extent?.temporal?.[0],
+              reference_only: true,
+              mirrored_from: c.mirroredFrom,
+            })),
+          ],
         };
       }
       case "resolve_region": {

@@ -6,8 +6,17 @@ version. Keep both honest.
 
 ## Ingest
 
-- [x] Mirror PhilSA Satellite Imagery Catalog into pgSTAC by reference
-      (`mirror_philsa_catalog.py`)
+- [x] Mirror the PhilSA STAC (`stac.infra.copphil.philsa.gov.ph`) into pgSTAC by
+      reference (`mirror_philsa_catalog.py`) — every collection, plus the 20 most
+      recent items each (the upstream holds ~387k). Mirrored collections carry
+      `philsa:mirrored_from` and sort **last** in the Browser so PhilSA's own
+      products lead the list.
+  - [x] Retired the legacy Satellite Imagery Catalog mirror (`diwata-2` /
+        `planetscope` / `skysat`, from `api.catalog.data.philsa.gov.ph`) and the
+        simulated MULA collection — all four dropped from local **and** prod
+        pgSTAC, and `pipelines/reference/mula-mock/` deleted. The legacy host is
+        still live, so `SRC=https://api.catalog.data.philsa.gov.ph
+        mirror_philsa_catalog.py` would rebuild the first three if ever needed.
 - [x] Load ESRI 10 m Annual LULC COGs by reference (`load_esri_lulc.sh`)
 - [x] Build PH admin-boundary GeoParquet adm0–adm4 (`ph-admin-geoparquet` skill)
 - [ ] **CopPhil S3 — raw Sentinel / EODATA** (`COP`): ingest raw Sentinel-1
@@ -333,8 +342,8 @@ two static frontends + R2. Component → free-tier pick:
           (`mosaicPublicUrlFor`) since the browser can't read `s3://`.
     - [x] Per-item COG tile URLs fed to TiTiler get the same r2.dev → `s3://`
           rewrite (`webmap/src/lib/titiler.ts` `toR2S3Url`, reused by
-          `stats.ts`'s `/cog/statistics` calls), leaving non-R2 hrefs (ESRI LULC's Azure blob,
-          Diwata-2's GCS COG) untouched. STAC asset hrefs in the catalog and
+          `stats.ts`'s `/cog/statistics` calls), leaving non-R2 hrefs (ESRI LULC's
+          Azure blob) untouched. STAC asset hrefs in the catalog and
           all other client-side fetches (PMTiles, `ph_admin_index.json`,
           GeoParquet) intentionally stay on the public r2.dev base.
     - [x] Redeploys landed (verified 2026-07-17): `philsa-titiler` runs the

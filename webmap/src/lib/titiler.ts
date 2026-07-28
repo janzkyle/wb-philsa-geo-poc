@@ -18,7 +18,7 @@ export const RASTER_TILE_SIZE = 512;
 // authenticated endpoint - r2.dev is rate-limited and not for production tile
 // traffic. Rewrite any r2.dev href to s3://<bucket>/<key> before handing it to
 // TiTiler as a url= parameter; hrefs on other hosts (e.g. the ESRI LULC Azure
-// blob, Diwata-2's GCS COG) pass through unchanged.
+// blob) pass through unchanged.
 export function toR2S3Url(href: string): string {
   try {
     const u = new URL(href);

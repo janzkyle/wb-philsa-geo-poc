@@ -9,7 +9,10 @@
 #   deploy/scripts/load-reference-data.sh <local|prod> --all           # mirror + esri + silver
 #
 # Loaders:
-#   • PhilSA mirror  — diwata-2 / planetscope / skysat (always).
+#   • PhilSA mirror  — the PhilSA STAC (stac.infra.copphil.philsa.gov.ph): every
+#                      collection by reference, plus the 20 most recent items
+#                      each. Always runs. See mirror_philsa_catalog.py for the
+#                      item cap and how to lift it.
 #   • ESRI 10 m LULC — --with-esri (or YEAR=). Needs GDAL ≥ 3.8.
 #   • Silver derivs  — --with-silver: sentinel1-sar, sentinel1-flood,
 #                      sentinel2-ndvi, sentinel2-truecolor, cataloged by reference

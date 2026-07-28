@@ -87,8 +87,16 @@ are kept in step with the `renders` metadata the catalog publishes.
 ```bash
 STAC=https://philsa-stac-gateway.philsa.workers.dev
 
-# 1. What layers exist?
-curl -s "$STAC/collections" | jq '.collections[].id'
+# 1. What layers exist? (the endpoint pages at 10 by default — ask for the lot)
+curl -s "$STAC/collections?limit=1000" | jq '.collections[].id'
+
+# Most of those are the PhilSA STAC mirrored in *by reference*: browsable here,
+# but their pixels live upstream (each carries "philsa:mirrored_from" plus a
+# rel=via link to the original record). PhilSA's own ready-to-render products
+# are the ones without that field — sort them to the front, or filter them out:
+curl -s "$STAC/collections?limit=1000&sortby=-philsa:mirrored_from" | jq '.collections[].id'
+curl -s "$STAC/collections?limit=1000" \
+  | jq -r '.collections[] | select(has("philsa:mirrored_from") | not) | .id'
 
 # 2. Which dates does NDVI have?
 curl -s "$STAC/collections/sentinel2-ndvi/items?limit=100" \

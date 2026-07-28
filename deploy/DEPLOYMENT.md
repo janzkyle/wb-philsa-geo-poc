@@ -175,7 +175,7 @@ API then serves those same rows read-only. Nothing writable is ever
 internet-reachable. Requires Docker.
 
 ```bash
-deploy/scripts/prod-ingest.sh prod                 # PhilSA mirror only: diwata-2 / planetscope / skysat
+deploy/scripts/prod-ingest.sh prod                 # PhilSA STAC mirror only (~104 Sentinel collections, by reference)
 deploy/scripts/prod-ingest.sh prod --with-silver   # + Sentinel silver: sentinel1-sar, sentinel1-flood, sentinel2-ndvi, sentinel2-truecolor
 deploy/scripts/prod-ingest.sh prod --with-esri     # + ESRI 10 m LULC (default year 2025; override with YEAR=)
 deploy/scripts/prod-ingest.sh prod --all           # mirror + esri + silver (the full catalog)

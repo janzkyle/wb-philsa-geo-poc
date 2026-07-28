@@ -29,8 +29,7 @@ pipelines/
 │       (open/restricted tagging … as built)
 └── reference/                 # by-reference loaders — NOT part of the medallion flow
     ├── philsa-catalog/
-    ├── esri-lulc/
-    └── mula-mock/             # SIMULATED MULA collection for demos (clearly flagged)
+    └── esri-lulc/
 ```
 
 ## What each tier means here
@@ -51,8 +50,7 @@ The full CopPhil path is the clean medallion example:
 
 | Dataset / product | Source (where from) | Processing (how) | Used for (where) |
 | --- | --- | --- | --- |
-| **PhilSA satellite catalog** *(reference)* | PhilSA's public STAC API | Mirrored **by reference** — STAC metadata copied into our pgSTAC, pixels left at source | Discovery of PhilSA imagery (Diwata-2, SkySat, PlanetScope) in one catalog |
-| **MULA mock** *(reference)* | Recent Diwata-2 scenes already in our catalog | **Simulated** MULA collection: same COG hrefs by reference, re-dated to the last N days; flagged `mula:simulated` + source item recorded | Demo of a near-real-time MULA feed (PhilSA's upcoming satellite — no real data exists yet) |
+| **PhilSA STAC** *(reference)* | PhilSA's public STAC API — `https://stac.infra.copphil.philsa.gov.ph/v1` (~104 Copernicus Sentinel collections) | Mirrored **by reference** — STAC metadata copied into our pgSTAC, pixels left at source (`s3://eodata/…` on CloudFerro). Collections in full; items **capped at the 20 most recent each** (~387k upstream), stamped `philsa:mirrored_from` | Discovery of everything PhilSA serves, in one catalog; the mirrored collections sort last in the Browser so PhilSA's own products lead |
 | **ESRI 10 m LULC** *(reference)* | Esri / Impact Observatory *Living Atlas* (public COGs) | Registered **by reference** (no download/re-host) | Land-cover context layer in the catalog |
 | **CopPhil Sentinel-1/2** *(bronze)* | CopPhil / CloudFerro OData catalog + token download (Keycloak auth) | Raw `.SAFE.zip` downloaded to local `eodata/`, byte-count verified (default: Central Luzon, S2 ≤20% cloud, latest 3 dates; `--r2` also uploads as bronze) | Input to every silver Sentinel derivative below |
 | **PH admin boundaries** *(silver)* | OCHA COD-AB geodatabase on HDX | `ogr2ogr` → GeoParquet (adm0–adm4, optional simplify tolerance) | AOI selection / overlay reference vector |
@@ -79,9 +77,8 @@ script. This table is just the map:
 
 | Script (under `pipelines/`) | Tier | Lang | Does | Run from repo root |
 | --- | --- | --- | --- | --- |
-| `reference/philsa-catalog/mirror_philsa_catalog.py` | reference | Python | Mirror the PhilSA STAC catalog by reference | `python3 <path> --dry-run` |
+| `reference/philsa-catalog/mirror_philsa_catalog.py` | reference | Python | Mirror the PhilSA STAC by reference (all collections + `--max-items` recent items each) | `python3 <path> --dry-run` |
 | `reference/esri-lulc/load_esri_lulc.sh` | reference | shell | Register ESRI 10 m LULC COGs by reference | `YEAR=2025 bash <path>` |
-| `reference/mula-mock/mock_mula_catalog.py` | reference | Python | Register the **simulated** MULA collection (re-dated Diwata-2 scenes, by reference) | `python3 <path> --dry-run` |
 | `01-bronze/copphil-sentinel/download_copphil_eodata.py` | 01-bronze | Python | Download raw Sentinel scenes (Central Luzon, cloud-free, latest N dates) → local `eodata/` (`--r2` also uploads as bronze) | `python3 <path>` |
 | `02-silver/ph-admin-boundaries/build_ph_admin_geoparquet.sh` | 02-silver | shell | OCHA COD-AB geodatabase → GeoParquet (local or R2) | `TOLERANCE_M=100 bash <path>` |
 | `02-silver/ph-admin-boundaries/build_ph_admin_pmtiles.sh` | 02-silver | shell | GeoParquet → PMTiles (adm0–adm2) for the webmap → R2 | `bash <path>` |
@@ -214,8 +211,8 @@ write via GDAL `/vsis3` — no awscli/rclone needed for those. The exceptions ar
 ## Why `reference/` sits outside the medallion tiers
 
 The medallion model assumes you **own the bytes and progressively refine them**.
-Three loaders don't fit that: `mirror_philsa_catalog.py`, `load_esri_lulc.sh`,
-and `mock_mula_catalog.py` (and the planned Earth Search loader) follow the
+Two loaders don't fit that: `mirror_philsa_catalog.py` and `load_esri_lulc.sh`
+(and the planned Earth Search loader) follow the
 project's [**catalog-by-reference**](../AGENTS.md) principle — they copy only STAC metadata
 into pgSTAC and leave the pixels at their original source. Nothing is downloaded,
 transformed, or re-hosted, so there is no bronze→silver→gold progression to place

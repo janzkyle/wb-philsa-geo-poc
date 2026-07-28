@@ -20,6 +20,11 @@ export interface CollectionLite {
   title?: string;
   description?: string;
   extent?: { temporal?: (string | null)[][] };
+  // Set when the collection was mirrored by reference from an upstream STAC
+  // (philsa:mirrored_from). Its assets live at the source and are not
+  // renderable here — the assistant uses this to keep such collections out of
+  // "add a layer" answers.
+  mirroredFrom?: string;
 }
 
 const dayOf = (dt?: string) => (dt ? dt.slice(0, 10) : undefined);
@@ -44,8 +49,13 @@ function toLite(f: StacFeature, fallbackCollection?: string): StacItemLite {
   };
 }
 
+// stac-fastapi pages /collections at 10 by default. Mirroring the PhilSA STAC
+// puts ~110 collections in the catalog, so an unlimited request would silently
+// hand the assistant the first 10 and nothing else — ask for the lot.
+const COLLECTIONS_LIMIT = 1000;
+
 export async function listCollections(): Promise<CollectionLite[]> {
-  const res = await fetch(`${STAC_API}/collections`);
+  const res = await fetch(`${STAC_API}/collections?limit=${COLLECTIONS_LIMIT}`);
   if (!res.ok) throw new Error(`STAC /collections ${res.status}`);
   const body = await res.json();
   interface StacCollection {
@@ -53,12 +63,14 @@ export async function listCollections(): Promise<CollectionLite[]> {
     title?: string;
     description?: string;
     extent?: { temporal?: { interval?: (string | null)[][] } };
+    "philsa:mirrored_from"?: string;
   }
   return ((body.collections ?? []) as StacCollection[]).map((c) => ({
     id: c.id,
     title: c.title,
     description: c.description,
     extent: { temporal: c.extent?.temporal?.interval },
+    mirroredFrom: c["philsa:mirrored_from"],
   }));
 }
 
