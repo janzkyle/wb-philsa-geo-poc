@@ -55,6 +55,79 @@ change to `AUTH0_DOMAIN`/`AUTH0_AUDIENCE` and a redeploy.
 
 ---
 
+## First-time setup (bootstrapping from empty accounts)
+
+Everything else in this doc assumes the pieces below already exist. If you're
+standing the auth layer up from an empty Cloudflare account, do these once, in
+order — the rest of the doc (operating it, Auth0) only works once this is done.
+
+1. **Authenticate wrangler.** `npx wrangler login` (or set `CLOUDFLARE_API_TOKEN`)
+   against the Cloudflare account that will own the buckets and the Worker.
+   Every `wrangler` command below assumes this.
+
+2. **Create the private R2 bucket.** Cloudflare dashboard → **R2** → **Create
+   bucket** → name it to match `R2_PRIVATE_BUCKET` in `wrangler.toml`
+   (`world-bank-philsa-geo-private`). Leave public access **off** and do not
+   connect an `r2.dev` domain — the entire point is that these bytes are reachable
+   only through a signed URL from `/assets/sign`. This is a second bucket,
+   separate from the public one (`world-bank-philsa-geo`) created in
+   `deploy/DEPLOYMENT.md`.
+
+3. **Create the Workers KV namespace for API keys.**
+
+   ```bash
+   cd deploy/gateway
+   npx wrangler kv namespace create API_KEYS
+   ```
+
+   Paste the returned `id` into **both** `[[env.stac.kv_namespaces]]` and
+   `[[env.tiles.kv_namespaces]]` in `wrangler.toml` — environments don't inherit
+   bindings from each other (see the note at the top of that file), so the same
+   id has to be entered twice. This is the namespace `mint-key.mjs` writes into
+   and `lib/auth.js` reads from.
+
+4. **Issue an R2 API token covering both buckets.** Dashboard → **R2** →
+   **Manage API Tokens** → create a token with **Object Read & Write** on *both*
+   `world-bank-philsa-geo` and `world-bank-philsa-geo-private`. (If you're
+   widening an existing public-only token instead of minting a new one, see the
+   ⚠️ warning box further down — the follow-up steps differ.)
+
+5. **Set the Worker secrets and deploy both environments.**
+
+   ```bash
+   cd deploy/gateway
+   npx wrangler secret put R2_ACCOUNT_ID        -e stac
+   npx wrangler secret put R2_ACCESS_KEY_ID     -e stac
+   npx wrangler secret put R2_SECRET_ACCESS_KEY -e stac
+   npx wrangler deploy -e stac && npx wrangler deploy -e tiles
+   ```
+
+   Only `stac` signs URLs, so only it needs the R2 secrets — see "Configuration
+   reference" below for the full var/secret list.
+
+6. **Lock the origins to the gateway.** Set `ORIGIN_SHARED_SECRET` on both
+   gateway environments, *then* `GATEWAY_SHARED_SECRET` on Render's
+   `philsa-titiler` — that order matters. Full steps under "Locking the origins
+   to the gateway" below.
+
+7. **Restrict a collection end to end.** Tag it, move its bytes, and make the
+   pipeline that produces it restriction-aware so a later re-ingest doesn't
+   republish it to the open tier — see "Change what's restricted" and "Make a
+   restriction real" below.
+
+8. **Mint a partner key** (see "Issue an API key to a partner" below), and
+   optionally set up Auth0 (see "Setting up the Auth0 tenant" — the restricted
+   tier is fully enforced by API keys alone without it).
+
+A naming note that recurs through the rest of this doc: every
+`https://philsa-*-gateway.philsa.workers.dev` URL below assumes a Cloudflare
+account whose `workers.dev` subdomain is `philsa`. Yours will be whatever you
+chose when the account was created — substitute it everywhere (see
+`deploy/gateway/README.md`, which uses a `<account>` placeholder consistently
+for this reason).
+
+---
+
 ## Operating it
 
 ### Issue an API key to a partner
@@ -130,6 +203,20 @@ deploy/scripts/move-assets-private.sh prod sentinel1-flood --apply
 It copies to the private bucket, verifies the count, repoints the STAC hrefs, and
 only then deletes the public copies — so a failure part-way leaves the data
 reachable rather than gone.
+
+Moving today's bytes isn't the end of it: whatever pipeline produces the
+collection will happily write tomorrow's bytes back to the *public* bucket on
+its next run, silently undoing the restriction. Two places carry this, and both
+need editing for a new restricted product (both already do it for
+`sentinel1-flood`):
+
+- **`pipelines/03-gold/catalog_silver.py`** — the product's entry in `PRODUCTS`
+  needs `"access": "restricted"`, which routes its R2 listing/read and its asset
+  href to the private bucket instead of the public one.
+- **The silver builder that produces it** (e.g.
+  `pipelines/02-silver/sentinel1-flood/build_flood.sh`) — its `R2_DEST_BUCKET`
+  must default to the private bucket, not the public one it may read its input
+  from.
 
 ---
 
