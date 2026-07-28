@@ -263,6 +263,12 @@ export default {
       // clients straight off the gateway.
       fwdHeaders.set("X-Forwarded-Host", url.host);
       fwdHeaders.set("X-Forwarded-Proto", "https");
+      // Prove to the origin that this request came through the gateway. Origins
+      // get a public *.onrender.com hostname, so without this anyone who knows it
+      // can skip every check here — and the tiler holds credentials for the
+      // private bucket. The origin only enforces once it has the same secret
+      // configured, so setting this is safe to deploy first. See deploy/AUTH.md.
+      if (env.ORIGIN_SHARED_SECRET) fwdHeaders.set("X-Gateway-Auth", env.ORIGIN_SHARED_SECRET);
 
       const init = { method, headers: fwdHeaders };
       if (!isReadMethod(method)) {
@@ -334,6 +340,11 @@ export default {
             method: "GET",
             redirect: "manual",
             cf: { cacheTtl: 0 },
+            // Health paths are exempt from the origin guard, but send the secret
+            // anyway so the ping keeps working if that exemption is ever dropped.
+            headers: env.ORIGIN_SHARED_SECRET
+              ? { "X-Gateway-Auth": env.ORIGIN_SHARED_SECRET }
+              : {},
           });
           console.log(JSON.stringify({
             msg: "keep-warm ping", kind, path, status: resp.status, ms: Date.now() - t0,

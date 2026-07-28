@@ -45,9 +45,16 @@ SAR_NAME="${SAR_NAME:-}"
 METHOD="${METHOD:-sigma}"
 STAGING="${STAGING:-${REPO_ROOT}/eodata/_staging}"
 OUTPUT_DIR="${OUTPUT_DIR:-${REPO_ROOT}/eodata}"
-R2_BUCKET="${R2_BUCKET:-}"
+R2_BUCKET="${R2_BUCKET:-}"              # where the SOURCE silver SAR COG is read from
 R2_PREFIX="02-silver/sentinel1-flood"   # hardcoded per tier/dataset — see pipelines/README.md
 R2_PUBLIC_BASE="${R2_PUBLIC_BASE:-}"
+
+# The flood mask is RESTRICTED (see deploy/AUTH.md), so its output goes to the
+# private bucket, not the public one the source SAR lives in. Writing it to the
+# public bucket would publish a restricted product to the open tier the moment a
+# new scene is built — which is exactly what this default prevents. Override
+# R2_DEST_BUCKET to stage the output somewhere else.
+R2_DEST_BUCKET="${R2_DEST_BUCKET:-${R2_PRIVATE_BUCKET:-world-bank-philsa-geo-private}}"
 mkdir -p "$STAGING"
 
 # no SAR_NAME/SRC given: default to the newest local silver VV-dB COG
@@ -69,7 +76,7 @@ OUT_NAME="${SRC_BASE%.tif}"; OUT_NAME="${OUT_NAME%_dB}"; OUT_NAME="${OUT_NAME}_f
 if [ -n "$R2_BUCKET" ] && [ "${FORCE:-0}" != "1" ] && [ -n "${R2_ACCOUNT_ID:-}" ]; then
   export AWS_S3_ENDPOINT="${R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
   export AWS_VIRTUAL_HOSTING=FALSE AWS_DEFAULT_REGION=auto
-  if gdalinfo "/vsis3/${R2_BUCKET}/${R2_PREFIX}/${OUT_NAME}" >/dev/null 2>&1; then
+  if gdalinfo "/vsis3/${R2_DEST_BUCKET}/${R2_PREFIX}/${OUT_NAME}" >/dev/null 2>&1; then
     echo "= skip (already in R2): ${R2_PREFIX}/${OUT_NAME}"; exit 0
   fi
 fi
@@ -101,8 +108,8 @@ if [ -n "$R2_BUCKET" ]; then
   : "${R2_ACCOUNT_ID:?}"; : "${AWS_ACCESS_KEY_ID:?}"; : "${AWS_SECRET_ACCESS_KEY:?}"
   export AWS_S3_ENDPOINT="${R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
   export AWS_VIRTUAL_HOSTING=FALSE AWS_DEFAULT_REGION=auto CPL_VSIL_USE_TEMP_FILE_FOR_RANDOM_WRITE=YES
-  DEST="/vsis3/${R2_BUCKET}/${R2_PREFIX}/${OUT_NAME}"
-  echo ">> destination: s3://${R2_BUCKET}/${R2_PREFIX}/${OUT_NAME}"
+  DEST="/vsis3/${R2_DEST_BUCKET}/${R2_PREFIX}/${OUT_NAME}"
+  echo ">> destination: s3://${R2_DEST_BUCKET}/${R2_PREFIX}/${OUT_NAME}"
 else
   mkdir -p "$OUTPUT_DIR"; DEST="${OUTPUT_DIR}/${OUT_NAME}"; echo ">> destination: ${DEST} (local)"
 fi
@@ -114,7 +121,9 @@ gdal_translate -q -of COG -co COMPRESS=DEFLATE -co RESAMPLING=NEAREST \
 rm -f "$MASK"
 
 # 5) report
-if [ -n "$R2_BUCKET" ] && [ -n "$R2_PUBLIC_BASE" ]; then
-  echo "+ flood mask COG: ${R2_PUBLIC_BASE%/}/${R2_PREFIX}/${OUT_NAME}"
+if [ -n "$R2_BUCKET" ]; then
+  # Deliberately an s3:// URI, not a public URL: these bytes are not fetchable
+  # without a credential. Consumers exchange it for a signed URL at the gateway.
+  echo "+ flood mask COG: s3://${R2_DEST_BUCKET}/${R2_PREFIX}/${OUT_NAME}"
 else echo "+ flood mask COG: ${DEST}"; fi
 echo ">> done."

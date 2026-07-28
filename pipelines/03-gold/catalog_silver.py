@@ -3,7 +3,9 @@
 catalog_silver.py — gold step: register the silver COGs (in Cloudflare R2) as
 STAC Collections + Items in the local pgSTAC catalog, **by reference**.
 
-This does not move pixels: each Item's asset href points at the public R2 COG, and
+This does not move pixels: each Item's asset href points at the R2 COG — the
+public bucket for open products, an `s3://` URI into the private bucket for ones
+marked `access: restricted` (see deploy/AUTH.md) — and
 geo-metadata (geometry, bbox, proj:*, raster:bands) is read from the COG at load
 time via `gdalinfo -json` (over /vsis3). Idempotent: POST first, PUT on 409 — same
 pattern as the by-reference mirror loader.
@@ -139,7 +141,13 @@ PRODUCTS = [
      "renders": {"ratio": {"title": "VH/VV cross-ratio (dB)", "assets": ["data"],
                            "rescale": [[-14, -2]], "colormap_name": "ylgn",
                            "resampling": "bilinear"}}},
+    # access: "restricted" moves this product to the PRIVATE bucket — objects are
+    # listed and read there, and item hrefs become s3:// URIs instead of public
+    # r2.dev URLs. Without it a re-catalog would silently republish the layer to
+    # the open tier (and, once the bytes have moved, point every href at a deleted
+    # object). Enforcement itself lives in the gateway — see deploy/AUTH.md.
     {"collection": "sentinel1-flood", "prefix": "02-silver/sentinel1-flood",
+     "access": "restricted",
      "title": "Sentinel-1 Flood / Water Mask — Philippines",
      "source_product": "sentinel1-flood", "extra_keywords": ["flood", "water", "SAR", "threshold"],
      "description": "Open-water / flood mask derived from Sentinel-1 VV backscatter (dB) by "
@@ -317,6 +325,10 @@ def build_collection(prod, bbox, dts, items):
         "summaries": summaries,
         "philsa:source_product": source_product,
         "philsa:metadata_updated": METADATA_UPDATED,
+        # Sensitivity tier, so a consumer (or an auditor) can see which tier a
+        # collection is in. Documentation only — the gateway's
+        # RESTRICTED_COLLECTIONS var is what actually refuses a request.
+        "philsa:access": prod.get("access", "open"),
         "item_assets": {"data": {"type": COG_TYPE, "title": prod["asset_title"],
                                  "roles": ["data"]}},
         "links": [],
@@ -373,6 +385,31 @@ def main():
                  "requires the R2 API-token creds)")
     r2 = R2(acct, bucket, ak, sk)
 
+    # Restricted products live in a separate, non-public bucket. RESTRICTED_COLLECTIONS
+    # can add ids beyond those already marked `access: restricted` in PRODUCTS,
+    # so the tier can be widened without a code change; keep it in step with the
+    # gateway var of the same name (deploy/gateway/wrangler.toml).
+    private_bucket = os.environ.get("R2_PRIVATE_BUCKET", "world-bank-philsa-geo-private")
+    extra_restricted = {c.strip() for c in
+                        os.environ.get("RESTRICTED_COLLECTIONS", "").split(",") if c.strip()}
+    r2_private = R2(acct, private_bucket, ak, sk)
+
+    def is_restricted(prod):
+        return prod.get("access") == "restricted" or prod["collection"] in extra_restricted
+
+    def client_for(prod):
+        return r2_private if is_restricted(prod) else r2
+
+    def bucket_for(prod):
+        return private_bucket if is_restricted(prod) else bucket
+
+    def asset_href(prod, key):
+        # Restricted assets are not fetchable without a credential, so the href is
+        # an s3:// URI rather than a URL. TiTiler/GDAL read it through /vsis3 with
+        # signed requests; other clients exchange it for a time-limited URL at the
+        # gateway's /assets/sign. A public https href here would be a dead link.
+        return f"s3://{private_bucket}/{key}" if is_restricted(prod) else f"{public}/{key}"
+
     # Read COG metadata over the authenticated /vsis3 endpoint: the public r2.dev
     # host has flaky DNS (see TODO "Tile-serving robustness"), while
     # <account>.r2.cloudflarestorage.com resolves reliably. Asset hrefs stay public.
@@ -380,8 +417,10 @@ def main():
     os.environ["AWS_VIRTUAL_HOSTING"] = "FALSE"
     os.environ["AWS_DEFAULT_REGION"] = "auto"
 
-    def read_path(key):
-        return f"/vsis3/{bucket}/{key}"
+    def read_path(prod, key):
+        # Metadata is always read over the authenticated /vsis3 endpoint, from
+        # whichever bucket the product lives in.
+        return f"/vsis3/{bucket_for(prod)}/{key}"
 
     print(f">> pgSTAC : {STAC_API}")
     print(f">> bucket : {bucket}")
@@ -410,7 +449,8 @@ def main():
     for prod in products:
         cid = prod["collection"]
         try:
-            keys = [k for k in r2.list_keys(prod["prefix"] + "/") if k.lower().endswith(".tif")]
+            keys = [k for k in client_for(prod).list_keys(prod["prefix"] + "/")
+                    if k.lower().endswith(".tif")]
         except (urllib.error.URLError, OSError) as e:
             print(f"  !! skip {cid}: R2 list failed for {prod['prefix']} ({e})", file=sys.stderr)
             continue
@@ -419,7 +459,7 @@ def main():
             continue
         items, bbox, dts = [], None, []
         for key in keys:
-            info = gdalinfo_json(read_path(key))
+            info = gdalinfo_json(read_path(prod, key))
             if not info or "wgs84Extent" not in info:
                 print(f"  !! skip (no metadata): {key}", file=sys.stderr)
                 continue
@@ -438,7 +478,7 @@ def main():
                 links.append({"rel": "derived_from", "type": "application/geo+json",
                               "href": f"{STAC_API}/collections/{sib}/items/{sar_id}",
                               "title": f"Silver VV backscatter item {sar_id}"})
-            it = build_item(prod, key, info, f"{public}/{key}", links)
+            it = build_item(prod, key, info, asset_href(prod, key), links)
             items.append(it)
             b = it["bbox"]
             bbox = b if bbox is None else [min(bbox[0], b[0]), min(bbox[1], b[1]),
@@ -447,6 +487,11 @@ def main():
                 dts.append(it["properties"]["datetime"])
         if not items:
             continue
+        # Show the tier and a sample href: the difference between publishing a
+        # product openly and restricting it is exactly this line, and it is worth
+        # seeing before the writes go in.
+        print(f"   tier: {prod.get('access', 'open')} | href: "
+              f"{items[0]['assets']['data']['href']}")
         col = build_collection(prod, bbox or [116, 4.5, 127, 21.5], dts, items)
         res = upsert("collection", f"{STAC_API}/collections",
                      f"{STAC_API}/collections/{urllib.parse.quote(cid)}", col, args.dry_run)

@@ -232,14 +232,27 @@ Only the STAC gateway signs URLs, so the tiles gateway needs no R2 secrets.
 > it's a scope problem.
 >
 > **Fix (one time, dashboard only — there's no wrangler command for it):**
-> Cloudflare dashboard → **R2** → **Manage API Tokens** → create (or edit) a
-> token with **Object Read & Write** on *both* `world-bank-philsa-geo` and
-> `world-bank-philsa-geo-private`, then re-set the two secrets above and
-> `wrangler deploy -e stac`. Update the repo-root `.env` with the same pair so
-> `move-assets-private.sh` can write to the private bucket as well.
+> Cloudflare dashboard → **R2** → **Manage API Tokens** → give a token
+> **Object Read & Write** on *both* `world-bank-philsa-geo` and
+> `world-bank-philsa-geo-private`.
 >
-> Until that's done, `/assets/sign` returns a correctly-signed URL that R2 will
-> refuse. Nothing else in the auth layer depends on it.
+> **Whether you then have to touch the Worker depends on how you did it:**
+>
+> - **Widened the existing token's scope** — nothing else to do. R2 evaluates a
+>   token's permissions server-side on every request, so the same access-key pair
+>   simply starts working. The Worker's stored secrets are still correct.
+> - **Created a *new* token** — the key pair changed, so re-run the three
+>   `wrangler secret put` commands above with the new values.
+>
+> Either way there is **no redeploy**: `wrangler secret put` updates the live
+> Worker immediately. A `wrangler deploy` is only needed when *code* or a
+> `vars`/binding entry in `wrangler.toml` changes.
+>
+> Update the repo-root `.env` to match whichever token you use, so
+> `move-assets-private.sh` can write to the private bucket too.
+>
+> Until this is sorted, `/assets/sign` returns a correctly-signed URL that R2
+> refuses. Nothing else in the auth layer depends on it.
 
 ## What the gateway actually enforces
 
@@ -267,6 +280,56 @@ never be replayed to an anonymous caller. Responses carry
 `Vary: Authorization, X-API-Key` for the same reason downstream. Credentials are
 stripped before the request is forwarded — the origins never see them.
 
+## Locking the origins to the gateway
+
+Everything above is enforced at the edge — which only means anything if the edge
+is the *only* way in. It wasn't. Render gives each origin a public
+`*.onrender.com` hostname, and TiTiler holds R2 credentials that can read the
+private bucket, so before this landed an anonymous request to
+`philsa-titiler.onrender.com/cog/tiles/...?url=s3://<private>/...` returned a
+real PNG tile of a restricted scene. Moving the bytes closed the direct-download
+hole and opened a rendering one.
+
+The fix is a shared secret. The gateway injects `X-Gateway-Auth` on every request
+it forwards; TiTiler (`deploy/titiler/gateway_guard.py`) refuses anything without
+it. Health paths stay exempt so Render's probes and the keep-warm cron still work.
+
+**It fails open when the secret is unset** — a missing env var degrades to the old
+behaviour rather than 403-ing every tile, including open ones. That also fixes the
+rollout order:
+
+```bash
+# 1. gateway first — it starts sending the header; the origin still ignores it
+cd deploy/gateway
+npx wrangler secret put ORIGIN_SHARED_SECRET -e stac
+npx wrangler secret put ORIGIN_SHARED_SECRET -e tiles
+npx wrangler deploy -e stac && npx wrangler deploy -e tiles
+
+# 2. then the origin — enforcement switches on here
+#    Render ▸ philsa-titiler ▸ Environment ▸ GATEWAY_SHARED_SECRET = <same value>
+#    Save; Render redeploys automatically.
+```
+
+Do it in the other order and tiles 403 in the window between.
+
+Verify afterwards: a direct hit on the origin should give `403` with a message
+pointing at the gateway, while the same request through the gateway still works.
+
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' \
+  "https://philsa-titiler.onrender.com/cog/info?url=s3://world-bank-philsa-geo-private/…"   # 403
+curl -s -o /dev/null -w '%{http_code}\n' -H "X-API-Key: philsa_…" \
+  "https://philsa-tiles-gateway.philsa.workers.dev/cog/info?url=s3://…"                     # 200
+```
+
+**The STAC API origin is not covered.** `philsa-stac-api.onrender.com` still
+serves the restricted collection and its items to anyone. That leaks *metadata*
+— scene ids, footprints, dates — not imagery, which is why it's ranked below the
+tiler. Closing it needs the same guard inside the STAC API image, and that image
+builds from the submodule (`deploy/stac-api/Dockerfile`, build context is the
+submodule root), so the guard has to be injected rather than `COPY`ed. Left for
+after the POC; noted in the limits below.
+
 ## Known limits (POC-appropriate, worth stating)
 
 - **Sensitivity is per collection, not per item.** That matches how the data is
@@ -282,3 +345,8 @@ stripped before the request is forwarded — the origins never see them.
 - **`workers.dev` has no custom domain**, so Cloudflare Access can't front these
   hostnames. Revisit for internal tools (the Dagster UI) once
   `stac.philsa.gov.ph` exists.
+- **The STAC API origin is still directly reachable**, so restricted *metadata*
+  (ids, footprints, dates) is readable by anyone who knows the `onrender.com`
+  hostname. Imagery is not — see "Locking the origins to the gateway".
+- **One shared secret for all origins**, not per-service, and rotating it means
+  updating both sides in the order above.

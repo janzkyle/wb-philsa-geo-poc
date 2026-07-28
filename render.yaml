@@ -136,6 +136,14 @@ services:
         value: "TRUE"
       - key: TITILER_API_CORS_ORIGINS
         value: "*"
+      # Origin guard. This service can read the PRIVATE R2 bucket and Render gives
+      # it a public hostname, so without this anyone who knows that hostname can
+      # render restricted imagery and skip the gateway's access checks entirely.
+      # Must match the gateway's ORIGIN_SHARED_SECRET Worker secret.
+      # UNSET = fail open (previous behaviour), so deploy the gateway first, then
+      # set this. See deploy/AUTH.md → "Locking the origins to the gateway".
+      - key: GATEWAY_SHARED_SECRET
+        sync: false
       # Concurrent tile renders. A zoomed-out map makes MapLibre request a whole
       # tile grid at once; each render peaks ~180 MB, so unbounded concurrency
       # OOM-kills this service (free/starter = 512 MB). 1 keeps it alive by making

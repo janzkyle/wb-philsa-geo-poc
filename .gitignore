@@ -34,3 +34,6 @@ __pycache__/
 
 # Wrangler local state/cache (Cloudflare Workers dev)
 .wrangler/
+
+# shared secret between the edge gateway and the Render origins (deploy/AUTH.md)
+deploy/.gateway-secret

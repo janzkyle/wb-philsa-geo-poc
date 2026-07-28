@@ -53,6 +53,45 @@ command -v aws >/dev/null 2>&1 || die "the AWS CLI is required (brew install aws
 
 aws_r2() { AWS_DEFAULT_REGION=auto aws --endpoint-url "$ENDPOINT" "$@"; }
 
+# R2 implements CopyObject but NOT the S3 object-tagging API, and `aws s3 cp`
+# insists on tagging one way or another for a bucket-to-bucket copy:
+#
+#   --copy-props default (the default)  -> calls GetObjectTagging
+#                                          "NotImplemented: GetObjectTagging"
+#   --copy-props none                   -> sends x-amz-tagging-directive: REPLACE
+#   --copy-props metadata-directive     -> also sends x-amz-tagging-directive
+#                                          "NotImplemented: Header
+#                                           'x-amz-tagging-directive' ... "
+#
+# All three were tried against R2; all three fail, and they fail *per object*, so
+# a run leaves a partial copy behind. The low-level `s3api copy-object` sends only
+# the headers we pass it, which R2 accepts — that's what copy_prefix uses. These
+# COGs carry no tags or custom metadata, so nothing is lost in the switch.
+# NB: iterate with `while read`, not `for key in $keys`. Unquoted word-splitting
+# is a bash-ism — zsh leaves the whole listing as ONE word, which turns into a
+# single copy-object call with every key concatenated ("InvalidObjectName").
+# Reading line by line behaves the same in both shells. The here-string keeps the
+# loop in the current shell, so `set -e` still aborts the script on a failed copy
+# rather than swallowing it in a pipeline subshell.
+copy_prefix() {
+  local src_bucket="$1" dst_bucket="$2" prefix="$3" keys key
+  keys=$(aws_r2 s3api list-objects-v2 --bucket "$src_bucket" --prefix "$prefix" \
+           --query 'Contents[].Key' --output text | tr '\t' '\n')
+  while IFS= read -r key; do
+    [ -n "$key" ] && [ "$key" != "None" ] || continue
+    aws_r2 s3api copy-object --copy-source "${src_bucket}/${key}" \
+      --bucket "$dst_bucket" --key "$key" >/dev/null
+    printf '    copied %s\n' "${key##*/}"
+  done <<<"$keys"
+}
+
+# Total bytes under a prefix — compared source vs destination before we delete
+# anything, so a truncated copy can't be mistaken for a complete one on count alone.
+prefix_bytes() {
+  aws_r2 s3api list-objects-v2 --bucket "$1" --prefix "$2" \
+    --query 'sum(Contents[].Size)' --output text 2>/dev/null | sed 's/None/0/' | cut -d. -f1
+}
+
 psql_run() {
   if command -v psql >/dev/null 2>&1; then psql "$DATABASE_URL" -v ON_ERROR_STOP=1 "$@"
   else
@@ -72,23 +111,40 @@ count=$(aws_r2 s3 ls "s3://$R2_BUCKET/$PREFIX" --recursive | wc -l | tr -d ' ')
 info "found $count object(s) to move"
 
 if ! $APPLY; then
-  aws_r2 s3 cp "s3://$R2_BUCKET/$PREFIX" "s3://$PRIVATE_BUCKET/$PREFIX" --recursive --dryrun
+  info "would copy these into s3://$PRIVATE_BUCKET/$PREFIX:"
+  aws_r2 s3 ls "s3://$R2_BUCKET/$PREFIX" --recursive | awk '{print "    " $NF}'
   info "dry run only — no objects copied, nothing deleted, catalog untouched."
   exit 0
 fi
 
 info "copying into the private bucket …"
-aws_r2 s3 cp "s3://$R2_BUCKET/$PREFIX" "s3://$PRIVATE_BUCKET/$PREFIX" --recursive
+copy_prefix "$R2_BUCKET" "$PRIVATE_BUCKET" "$PREFIX"
 
+# Verify on BOTH count and total bytes before anything destructive happens. The
+# copy is idempotent, so re-running after a partial failure is safe and cheap.
 private_count=$(aws_r2 s3 ls "s3://$PRIVATE_BUCKET/$PREFIX" --recursive | wc -l | tr -d ' ')
 [ "$private_count" = "$count" ] || die "copy incomplete ($private_count/$count objects present) — public copy left untouched."
-info "verified $private_count/$count objects in the private bucket"
+src_bytes=$(prefix_bytes "$R2_BUCKET" "$PREFIX")
+dst_bytes=$(prefix_bytes "$PRIVATE_BUCKET" "$PREFIX")
+[ "$src_bytes" = "$dst_bytes" ] || die "byte totals differ (public $src_bytes vs private $dst_bytes) — public copy left untouched."
+info "verified $private_count/$count objects, $dst_bytes bytes, in the private bucket"
 
 # Repoint the catalog BEFORE deleting the public copy, so there is never a window
 # where the hrefs point at bytes that no longer exist.
+#
+# The new href is an `s3://` URI, NOT the bucket's https endpoint. That matters:
+# TiTiler reads assets through GDAL, and only the s3:// form makes GDAL use
+# /vsis3/ and SIGN the request with TiTiler's own R2 credentials. Handed the
+# https endpoint it does a plain unsigned range GET and R2 rejects it — verified,
+# the tiler returns 500 ("HTTP response code: 400") for the https form and 200
+# for s3://. So https hrefs would break the layer even for authorised partners.
+#
+# s3:// also reads correctly as "these bytes are not directly fetchable": clients
+# exchange the href for a time-limited URL at the gateway's /assets/sign, which
+# accepts the s3:// form.
 info "repointing STAC asset hrefs to the private bucket …"
 PUBLIC_BASE="${R2_PUBLIC_BASE:?not set in .env}"
-PRIVATE_BASE="${ENDPOINT}/${PRIVATE_BUCKET}"
+PRIVATE_BASE="s3://${PRIVATE_BUCKET}"
 psql_run -q -c "
   UPDATE pgstac.items
      SET content = replace(content::text, '${PUBLIC_BASE}/${PREFIX}', '${PRIVATE_BASE}/${PREFIX}')::jsonb
