@@ -53,6 +53,13 @@ command -v aws >/dev/null 2>&1 || die "the AWS CLI is required (brew install aws
 
 aws_r2() { AWS_DEFAULT_REGION=auto aws --endpoint-url "$ENDPOINT" "$@"; }
 
+# R2 does not implement the S3 object-tagging API. On a bucket-to-bucket copy the
+# AWS CLI v2 tries to carry tags across, calls GetObjectTagging, and the copy dies
+# with "NotImplemented: GetObjectTagging not implemented". `--copy-props none`
+# stops it asking. We have no tags or custom metadata on these COGs — content-type
+# is re-derived by R2 — so nothing is lost.
+COPY_FLAGS=(--recursive --copy-props none)
+
 psql_run() {
   if command -v psql >/dev/null 2>&1; then psql "$DATABASE_URL" -v ON_ERROR_STOP=1 "$@"
   else
@@ -72,13 +79,13 @@ count=$(aws_r2 s3 ls "s3://$R2_BUCKET/$PREFIX" --recursive | wc -l | tr -d ' ')
 info "found $count object(s) to move"
 
 if ! $APPLY; then
-  aws_r2 s3 cp "s3://$R2_BUCKET/$PREFIX" "s3://$PRIVATE_BUCKET/$PREFIX" --recursive --dryrun
+  aws_r2 s3 cp "s3://$R2_BUCKET/$PREFIX" "s3://$PRIVATE_BUCKET/$PREFIX" "${COPY_FLAGS[@]}" --dryrun
   info "dry run only — no objects copied, nothing deleted, catalog untouched."
   exit 0
 fi
 
 info "copying into the private bucket …"
-aws_r2 s3 cp "s3://$R2_BUCKET/$PREFIX" "s3://$PRIVATE_BUCKET/$PREFIX" --recursive
+aws_r2 s3 cp "s3://$R2_BUCKET/$PREFIX" "s3://$PRIVATE_BUCKET/$PREFIX" "${COPY_FLAGS[@]}"
 
 private_count=$(aws_r2 s3 ls "s3://$PRIVATE_BUCKET/$PREFIX" --recursive | wc -l | tr -d ' ')
 [ "$private_count" = "$count" ] || die "copy incomplete ($private_count/$count objects present) — public copy left untouched."
@@ -86,9 +93,20 @@ info "verified $private_count/$count objects in the private bucket"
 
 # Repoint the catalog BEFORE deleting the public copy, so there is never a window
 # where the hrefs point at bytes that no longer exist.
+#
+# The new href is an `s3://` URI, NOT the bucket's https endpoint. That matters:
+# TiTiler reads assets through GDAL, and only the s3:// form makes GDAL use
+# /vsis3/ and SIGN the request with TiTiler's own R2 credentials. Handed the
+# https endpoint it does a plain unsigned range GET and R2 rejects it — verified,
+# the tiler returns 500 ("HTTP response code: 400") for the https form and 200
+# for s3://. So https hrefs would break the layer even for authorised partners.
+#
+# s3:// also reads correctly as "these bytes are not directly fetchable": clients
+# exchange the href for a time-limited URL at the gateway's /assets/sign, which
+# accepts the s3:// form.
 info "repointing STAC asset hrefs to the private bucket …"
 PUBLIC_BASE="${R2_PUBLIC_BASE:?not set in .env}"
-PRIVATE_BASE="${ENDPOINT}/${PRIVATE_BUCKET}"
+PRIVATE_BASE="s3://${PRIVATE_BUCKET}"
 psql_run -q -c "
   UPDATE pgstac.items
      SET content = replace(content::text, '${PUBLIC_BASE}/${PREFIX}', '${PRIVATE_BASE}/${PREFIX}')::jsonb
