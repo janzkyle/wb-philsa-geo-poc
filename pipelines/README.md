@@ -36,11 +36,11 @@ pipelines/
 
 This is an Earth-observation STAC POC, so the medallion tiers map to asset state:
 
-| Tier | Meaning | Storage | Example scripts |
-| --- | --- | --- | --- |
-| **01-bronze** | Raw scenes pulled in verbatim, no transformation. | Local `eodata/` (default); optional R2 `01-bronze/copphil-sentinel/` via `--r2` | `download_copphil_eodata.py` (raw Sentinel-1/2 SAFE zips from CopPhil) |
-| **02-silver** | Cleaned, clipped, reprojected, or derived products (NDVI, SAR flood masks, conformed vectors → GeoParquet/PMTiles). | R2 (public/private COGs, GeoParquet, PMTiles) | `build_ph_admin_geoparquet.sh`, `sentinel2-ndvi/build_ndvi.sh`, `sentinel2-truecolor/build_truecolor.sh`, `sentinel1-sar/build_sar.sh`, `sentinel1-flood/build_flood.sh`, `sentinel1-ratio/build_ratio.sh`; *planned:* `vector_to_pmtiles.py` (VEC path) |
-| **03-gold** | Serving-ready catalog entries — what end users discover and consume. | pgSTAC Items (hrefs → R2) | `catalog_silver.py` (registers silver COGs as STAC items); *planned:* open/restricted tagging |
+| Tier          | Meaning                                                                                                             | Storage                                                                         | Example scripts                                                                                                                                                                                                                                          |
+| ------------- | ------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **01-bronze** | Raw scenes pulled in verbatim, no transformation.                                                                   | Local `eodata/` (default); optional R2 `01-bronze/copphil-sentinel/` via `--r2` | `download_copphil_eodata.py` (raw Sentinel-1/2 SAFE zips from CopPhil)                                                                                                                                                                                   |
+| **02-silver** | Cleaned, clipped, reprojected, or derived products (NDVI, SAR flood masks, conformed vectors → GeoParquet/PMTiles). | R2 (public/private COGs, GeoParquet, PMTiles)                                   | `build_ph_admin_geoparquet.sh`, `sentinel2-ndvi/build_ndvi.sh`, `sentinel2-truecolor/build_truecolor.sh`, `sentinel1-sar/build_sar.sh`, `sentinel1-flood/build_flood.sh`, `sentinel1-ratio/build_ratio.sh`; *planned:* `vector_to_pmtiles.py` (VEC path) |
+| **03-gold**   | Serving-ready catalog entries — what end users discover and consume.                                                | pgSTAC Items (hrefs → R2)                                                       | `catalog_silver.py` (registers silver COGs as STAC items); *planned:* open/restricted tagging                                                                                                                                                            |
 
 The full CopPhil path is the clean medallion example:
 **bronze** (download raw S1/S2) → **silver** (compute NDVI / SAR-flood COGs to R2)
@@ -48,18 +48,18 @@ The full CopPhil path is the clean medallion example:
 
 ## Data lineage — where each came from, how it's processed, what it's for
 
-| Dataset / product | Source (where from) | Processing (how) | Used for (where) |
-| --- | --- | --- | --- |
-| **PhilSA STAC** *(reference)* | PhilSA's public STAC API — `https://stac.infra.copphil.philsa.gov.ph/v1` (~104 Copernicus Sentinel collections) | Mirrored **by reference** — STAC metadata copied into our pgSTAC, pixels left at source (`s3://eodata/…` on CloudFerro). Collections in full; items **capped at the 20 most recent each** (~387k upstream), stamped `philsa:mirrored_from` | Discovery of everything PhilSA serves, in one catalog; the mirrored collections sort last in the Browser so PhilSA's own products lead |
-| **ESRI 10 m LULC** *(reference)* | Esri / Impact Observatory *Living Atlas* (public COGs) | Registered **by reference** (no download/re-host) | Land-cover context layer in the catalog |
-| **CopPhil Sentinel-1/2** *(bronze)* | CopPhil / CloudFerro OData catalog + token download (Keycloak auth) | Raw `.SAFE.zip` downloaded to local `eodata/`, byte-count verified (default: Central Luzon, S2 ≤20% cloud, latest 3 dates; `--r2` also uploads as bronze) | Input to every silver Sentinel derivative below |
-| **PH admin boundaries** *(silver)* | OCHA COD-AB geodatabase on HDX | `ogr2ogr` → GeoParquet (adm0–adm4, optional simplify tolerance) | AOI selection / overlay reference vector |
-| **Sentinel-2 NDVI** *(silver)* | Bronze S2 L2A — 10 m B04 (red) + B08 (NIR) | `(B08−B04)/(B08+B04)` → Float32 COG; edge-granule fill masked to `-9999` NoData | Vegetation index; served as colorized tiles (`rdylgn`, −0.2…0.8) |
-| **Sentinel-2 true-colour** *(silver)* | Bronze S2 L2A — 10 m TCI band | Extract TCI → 8-bit RGB COG; fill (`0`) flagged NoData | Visual reference imagery / basemap |
-| **Sentinel-1 SAR** *(silver)* | Bronze S1 IW GRD, VV polarization | GCP warp → EPSG:4326, amplitude → dB → Float32 COG | Backscatter base layer (**not** a validated flood product); served grayscale (15…55 dB) |
-| **Sentinel-1 flood** *(silver)* | Silver S1 VV backscatter (dB) COG | Dark-water threshold (`sigma` = mean−k·std default; `otsu`/`fixed` options), block-wise → Byte mask (1=water, 0=land, 2=perm-water, 255=nodata) | POC flood **proxy** (**not** validated; uncalibrated dB); pairs with Copernicus EMS/GFM; served via flood colormap |
-| **Sentinel-1 VH/VV ratio** *(silver)* | Bronze S1 IW GRD, both polarisations | GCP warp both pols to one grid → `VH_dB − VV_dB` → Float32 COG | Radar vegetation index (rises with crop canopy, works through cloud — the SAR fallback for parametric triggers); ratio cancels the per-scene gain of the uncalibrated dB, so the fixed stretch reads consistently; served `ylgn` |
-| **STAC catalog** *(gold)* | All silver COGs already in R2 | `catalog_silver.py` registers collections + items **by reference**, reading COG metadata over the authenticated R2 endpoint; adds render hints + standards metadata. Needs a writable target — see [`../AGENTS.md`](../AGENTS.md) | What users discover/consume via the STAC API |
+| Dataset / product                     | Source (where from)                                                                                             | Processing (how)                                                                                                                                                                                                                           | Used for (where)                                                                                                                                                                                                                 |
+| ------------------------------------- | --------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **PhilSA STAC** *(reference)*         | PhilSA's public STAC API — `https://stac.infra.copphil.philsa.gov.ph/v1` (~104 Copernicus Sentinel collections) | Mirrored **by reference** — STAC metadata copied into our pgSTAC, pixels left at source (`s3://eodata/…` on CloudFerro). Collections in full; items **capped at the 20 most recent each** (~387k upstream), stamped `philsa:mirrored_from` | Discovery of everything PhilSA serves, in one catalog; the mirrored collections sort last in the Browser so PhilSA's own products lead                                                                                           |
+| **ESRI 10 m LULC** *(reference)*      | Esri / Impact Observatory *Living Atlas* (public COGs)                                                          | Registered **by reference** (no download/re-host)                                                                                                                                                                                          | Land-cover context layer in the catalog                                                                                                                                                                                          |
+| **CopPhil Sentinel-1/2** *(bronze)*   | CopPhil / CloudFerro OData catalog + token download (Keycloak auth)                                             | Raw `.SAFE.zip` downloaded to local `eodata/`, byte-count verified (default: Central Luzon, S2 ≤20% cloud, latest 3 dates; `--r2` also uploads as bronze)                                                                                  | Input to every silver Sentinel derivative below                                                                                                                                                                                  |
+| **PH admin boundaries** *(silver)*    | OCHA COD-AB geodatabase on HDX                                                                                  | `ogr2ogr` → GeoParquet (adm0–adm4, optional simplify tolerance)                                                                                                                                                                            | AOI selection / overlay reference vector                                                                                                                                                                                         |
+| **Sentinel-2 NDVI** *(silver)*        | Bronze S2 L2A — 10 m B04 (red) + B08 (NIR)                                                                      | `(B08−B04)/(B08+B04)` → Float32 COG; edge-granule fill masked to `-9999` NoData                                                                                                                                                            | Vegetation index; served as colorized tiles (`rdylgn`, −0.2…0.8)                                                                                                                                                                 |
+| **Sentinel-2 true-colour** *(silver)* | Bronze S2 L2A — 10 m TCI band                                                                                   | Extract TCI → 8-bit RGB COG; fill (`0`) flagged NoData                                                                                                                                                                                     | Visual reference imagery / basemap                                                                                                                                                                                               |
+| **Sentinel-1 SAR** *(silver)*         | Bronze S1 IW GRD, VV polarization                                                                               | GCP warp → EPSG:4326, amplitude → dB → Float32 COG                                                                                                                                                                                         | Backscatter base layer (**not** a validated flood product); served grayscale (15…55 dB)                                                                                                                                          |
+| **Sentinel-1 flood** *(silver)*       | Silver S1 VV backscatter (dB) COG                                                                               | Dark-water threshold (`sigma` = mean−k·std default; `otsu`/`fixed` options), block-wise → Byte mask (1=water, 0=land, 2=perm-water, 255=nodata)                                                                                            | POC flood **proxy** (**not** validated; uncalibrated dB); pairs with Copernicus EMS/GFM; served via flood colormap                                                                                                               |
+| **Sentinel-1 VH/VV ratio** *(silver)* | Bronze S1 IW GRD, both polarisations                                                                            | GCP warp both pols to one grid → `VH_dB − VV_dB` → Float32 COG                                                                                                                                                                             | Radar vegetation index (rises with crop canopy, works through cloud — the SAR fallback for parametric triggers); ratio cancels the per-scene gain of the uncalibrated dB, so the fixed stretch reads consistently; served `ylgn` |
+| **STAC catalog** *(gold)*             | All silver COGs already in R2                                                                                   | `catalog_silver.py` registers collections + items **by reference**, reading COG metadata over the authenticated R2 endpoint; adds render hints + standards metadata. Needs a writable target — see [`../AGENTS.md`](../AGENTS.md)          | What users discover/consume via the STAC API                                                                                                                                                                                     |
 
 The five silver Sentinel products are **single-/multi-band COGs in R2**; they're
 visualized through **TiTiler** (repo-root [`compose.viz.yml`](../compose.viz.yml),
@@ -75,86 +75,38 @@ Per-script usage and parameters live in **each script's own header** — run a
 Python script with `--help`, or read the comment block at the top of a shell
 script. This table is just the map:
 
-| Script (under `pipelines/`) | Tier | Lang | Does | Run from repo root |
-| --- | --- | --- | --- | --- |
-| `reference/philsa-catalog/mirror_philsa_catalog.py` | reference | Python | Mirror the PhilSA STAC by reference (all collections + `--max-items` recent items each) | `python3 <path> --dry-run` |
-| `reference/esri-lulc/load_esri_lulc.sh` | reference | shell | Register ESRI 10 m LULC COGs by reference | `YEAR=2025 bash <path>` |
-| `01-bronze/copphil-sentinel/download_copphil_eodata.py` | 01-bronze | Python | Download raw Sentinel scenes (Central Luzon, cloud-free, latest N dates) → local `eodata/` (`--r2` also uploads as bronze) | `python3 <path>` |
-| `02-silver/ph-admin-boundaries/build_ph_admin_geoparquet.sh` | 02-silver | shell | OCHA COD-AB geodatabase → GeoParquet (local or R2) | `TOLERANCE_M=100 bash <path>` |
-| `02-silver/ph-admin-boundaries/build_ph_admin_pmtiles.sh` | 02-silver | shell | GeoParquet → PMTiles (adm0–adm2) for the webmap → R2 | `bash <path>` |
-| `02-silver/sentinel2-ndvi/build_ndvi.sh` | 02-silver | shell | Sentinel-2 L2A SAFE → NDVI COG → R2 | `bash <path>` |
-| `02-silver/sentinel2-truecolor/build_truecolor.sh` | 02-silver | shell | Sentinel-2 TCI → true-colour RGB COG → R2 | `bash <path>` |
-| `02-silver/sentinel1-sar/build_sar.sh` | 02-silver | shell | Sentinel-1 GRD VV → geocoded backscatter (dB) COG → R2 | `bash <path>` |
-| `02-silver/sentinel1-flood/build_flood.sh` | 02-silver | shell | Silver VV-dB COG → flood/water Byte mask COG → R2 | `SAR_NAME=… bash <path>` |
-| `02-silver/sentinel1-ratio/build_ratio.sh` | 02-silver | shell | Sentinel-1 GRD VV+VH → VH/VV cross-ratio (dB) COG → R2 | `bash <path>` |
-| `02-silver/sentinel1-flood/otsu_flood.py` | 02-silver | Python | Classify VV-dB → flood Byte mask (`sigma`/`otsu`/`fixed`); called by `build_flood.sh` | `python3 <path> --help` |
-| `02-silver/build_silver.py` | 02-silver | Python | Batch driver: every bronze scene → every silver product (ndvi, truecolor, sar, flood) | `python3 <path> --dry-run` |
-| `02-silver/build_raster_mosaics.sh` | 02-silver | shell | Per-date MosaicJSON stitching same-day Sentinel COG granules (the 3 scene collections; flood excluded by default) → R2. Reads hrefs from the catalog, so run it **after** the gold step | `bash <path>` |
-| `03-gold/catalog_silver.py` | 03-gold | Python | Register silver COGs in pgSTAC as STAC collections+items (by reference) | `python3 <path>` |
+| Script (under `pipelines/`)                                  | Tier      | Lang   | Does                                                                                                                                                                                    | Run from repo root            |
+| ------------------------------------------------------------ | --------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------- |
+| `reference/philsa-catalog/mirror_philsa_catalog.py`          | reference | Python | Mirror the PhilSA STAC by reference (all collections + `--max-items` recent items each)                                                                                                 | `python3 <path> --dry-run`    |
+| `reference/esri-lulc/load_esri_lulc.sh`                      | reference | shell  | Register ESRI 10 m LULC COGs by reference                                                                                                                                               | `YEAR=2025 bash <path>`       |
+| `01-bronze/copphil-sentinel/download_copphil_eodata.py`      | 01-bronze | Python | Download raw Sentinel scenes (Central Luzon, cloud-free, latest N dates) → local `eodata/` (`--r2` also uploads as bronze)                                                              | `python3 <path>`              |
+| `02-silver/ph-admin-boundaries/build_ph_admin_geoparquet.sh` | 02-silver | shell  | OCHA COD-AB geodatabase → GeoParquet (local or R2)                                                                                                                                      | `TOLERANCE_M=100 bash <path>` |
+| `02-silver/ph-admin-boundaries/build_ph_admin_pmtiles.sh`    | 02-silver | shell  | GeoParquet → PMTiles (adm0–adm2) for the webmap → R2                                                                                                                                    | `bash <path>`                 |
+| `02-silver/sentinel2-ndvi/build_ndvi.sh`                     | 02-silver | shell  | Sentinel-2 L2A SAFE → NDVI COG → R2                                                                                                                                                     | `bash <path>`                 |
+| `02-silver/sentinel2-truecolor/build_truecolor.sh`           | 02-silver | shell  | Sentinel-2 TCI → true-colour RGB COG → R2                                                                                                                                               | `bash <path>`                 |
+| `02-silver/sentinel1-sar/build_sar.sh`                       | 02-silver | shell  | Sentinel-1 GRD VV → geocoded backscatter (dB) COG → R2                                                                                                                                  | `bash <path>`                 |
+| `02-silver/sentinel1-flood/build_flood.sh`                   | 02-silver | shell  | Silver VV-dB COG → flood/water Byte mask COG → R2                                                                                                                                       | `SAR_NAME=… bash <path>`      |
+| `02-silver/sentinel1-ratio/build_ratio.sh`                   | 02-silver | shell  | Sentinel-1 GRD VV+VH → VH/VV cross-ratio (dB) COG → R2                                                                                                                                  | `bash <path>`                 |
+| `02-silver/sentinel1-flood/otsu_flood.py`                    | 02-silver | Python | Classify VV-dB → flood Byte mask (`sigma`/`otsu`/`fixed`); called by `build_flood.sh`                                                                                                   | `python3 <path> --help`       |
+| `02-silver/build_silver.py`                                  | 02-silver | Python | Batch driver: every bronze scene → every silver product (ndvi, truecolor, sar, flood)                                                                                                   | `python3 <path> --dry-run`    |
+| `02-silver/build_raster_mosaics.sh`                          | 02-silver | shell  | Per-date MosaicJSON stitching same-day Sentinel COG granules (the 3 scene collections; flood excluded by default) → R2. Reads hrefs from the catalog, so run it **after** the gold step | `bash <path>`                 |
+| `03-gold/catalog_silver.py`                                  | 03-gold   | Python | Register silver COGs in pgSTAC as STAC collections+items (by reference)                                                                                                                 | `python3 <path>`              |
 
 ## Orchestration (Dagster)
 
 The scripts above stay runnable **standalone** — that's the contract. On top of
-them, [`orchestration/`](./orchestration/) adds an **optional** Dagster layer
-that wraps each script as a software-defined **asset** via **Pipes subprocesses**
-(it never imports or edits the scripts — it shells out to them, passing their
-env-var / CLI parameters as run config). The medallion tiers become the asset
-graph, so lineage, freshness, run history, backfills, and a manual-run/trigger
-UI come for free. Nothing here is required to run a pipeline by hand.
+them, [`orchestration/`](./orchestration/) adds an **optional** Dagster layer that
+wraps each script as a software-defined **asset** via **Pipes subprocesses** (it
+never imports or edits the scripts — it shells out to them, passing their env-var
+/ CLI parameters as run config). The medallion tiers become the asset graph, so
+lineage, freshness, run history, backfills, and a manual-run/trigger UI come for
+free. Nothing here is required to run a pipeline by hand.
 
-The 11 assets and their lineage:
-
-```
-bronze/copphil_sentinel
-   ├─ silver/sentinel2_ndvi ─┐
-   ├─ silver/sentinel2_truecolor ─┤
-   ├─ silver/sentinel1_sar ─┬─────┤
-   │      └─ silver/sentinel1_flood ─┤   (flood reads the silver VV-dB COG)
-   │                                 └─ gold/stac_catalog ─ silver/raster_mosaics
-silver/ph_admin_geoparquet ─ silver/ph_admin_pmtiles   (manual-run, no upstream)
-reference/philsa_catalog                                (by-reference loaders,
-reference/esri_lulc                                      standalone/manual-run)
-```
-
-`raster_mosaics` sits **after** gold because the mosaic script reads item
-hrefs from the STAC API — it can only stitch scenes the gold step has already
-registered. The per-scene Sentinel silver assets run in **batch mode** when no
-`scene` is set in run config: they invoke `build_silver.py --only <product>`,
-which builds that product for every bronze scene (local + R2) — so a
-sensor-triggered chain run actually processes the newly downloaded scenes.
-Pin `scene` (or `sar_name` for flood) in run config to build a single scene.
-
-**Run modes — both from the checklist ask:**
-- **One-time / manual:** materialize any asset from the UI ("Materialize"), or
-  headless: `dagster asset materialize -m definitions --select 'bronze/copphil_sentinel'`
-  (add `--config-json '{"ops":{"bronze__copphil_sentinel":{"config":{"dry_run":true}}}}'`
-  to preview without downloading). Every script's own params are exposed as
-  **run config** (e.g. `scene`, `force`, `tolerance_m`, `dry_run`, `only`).
-- **Daily update check:** `copphil_new_scene_sensor` polls the CopPhil OData
-  catalogue hourly and launches the `copphil_chain_refresh` job (bronze +
-  everything downstream) **only when a scene newer than its cursor appears**;
-  `copphil_daily_schedule` (06:00 Asia/Manila) is a blind-but-idempotent
-  fallback. **Both ship OFF** (`STOPPED`) — enable deliberately in the UI's
-  Automation tab, or `dagster sensor start copphil_new_scene_sensor`.
-
-**Local dev (no server):** from `orchestration/`, `uv venv && uv pip install -e .`
-then `dagster dev` (ephemeral storage, UI on :3000) or `dagster definitions validate`.
-
-**Full stack (compose):** run/event storage lives in a `dagster` database on the
-existing pgSTAC Postgres. One-time:
-
-```
-docker compose -f stac-fastapi-pgstac/compose.yml up -d          # Postgres + STAC API
-docker compose -f stac-fastapi-pgstac/compose.yml exec database \
-  psql -U username -d postgis -c 'CREATE DATABASE dagster'       # once
-docker compose -f compose.orchestration.yml up -d --build        # webserver + daemon
-```
-
-UI at **http://localhost:3030**. The webserver+daemon join the pgSTAC compose
-network (reaching Postgres as `database`, the STAC API as `app:8082`) and
-bind-mount the repo. Two assets still run best from the **host**, not the
-container image: `silver/ph_admin_pmtiles` (needs `tippecanoe` + the `aws` CLI)
-and `silver/raster_mosaics` (execs into the TiTiler container).
+**The operating detail lives in
+[`orchestration/README.md`](./orchestration/README.md)**: the 11 assets and their
+lineage, run config, the sensor/schedule (both ship OFF), `dagster dev` vs. the
+compose stack, and the two assets that must run from the host. Read it when you
+touch the orchestration layer — not when you run a script by hand.
 
 ## R2 key layout (mirrors the tiers)
 
@@ -175,6 +127,7 @@ s3://<bucket>/
 ```
 
 Conventions for R2-writing scripts:
+
 - The prefix is **hardcoded per script** (its tier + dataset) — it is not
   configurable via the environment, so a stray env var can't silently redirect
   a tier. `download_copphil_eodata.py` writes locally by default (`--r2` uploads);
@@ -195,11 +148,11 @@ Conventions for R2-writing scripts:
 Needed before the first R2 upload (any script):
 
 1. **Enable R2** on the Cloudflare account (free tier: 10 GB, zero egress).
-2. **Create a bucket** (e.g. `philsa-geo`).
-3. **Create an R2 API token** (R2 → *Manage R2 API Tokens*), permission **Object
+1. **Create a bucket** (e.g. `philsa-geo`).
+1. **Create an R2 API token** (R2 → *Manage R2 API Tokens*), permission **Object
    Read & Write** scoped to the bucket → Access Key ID + Secret (shown once).
-4. **Note the Account ID**.
-5. *(Optional)* enable the bucket's `r2.dev` subdomain or a custom domain for
+1. **Note the Account ID**.
+1. *(Optional)* enable the bucket's `r2.dev` subdomain or a custom domain for
    public HTTPS and set it as `R2_PUBLIC_BASE`.
 
 Endpoint is `https://<R2_ACCOUNT_ID>.r2.cloudflarestorage.com`. The Python scripts

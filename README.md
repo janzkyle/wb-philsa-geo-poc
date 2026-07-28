@@ -122,6 +122,9 @@ Both commits matter: the submodule push publishes the code; the parent commit
 records *which* commit collaborators should check out. Skip the parent commit and
 your edit stays invisible to everyone else.
 
+Both steps are scripted — `bash .claude/skills/submodule-bump/bump_submodule.sh
+stac-browser -m "..."` (see the `submodule-bump` skill; `DRY_RUN=1` to preview).
+
 To pull in upstream's updates later: `git fetch upstream && git merge upstream/main`
 inside the submodule, push to `origin`, then record the new gitlink as above.
 

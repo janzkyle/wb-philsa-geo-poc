@@ -146,7 +146,7 @@ tools, not in the chat model's weights.
       **both ship OFF**, enable in the UI). Run/event storage = a `dagster` DB on
       the existing pgSTAC Postgres; `compose.orchestration.yml` runs the
       webserver (UI :3030) + daemon on the pgSTAC network. See
-      `pipelines/README.md` → *Orchestration (Dagster)*.
+      `pipelines/orchestration/README.md`.
   - [ ] Add `tippecanoe` + `aws` CLI to the Dagster image so
         `silver/ph_admin_pmtiles` and `silver/raster_mosaics` run in-container
         (today they run best from the host).
