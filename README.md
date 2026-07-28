@@ -139,8 +139,14 @@ inside the submodule, push to `origin`, then record the new gitlink as above.
   a chat assistant drives the same layer store as the manual panel via STAC
   tools — see `webmap/README.md`) renders the open layers via TiTiler. Next:
   restricted/authenticated layers.
-- 🔜 **Auth & governance.** Identity provider + RBAC, collection-level access
-  control, and the open/restricted data-sharing policy.
+- ◐ **Auth & governance.** Live at the edge gateway: partner **API keys** +
+  **Auth0 JWT** verification, **collection-level RBAC** (`sentinel1-flood` is the
+  first restricted collection — hidden from anonymous `/collections`, refused on
+  its own routes, filtered out of unscoped `/search`, and un-renderable by
+  TiTiler), and a presigned-URL endpoint for private-bucket assets. Policy and
+  operator guide in **`deploy/AUTH.md`**. Next: create the Auth0 tenant, issue an
+  R2 token covering the private bucket, and move the restricted bytes off the
+  public host.
 
 When you finish a milestone, update this list and `poc-architecture.mmd` so they
 stay honest.

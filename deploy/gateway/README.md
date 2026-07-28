@@ -10,9 +10,14 @@ governed, read-only open-data API. This is the "API gateway" component from
 | Concern | How |
 | --- | --- |
 | **Read-only** | Blocks every write/transaction method at the edge. Only `GET`/`HEAD`/`OPTIONS` pass, plus `POST /search` and `POST /aggregate` (STAC's POST-based *reads*). |
-| **CORS** | One consistent open-data CORS contract (`*`, no credentials) for browser consumers; preflights answered at the edge. |
-| **Caching** | `GET` responses cached at the POP — tiles hard (24 h), STAC short (60 s) — so TiTiler never re-renders an identical tile for two agencies. |
-| **Rate limiting** | Optional Cloudflare rate-limit binding, per client IP (see `wrangler.toml`). |
+| **CORS** | One consistent open-data CORS contract for browser consumers; preflights answered at the edge. `Authorization`/`X-API-Key` are allow-listed so credentialed browser calls work. |
+| **Auth & governance** | Anonymous callers get the **open** tier; a partner **API key** or an **Auth0 JWT** unlocks the **restricted** tier. `/assets/sign` mints short-lived presigned R2 URLs. See **[`../AUTH.md`](../AUTH.md)**. |
+| **Caching** | `GET` responses cached at the POP — tiles hard (24 h), STAC short (60 s) — so TiTiler never re-renders an identical tile for two agencies. Cache keys are **scoped by access tier**, so a privileged response can't be replayed to an anonymous caller. |
+| **Rate limiting** | Optional Cloudflare rate-limit binding — per API key for credentialed callers, per client IP for anonymous ones (see `wrangler.toml`). |
+
+Anonymous requests pay nothing for the auth layer existing: with no credential
+header the worker skips principal resolution entirely — no KV read, no JWKS
+fetch.
 
 **No custom domains in this POC.** Each deploy lands on a `*.workers.dev` URL. One
 worker fronts one origin, so it's deployed **twice** (STAC + TiTiler) via wrangler
@@ -57,9 +62,23 @@ The consumer code is unchanged — only the base URLs move (this is exactly what
 `DATA_SOURCE` constants in `webmap/src/config.ts` are set up for). External
 agencies then integrate against these same two workers.dev URLs.
 
-## Later: restricted collections (Phase 3)
+## Restricted collections (Phase 3 — built)
 
-The `API_KEYS` hook in `worker.js` is where per-key auth for the private/licensed
-tier goes: open collections stay anonymous; a valid key gates restricted paths
-and mints a short-lived presigned R2 URL for the private-bucket COG. Not needed
-until the private bucket exists.
+Open collections stay anonymous; a valid credential gates the restricted tier and
+mints a short-lived presigned R2 URL for the private-bucket COG. The policy is
+two `wrangler.toml` vars — `RESTRICTED_COLLECTIONS` and
+`RESTRICTED_ASSET_PREFIXES` — and the code lives in `lib/`:
+
+| File | Does |
+| --- | --- |
+| `lib/auth.js` | Resolves the caller: API key (hashed, in Workers KV) or Auth0 JWT (RS256 against the tenant JWKS). Both collapse into one principal. |
+| `lib/access.js` | Pure policy — which routes are refused, which responses are filtered, which object keys are restricted. |
+| `lib/presign.js` | SigV4 presigned GET URLs for R2, via Web Crypto (no SDK in the bundle). |
+| `scripts/mint-key.mjs` | Issue / list / revoke partner API keys. |
+
+Full operator guide, the Auth0 tenant setup, and the enforcement matrix:
+**[`../AUTH.md`](../AUTH.md)**.
+
+```bash
+node --test 'test/*.test.mjs'   # policy + presigner unit tests, no account needed
+```

@@ -13,6 +13,10 @@
 #
 # Origins are the current POC services (see ../../render.yaml). Change them if
 # Render appended a suffix to a taken service name.
+#
+# NOTE on wrangler environments: `vars`, `kv_namespaces` and triggers are NOT
+# inherited from the top level — anything an environment needs must be repeated
+# inside its own [env.*] block. That's why the auth config appears twice below.
 
 compatibility_date = "2026-07-15"
 main = "worker.js"
@@ -25,15 +29,59 @@ name = "philsa-open-data-gateway"
 # Logs + traces (Workers Logs — included on the free plan, with a daily cap a POC
 # won't hit). Inherited by both [env.*] below. This is how you'll see origin 502s,
 # cache behaviour, and rate-limit denials; the worker logs origin failures as JSON.
+# It is also the AUDIT LOG for restricted data: every /assets/sign call logs the
+# principal and the object key.
 [observability]
 enabled = true
 head_sampling_rate = 1
+
+# ==============================================================================
+# Auth & governance (see ../AUTH.md)
+# ==============================================================================
+# Non-secret config lives in `vars` below; the four credentials live in Worker
+# SECRETS, set once per environment and never committed:
+#
+#   wrangler secret put R2_ACCOUNT_ID       -e stac     # <account>.r2.cloudflarestorage.com
+#   wrangler secret put R2_ACCESS_KEY_ID    -e stac
+#   wrangler secret put R2_SECRET_ACCESS_KEY -e stac
+#
+# Only the STAC gateway signs URLs, so the tiles gateway needs no R2 secrets.
+#
+# AUTH0_DOMAIN is intentionally EMPTY until the tenant exists. With it unset the
+# worker simply rejects bearer JWTs ("identity provider is not configured") and
+# falls back to anonymous — API-key auth keeps working, so the restricted tier is
+# enforced from day one and logins light up later with a var change + redeploy.
 
 # --- STAC API gateway ---------------------------------------------------------
 [env.stac]
 name = "philsa-stac-gateway"
 workers_dev = true
-vars = { ORIGIN = "https://philsa-stac-api.onrender.com", KIND = "stac" }
+
+[env.stac.vars]
+ORIGIN = "https://philsa-stac-api.onrender.com"
+KIND = "stac"
+# The ENFORCEMENT authority for collection-level access. The matching
+# `philsa:access` property in pgSTAC is documentation — keep the two in sync with
+# ../scripts/tag-collection-access.sh.
+RESTRICTED_COLLECTIONS = "sentinel1-flood"
+# R2 object-key prefixes whose bytes are restricted. Used to gate TiTiler renders
+# and to bound what /assets/sign is willing to sign.
+RESTRICTED_ASSET_PREFIXES = "02-silver/sentinel1-flood/"
+# Identity provider (Auth0). Fill AUTH0_DOMAIN in after creating the tenant —
+# see ../AUTH.md. Swapping to PhilSA/CopPhil Keycloak later changes only these.
+AUTH0_DOMAIN = ""
+AUTH0_AUDIENCE = "https://api.philsa-poc.example/stac"
+AUTH0_ROLES_CLAIM = "https://philsa.gov.ph/roles"
+# Presigned-URL minting for the restricted tier.
+R2_PRIVATE_BUCKET = "world-bank-philsa-geo-private"
+PRESIGN_TTL_SECONDS = "300"
+PRESIGN_MAX_TTL_SECONDS = "900"
+
+# Hashed partner API keys. Mint with `node scripts/mint-key.mjs` — the namespace
+# only ever holds SHA-256 digests, never the keys themselves.
+[[env.stac.kv_namespaces]]
+binding = "API_KEYS"
+id = "3c64dcd06139419b90154106a13bb359"
 
 # Keep-warm cron: ping the origin every 5 min so the free-tier Render service
 # never idles into a ~30–60 s cold start (worker.js scheduled()). Render sleeps
@@ -47,7 +95,21 @@ crons = ["*/5 * * * *"]
 [env.tiles]
 name = "philsa-tiles-gateway"
 workers_dev = true
-vars = { ORIGIN = "https://philsa-titiler.onrender.com", KIND = "tiler" }
+
+[env.tiles.vars]
+ORIGIN = "https://philsa-titiler.onrender.com"
+KIND = "tiler"
+# The tiler doesn't know about collections, only objects — but it MUST refuse to
+# render restricted ones, or the STAC-side restriction is cosmetic.
+RESTRICTED_ASSET_PREFIXES = "02-silver/sentinel1-flood/"
+AUTH0_DOMAIN = ""
+AUTH0_AUDIENCE = "https://api.philsa-poc.example/stac"
+AUTH0_ROLES_CLAIM = "https://philsa.gov.ph/roles"
+
+# Same namespace as the STAC gateway: one key works across both surfaces.
+[[env.tiles.kv_namespaces]]
+binding = "API_KEYS"
+id = "3c64dcd06139419b90154106a13bb359"
 
 [env.tiles.triggers]
 crons = ["*/5 * * * *"]
@@ -56,7 +118,9 @@ crons = ["*/5 * * * *"]
 # Uncomment inside EACH env above (or here to share) to enforce per-IP limits
 # (worker.js calls env.RATE_LIMITER.limit()). 100 requests / 60s per client IP is
 # a sane open-data default; raise it once you issue API keys for heavier
-# server consumers. Example (add under an [env.*] block):
+# server consumers. Credentialed callers are metered per principal rather than
+# per IP, so an agency behind a NAT isn't throttled by its neighbours.
+# Example (add under an [env.*] block):
 #
 #   [[env.stac.unsafe.bindings]]
 #   name = "RATE_LIMITER"

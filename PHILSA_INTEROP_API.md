@@ -167,8 +167,8 @@ edge, with no new server to run:
 - **Rate Limiting** (native rate-limit binding) in front of the Render origins,
 - **caching of tiles** (huge — TiTiler renders every tile on demand; the edge
   cache in front of the tiler collapses repeat cost),
-- a lightweight per-key check against restricted paths (the `deploy/gateway/`
-  worker already stubs this hook).
+- a lightweight per-key check against restricted paths — **built and deployed**;
+  see `deploy/AUTH.md`.
 
 Heavier alternatives if PhilSA later standardises on a full API-management
 product: **APISIX** or **Kong** (self-host) — more knobs, more ops. Not warranted
@@ -181,6 +181,18 @@ Restricted/licensed layers (the private R2 bucket in the architecture diagram):
 - A valid API key (via the gateway) mints a **short-lived presigned R2 URL**;
   TiTiler (or the agency's own GDAL) reads the COG through it.
 - This keeps licensed imagery governed without re-hosting or copying it.
+
+**Built** — `GET /assets/sign?url=<asset href>` on the STAC gateway, gated on the
+`partner` role, capped at 15 min, and refusing to sign anything outside the
+restricted prefixes so a leaked key can't proxy the whole bucket. Every signing is
+logged with the principal and object key. Full detail, including how to issue and
+revoke partner keys: **`deploy/AUTH.md`**.
+
+Two follow-ups before this path is real end-to-end: the R2 API token needs to
+cover `world-bank-philsa-geo-private`, and the restricted objects have to be moved
+off the public `r2.dev` host (`deploy/scripts/move-assets-private.sh`). Until then
+`sentinel1-flood` is restricted in the catalog and the tiler but still downloadable
+directly from public R2.
 
 ### 5. Tile caching — cost & latency (do this early, it's cheap)
 Per `webmap/src/lib/titiler.ts`, every tile is rendered on demand (open COG,

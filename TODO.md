@@ -155,9 +155,16 @@ tools, not in the chat model's weights.
 
 - [x] Create the public bucket (open COGs + PMTiles) and confirm public read
 - [x] Upload PH admin-boundary GeoParquet to R2 (skill already supports this)
-- [ ] Create the private bucket (sensitive data + licensed imagery)
-- [ ] Decide the open/restricted **sensitivity tagging** scheme on items/assets
-- [ ] Presigned-URL flow for restricted assets
+- [x] Create the private bucket (sensitive data + licensed imagery) —
+      `world-bank-philsa-geo-private`, no public access, no `r2.dev` domain.
+      Still empty: see *Auth & governance* → move the restricted bytes.
+- [x] Decide the open/restricted **sensitivity tagging** scheme — `philsa:access`
+      (`open`|`restricted`) on the **collection**, matching the existing
+      `philsa:*` property convention. Per-collection, not per-item: that's how the
+      data is actually licensed and it keeps enforcement off the hot path.
+      See *Auth & governance*.
+- [~] Presigned-URL flow for restricted assets — built (`/assets/sign`), blocked
+      on an R2 API token that covers the private bucket. See *Auth & governance*.
 
 ## Frontend — MapLibre webmap (ACTIVE track)
 
@@ -466,6 +473,57 @@ is `INTEGRATION_GUIDE.md`; `partner-template/` is a runnable single-file sample.
 
 ## Auth & governance
 
-- [ ] Identity provider + token issuance
-- [ ] RBAC / collection-level access control on the catalog API
-- [ ] Data-sharing policy: who sees open vs. restricted
+Enforced at the **edge gateway** (`deploy/gateway/`), which already fronts both
+public origins — no new service in the request path, and anonymous open-data
+traffic pays nothing for it (no KV read, no JWKS fetch without a credential).
+Operator guide + Auth0 tenant setup: **`deploy/AUTH.md`**.
+
+- [x] **Identity provider + token issuance** — two credential types, one
+      principal (`gateway/lib/auth.js`): **API keys** for server consumers that
+      can hold a secret (hashed SHA-256 in Workers KV, minted/revoked with
+      `gateway/scripts/mint-key.mjs`), and **Auth0 JWTs** (RS256 verified against
+      the tenant JWKS, `alg` pinned) for browser users who can't. Roles:
+      `public` / `partner` / `admin`. Nothing is Auth0-specific — it's plain OIDC
+      discovery, so repointing at CopPhil/PhilSA **Keycloak** later is a var
+      change. *Auth0 tenant not created yet: `AUTH0_DOMAIN` ships empty, which
+      disables JWTs and leaves API-key auth fully working.*
+- [x] **RBAC / collection-level access control on the catalog API** — deployed and
+      verified live. `sentinel1-flood` is the first restricted collection:
+      stripped from `/collections` (110 → 109 anonymously), `401` on its
+      collection/item routes, `401` on a search naming it, and filtered out of an
+      **unscoped** `/search` (the bypass that matters — origin returns 30 items
+      for a given date window, the gateway returns 28 with zero flood). The tiles
+      gateway refuses to render restricted COGs, including via the `urls`/`url_1`
+      mosaic params. Edge-cache keys are tier-scoped so a privileged response
+      can't be replayed to an anonymous caller.
+- [x] **Data-sharing policy: who sees open vs. restricted** — written up in
+      `deploy/AUTH.md` (tier table, roles, enforcement matrix, known limits).
+      Sensitivity is tagged on collections as `philsa:access` via
+      `deploy/scripts/tag-collection-access.sh` — **documentation**; the gateway's
+      `RESTRICTED_COLLECTIONS` var is the **enforcement authority**. Deliberately
+      two places: enforcement must survive the DB being unreachable, and a
+      catalog writer must not be able to quietly open the restricted tier.
+- [~] **Presigned URLs for restricted assets** — `/assets/sign` is built and
+      deployed; it refuses anonymous callers, refuses to sign open assets (so a
+      leaked key can't proxy the bucket), and logs every signing with the
+      principal + object key (that log is the access record). The SigV4
+      implementation is verified **byte-identical to botocore**, and signs the
+      public bucket successfully (`206` with Range). **Blocked on one dashboard
+      step:** the R2 API token in `.env` is scoped to `world-bank-philsa-geo`
+      only, so URLs into the private bucket return `403 AccessDenied`. Issue a
+      token covering both buckets, re-set the Worker secrets, redeploy — see the
+      warning box in `deploy/AUTH.md`.
+- [ ] **Move the restricted bytes** — until this runs, the restriction is
+      metadata only: `sentinel1-flood` COGs are still world-readable straight off
+      the public `r2.dev` host, which the gateway isn't in the path of.
+      `deploy/scripts/move-assets-private.sh prod sentinel1-flood --apply` copies
+      to the private bucket, verifies the count, repoints the STAC hrefs, then
+      deletes the public copies (dry-run by default). Needs the R2 token fix above.
+- [ ] **Auth0 tenant** — create it and fill `AUTH0_DOMAIN` in both `[env.*.vars]`
+      blocks to switch on browser logins (`deploy/AUTH.md` has the click-path:
+      API + audience, RBAC, roles, and the post-login Action that emits the roles
+      claim).
+- [ ] **Restricted layers in the frontends** — the webmap/dashboard/STAC Browser
+      currently see `sentinel1-flood` disappear (they're anonymous). Wire the
+      Auth0 SPA login and pass the bearer token through, or ship a partner key
+      server-side for the template.
