@@ -23,7 +23,7 @@ services:
     runtime: docker
     plan: free
     region: singapore                       # closest free region to the Philippines
-    dockerfilePath: ./deploy/stac-api/Dockerfile   # pins deps to the known-good 6.2.1 set
+    dockerfilePath: ./deploy/stac-api/Dockerfile   # pins deps for reproducible builds
     dockerContext: ./stac-fastapi-pgstac
     dockerCommand: uvicorn stac_fastapi.pgstac.app:app --host 0.0.0.0 --port $PORT
     autoDeploy: true

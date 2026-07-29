@@ -42,12 +42,10 @@ cleanup() { docker rm -f "$CONTAINER" >/dev/null 2>&1 || true; }
 trap cleanup EXIT
 
 # Build the SAME pinned image as prod (deploy/stac-api/Dockerfile), NOT the
-# submodule's own Dockerfile. The submodule's `pip install .[server,catalogs]`
-# resolves a newer stac-fastapi-extensions (6.3+) that moved `core.fields`, so
-# the app crashes at import with `ModuleNotFoundError:
-# stac_fastapi.extensions.core.fields`. The pinned Dockerfile reproduces the
-# known-good 6.2.1 set. Context is the submodule root (COPYs are relative to it).
-info "building the pinned STAC API image (same known-good deps as prod) …"
+# submodule's own Dockerfile — ingesting against a different dependency set than
+# prod runs would defeat the point. Context is the submodule root (COPYs are
+# relative to it).
+info "building the pinned STAC API image (same deps as prod) …"
 docker build -q -f "$DEPLOY_DIR/stac-api/Dockerfile" -t "$IMAGE" \
   "$REPO_ROOT/stac-fastapi-pgstac" >/dev/null
 
