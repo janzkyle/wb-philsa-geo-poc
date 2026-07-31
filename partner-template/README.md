@@ -59,6 +59,10 @@ opacity) already works and needs no changes.
 - Discovering PhilSA layers and dates via **STAC** (`/collections`, `/search`).
 - Rendering them as **tiles** through TiTiler — with the exact render params per
   layer, so it looks identical to the PhilSA webmap.
+- Handling PhilSA's **restricted tier** honestly: layers flagged `restricted` in
+  the `LAYERS` table are reported as needing access, rather than failing with a
+  mystery error. A browser page can't hold the API key that would unlock them —
+  see the guide's section 2a.
 - Drawing **your own vectors on top** (via `MY_DATA`) — the whole integration
   pattern in ~40 lines of real logic. The `MY_DATA` block in `map.on("load")` is
   also the hook where you'd wire a parcel-click popup showing your attributes, or
@@ -78,7 +82,9 @@ opacity) already works and needs no changes.
 
 ## Notes
 
-- **No PhilSA key needed** for these open layers; the endpoints are read-only.
+- **No PhilSA key needed** for the open layers; the endpoints are read-only.
+  Layers in the restricted tier need a key your **server** holds — never paste one
+  into this file, which ships to every visitor.
 - **Cold starts:** the free-tier services sleep after idle — the first tile
   request can take ~30–60 s. The page shows a "loading…" status; just wait.
 - **CDN vs bundling:** this template loads MapLibre from a CDN for zero-setup. If

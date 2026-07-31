@@ -14,7 +14,7 @@
 # NOTE on URLs: the frontend build vars below assume Render gives each service
 # its `https://<name>.onrender.com` URL. If a name is already taken in your
 # account Render appends a suffix — then update the *_API / SB_catalogUrl vars to
-# the real URLs and redeploy the two static sites. See DEPLOYMENT.md §5.
+# the real URLs and redeploy the two static sites. See DEPLOYMENT.md section 5.
 
 services:
   # ---------------------------------------------------------------- STAC API --

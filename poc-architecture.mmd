@@ -1,51 +1,86 @@
 flowchart LR
-    subgraph SRC["Authoritative Data Sources"]
-        COP["CopPhil S3<br/>raw Sentinel / EODATA"]
-        VEC["Vector sources<br/>HDX admin · Copernicus EMS · OSM / synthetic"]
-        PUB["Public STAC APIs<br/>Earth Search · Planetary Computer"]
+    subgraph SRC["<b>Authoritative data sources</b>"]
+        COP["<b>CopPhil DIAS · CloudFerro</b><br/>raw Sentinel-1/2 · OData + Keycloak"]
+        CAT["<b>External catalogs</b><br/>PhilSA STAC: Copernicus Sentinel-1/2/3/5P/6<br/>ESRI 10 m LULC Living Atlas COGs"]
+        HDX["<b>OCHA COD-AB on HDX</b><br/>PH admin boundaries"]
+        FUT["<b>Planned sources</b><br/>EMS/GFM flood · Sentinel-3 · DEM · OSM · Earth Search"]
     end
 
-    subgraph ETLP["ETL — CopPhil JupyterLab"]
-        JUP["Processing<br/>clip · NDVI · SAR flood · vector to PMTiles<br/>tag sensitivity (open / restricted)"]
+    subgraph PIPE["<b>pipelines/ — medallion tiers</b>"]
+        BRZ["<b>01-bronze</b><br/>raw scenes, as acquired"]
+        SLV["<b>02-silver</b><br/>derived rasters + vectors"]
+        GLD["<b>03-gold</b><br/>serving-ready catalog entries, by reference"]
+        REFL["<b>reference/ loaders</b><br/>external catalogs mirrored by reference<br/>pixels stay at source"]
+        DAG["<b>Dagster orchestration — optional</b><br/>asset graph · new-scene sensor + daily schedule"]
     end
 
-    subgraph STORE["Storage"]
-        R2PRIV["private<br/>sensitive data + licensed imagery · Cloudflare R2"]
-        DB["STAC DB — internal only<br/>PostgreSQL + PostGIS (pgSTAC)"]
-        R2PUB["public<br/>open COGs + PMTiles · Cloudflare R2"]
+    subgraph STORE["<b>Storage</b>"]
+        R2PUB["<b>Cloudflare R2 — public bucket</b><br/>open COGs · PMTiles · MosaicJSON · admin index"]
+        R2PRIV["<b>Cloudflare R2 — private bucket</b><br/>restricted / licensed assets<br/>s3:// hrefs · short-lived presigned URLs"]
+        DB["<b>pgSTAC — PostgreSQL + PostGIS</b><br/>local: Docker · prod: Neon"]
     end
 
-    subgraph UIP["End user layer"]
-        BROW["STAC Browser<br/>catalog explorer<br/><i>audience: analysts / data engineers</i>"]
-        DASH["TerriaJS dashboard<br/>open: public · restricted: authenticated<br/><i>audience: partner agencies</i>"]
+    APIW["<b>Writable STAC API — never public</b><br/>local: transactions ON<br/>prod: ephemeral via prod-ingest.sh → Neon"]
+
+    subgraph SERVE["<b>Interoperability layer — Render</b>"]
+        API["<b>STAC API</b><br/>stac-fastapi-pgstac · discovery + search<br/>STAC 1.0 / OGC API Features · prod read-only"]
+        TIT["<b>Tile server</b><br/>TiTiler · styled XYZ tiles · per-date MosaicJSON<br/>zonal statistics · reads R2 authenticated S3"]
     end
 
-    subgraph GATE["Access &amp; Governance"]
-        AUTH["Auth / Identity provider<br/>RBAC · token issuance<br/>presigned URLs · data-sharing policy"]
+    subgraph GATE["<b>Edge gateway — Cloudflare Workers</b><br/>read-only allowlist · open-data CORS · edge cache · rate limit"]
+        GWS["<b>philsa-stac-gateway</b><br/>*.workers.dev"]
+        GWT["<b>philsa-tiles-gateway</b><br/>*.workers.dev"]
     end
 
-    subgraph SERVE["Interoperability layer"]
-        API["Catalog API<br/>collection-level access control<br/>stac-fastapi-pgstac"]
-        TIT["Raster tiling<br/>"TiTiler]
+    subgraph UIP["<b>Frontends</b>"]
+        WEB["<b>MapLibre webmap — ACTIVE frontend</b><br/>layer panel + AI chat assistant, one shared store<br/>chat server → OpenRouter, free-first models<br/>Render static"]
+        BROW["<b>STAC Browser</b><br/>PhilSA-branded catalog explorer<br/>locked to our API · Render static"]
+        TPL["<b>partner-template</b><br/>single-file forkable agency starter + guide<br/>agency data over PhilSA layers · GitHub Pages"]
     end
 
-    COP --> JUP
-    VEC --> JUP
-    PUB -. "query asset URLs (ETL only)" .-> JUP
-    JUP -- "write open assets" --> R2PUB
-    JUP -- "write restricted assets" --> R2PRIV
+    EXT["<b>External agency consumers</b><br/>browser: MapLibre / Leaflet embeds<br/>server: QGIS · pystac-client · rasterio /vsicurl"]
 
-    BROW -- "authenticate" --> AUTH
-    DASH -- "authenticate" --> AUTH
-    AUTH -- "authorized discovery" --> API
-    AUTH -- "authorized tiles" --> TIT
+    AUTH["<b>Auth &amp; governance</b><br/>API keys, SHA-256 in Workers KV · collection RBAC<br/>presigned URLs · open/restricted tagging<br/>Auth0 JWT — planned, tenant not yet created"]
+
+    COP --> BRZ
+    HDX --> SLV
+    BRZ -- "SAFE zips" --> SLV
+    SLV -- "COGs · GeoParquet · PMTiles · mosaics" --> R2PUB
+    SLV -- "register silver assets, hrefs → R2" --> GLD
+    CAT --> REFL
+    FUT -. "as built" .-> SLV
+    FUT -. "as built" .-> REFL
+    DAG -. "orchestrates via Pipes subprocesses" .- BRZ
+    DAG -. " " .- SLV
+    DAG -. " " .- GLD
+
+    GLD -- "POST/PUT items" --> APIW
+    REFL -- "POST/PUT items" --> APIW
+    APIW --> DB
+
     API <--> DB
+    TIT -- "open COGs" --> R2PUB
+    TIT -- "restricted COGs · authenticated s3://" --> R2PRIV
 
-    TIT -- "fetch open COGs" --> R2PUB
-    TIT -- "fetch restricted COGs" --> R2PRIV
-    DASH -- "open PMTiles (direct)" --> R2PUB
-    DASH -- "restricted PMTiles (presigned)" --> R2PRIV
-    JUP -- "load collections + items<br/>pypgstac (hrefs to R2)" --> DB
+    GWS --> API
+    API -. "origin still directly reachable · metadata leak" .-> EXT
+    GWT -- "X-Gateway-Auth" --> TIT
+
+    WEB --> GWS
+    WEB --> GWT
+    WEB -- "admin PMTiles, direct" --> R2PUB
+    BROW --> GWS
+    BROW --> GWT
+    TPL --> GWS
+    TPL --> GWT
+
+    EXT --> GWS
+    EXT --> GWT
+    EXT -- "bulk COGs · /vsicurl" --> R2PUB
+
+    AUTH -- "enforced at" --> GWS
+    AUTH -- "enforced at" --> GWT
+    AUTH -- "presigns" --> R2PRIV
 
     classDef src fill:#e0f2f1,stroke:#00897b,color:#004d40;
     classDef etl fill:#eceff1,stroke:#546e7a,color:#263238;
@@ -53,10 +88,14 @@ flowchart LR
     classDef serve fill:#fff3e0,stroke:#fb8c00,color:#e65100;
     classDef gate fill:#fde7e9,stroke:#c62828,color:#7f0000;
     classDef ui fill:#e3f2fd,stroke:#1e88e5,color:#0d47a1;
+    classDef ext fill:#f1f8e9,stroke:#7cb342,color:#33691e;
+    classDef planned fill:#fafafa,stroke:#9e9e9e,color:#616161,stroke-dasharray:6 4;
 
-    class COP,PUB,VEC src;
-    class JUP etl;
+    class COP,CAT,HDX src;
+    class BRZ,SLV,GLD,REFL,DAG,APIW etl;
     class DB,R2PUB,R2PRIV store;
     class API,TIT serve;
-    class AUTH gate;
-    class DASH,BROW ui;
+    class GWS,GWT,AUTH gate;
+    class WEB,BROW,TPL ui;
+    class EXT ext;
+    class FUT planned;

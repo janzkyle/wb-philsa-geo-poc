@@ -149,7 +149,7 @@ export const ADMIN_LAYERS: AdminLayerDef[] = [
 // the STAC API at runtime; `titilerParams` controls styling and must stay in
 // step with the `renders` metadata in pipelines/03-gold/catalog_silver.py.
 // The same params are also published for external agencies in
-// INTEGRATION_GUIDE.md §2/§6 and copied into partner-template/index.html -
+// INTEGRATION_GUIDE.md sections 2 and 6, and copied into partner-template/index.html -
 // change them together, or partner maps drift from this reference webmap.
 export interface RasterDef {
   id: string; // == STAC collection id

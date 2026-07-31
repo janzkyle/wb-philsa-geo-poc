@@ -46,7 +46,7 @@ awkward (a key in browser JS is public). This is the webmap's own profile.
 In code: discover an item via STAC, drop its tiles on your map — ~10 lines of
 standard MapLibre/Leaflet, no PhilSA-specific client. Copy-paste recipes (with
 the current base URLs and per-layer render params) live in
-**`INTEGRATION_GUIDE.md` §5a–b**; `partner-template/` is the same thing as a
+**`INTEGRATION_GUIDE.md` sections 5a–b**; `partner-template/` is the same thing as a
 runnable single-file page.
 
 ### B. Server / backend consumers
@@ -58,7 +58,7 @@ cares about **stable URLs** and **rate limits** more than tiles.
 In code: `pystac_client` search + a `rasterio` `/vsicurl` COG read — a farm's
 NDVI history lands in the agency's own DB without downloading whole scenes. The
 worked example (including the per-parcel zonal-stats recipe with correct nodata
-handling) is **`INTEGRATION_GUIDE.md` §5c–d**.
+handling) is **`INTEGRATION_GUIDE.md` sections 5c–d**.
 
 ---
 
@@ -188,11 +188,18 @@ restricted prefixes so a leaked key can't proxy the whole bucket. Every signing 
 logged with the principal and object key. Full detail, including how to issue and
 revoke partner keys: **`deploy/AUTH.md`**.
 
-Two follow-ups before this path is real end-to-end: the R2 API token needs to
-cover `world-bank-philsa-geo-private`, and the restricted objects have to be moved
-off the public `r2.dev` host (`deploy/scripts/move-assets-private.sh`). Until then
-`sentinel1-flood` is restricted in the catalog and the tiler but still downloadable
-directly from public R2.
+**Real end-to-end as of 2026-07-29.** The R2 token now covers
+`world-bank-philsa-geo-private`, and `move-assets-private.sh` has moved the
+`sentinel1-flood` objects off the public `r2.dev` host and deleted the public
+copies — so the restriction is enforced on the bytes, not just in the catalog and
+the tiler. Item hrefs are `s3://world-bank-philsa-geo-private/…`, which nothing
+can fetch without a signed URL. The origins are locked to the gateway by a shared
+secret (`deploy/titiler/gateway_guard.py`), closing the direct-to-Render bypass.
+
+One gap remains: the **STAC API origin** on Render still answers restricted
+*metadata* (ids, footprints, dates — not pixels) to anyone who hits its
+`*.onrender.com` host directly, because that image builds from the submodule and
+hasn't had the same guard injected. Tracked in `deploy/AUTH.md`.
 
 ### 5. Tile caching — cost & latency (do this early, it's cheap)
 Per `webmap/src/lib/titiler.ts`, every tile is rendered on demand (open COG,
@@ -260,9 +267,11 @@ just doesn't *say so*. To make it read as "the sample an agency could build":
 - **A browser API key is not a secret.** Do not gate *browser*-facing open layers
   behind a key expecting it to stay private — gate by origin/rate-limit instead.
   Keys are for **server** consumers and **restricted** data.
-- **Restricted data needs the private bucket + presigned path first.** Until the
-  private R2 bucket and presigned-URL flow exist (POC has only the public
-  bucket), "restricted collections" are a design, not a capability.
+- **Restricted data — CLOSED.** This used to read "a design, not a capability,"
+  because the POC had only the public bucket. The private bucket, the migration,
+  and the presigned-URL flow all landed on 2026-07-29; `sentinel1-flood` is now
+  genuinely unreachable without a key. The residual gap is metadata-only — see
+  section 4 and `deploy/AUTH.md`.
 - **STAC write access — CLOSED (was the top risk).** Prod previously ran with
   `ENABLE_TRANSACTIONS_EXTENSIONS=true` and no auth, so anyone could
   `POST/PUT/DELETE` catalog items. Now: the prod origin runs **read-only**

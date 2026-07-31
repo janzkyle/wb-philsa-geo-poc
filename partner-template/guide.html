@@ -117,7 +117,7 @@ The deal in one line: **PhilSA hosts and serves the Earth-observation layers; yo
 render them over your own data** (farm parcels, road networks, admin units,
 claims). Nothing here re-hosts PhilSA data - you point your app at PhilSA's URLs.
 
-_Last updated: 2026-07-14_
+_Last updated: 2026-07-29_
 
 > This file is the **canonical copy**. A webpage version ships with the partner
 > template (`partner-template/guide.html`) with the markdown embedded verbatim -
@@ -153,9 +153,9 @@ Public R2  https://pub-17ab60a2ca7142a48ae8e2685cd853f7.r2.dev
 
 Two things to know up front:
 
-- **Read-only & open.** These endpoints only ever *read*. No key is required for
-  the open layers. (A future *restricted* tier - licensed imagery - will need a
-  key; the open layers below never will.)
+- **Read-only, and mostly open.** These endpoints only ever *read*. Most layers
+  need no key at all. A **restricted** tier exists and is live - see section 2a - and
+  the open layers below will never require a key.
 - **Always-on edge, but cold origins behind it.** The gateway itself never sleeps
   and caches repeat requests, but the free-tier services behind it sleep after
   ~15 min idle - so the *first uncached* request can take ~30–60 s while the origin
@@ -172,20 +172,69 @@ It is the **canonical copy** for integrators: the PhilSA webmap
 (`webmap/src/config.ts`) and the partner template restate these params, and all
 are kept in step with the `renders` metadata the catalog publishes.
 
-| Collection id | What it is | Dated? | Render params (TiTiler query string) | Value unit |
-|---|---|---|---|---|
-| `sentinel2-truecolor` | Natural-colour optical (Sentinel-2, 10 m) | yes | *(none - RGB auto-detected)* | - |
-| `sentinel2-ndvi` | Vegetation health / greenness | yes | `rescale=-0.2,0.9&colormap_name=rdylgn` | NDVI |
-| `sentinel1-ratio` | Radar vegetation index (VH/VV, sees through cloud) | yes | `rescale=-14,-2&colormap_name=ylgn` | dB (VH/VV) |
-| `sentinel1-sar` | Radar backscatter (VV, all-weather) | yes | `rescale=20,52` | dB (VV) |
-| `sentinel1-flood` | Open-water / flood mask ⚠️ POC proxy | yes | `colormap=` *(categorical, see §6)* | - |
-| `esri-10m-lulc` | Annual land cover (10 m, 2025) | no | `colormap=` *(categorical, see §6)* | - |
+| Collection id | What it is | Dated? | Access | Render params (TiTiler query string) | Value unit |
+|---|---|---|---|---|---|
+| `sentinel2-truecolor` | Natural-colour optical (Sentinel-2, 10 m) | yes | open | *(none - RGB auto-detected)* | - |
+| `sentinel2-ndvi` | Vegetation health / greenness | yes | open | `rescale=-0.2,0.9&colormap_name=rdylgn` | NDVI |
+| `sentinel1-ratio` | Radar vegetation index (VH/VV, sees through cloud) | yes | open | `rescale=-14,-2&colormap_name=ylgn` | dB (VH/VV) |
+| `sentinel1-sar` | Radar backscatter (VV, all-weather) | yes | open | `rescale=20,52` | dB (VV) |
+| `sentinel1-flood` | Open-water / flood mask ⚠️ POC proxy | yes | **restricted** | `colormap=` *(categorical, see section 6)* | - |
+| `esri-10m-lulc` | Annual land cover (10 m, 2025) | no | open | `colormap=` *(categorical, see section 6)* | - |
 
 - **Dated?** "yes" = a per-acquisition-date collection; you pick a `YYYY-MM-DD`
   and get that day's image. "no" = a single date-independent layer (annual LULC).
+- **Access.** "open" needs no credential, ever. "restricted" needs an API key -
+  section 2a. Every recipe in section 5 works as written for the open layers.
 - ⚠️ **`sentinel1-flood` is a POC proxy, not a validated flood product.** Fine for
   visualisation/demos; do **not** drive payouts or official decisions off it
   without a validated source (Copernicus EMS/GFM) or ground calibration.
+
+### 2a. The restricted tier
+
+The **Access** column in section 2 is the current list of restricted
+collections - treat it as the authority, since the tier grows over time.
+`sentinel1-flood` was the first of them. A restricted collection behaves like any
+other once you hold a credential, and like it does not exist until you do.
+Concretely, without a key:
+
+- it is **absent** from `GET /collections` - what you get back is the open subset;
+- `GET /collections/<id>` and any `/search` naming it return **401**;
+- its tiles return **401** from TiTiler;
+- its pixels are **not** on the public R2 store - the `url=` recipes in sections 5
+  and 6 will 404 against `pub-….r2.dev` for those collections.
+
+None of that is an outage. It is the governance tier working as designed, and it
+is why an app should treat a 401 as "you need access", not as a failure to retry.
+
+**Getting a key.** Contact the PhilSA geospatial platform team; they issue one
+per consuming organisation and can revoke it individually. Then send it as a
+header on **both** gateways:
+
+```bash
+curl -H "X-API-Key: philsa_…" \
+  https://philsa-stac-gateway.philsa.workers.dev/collections/sentinel1-flood
+```
+
+**An API key is a server-side secret.** It belongs in your backend's environment,
+never in browser JavaScript or a public repo - anything shipped to a browser is
+readable by every visitor. Browser apps should proxy through your own server, or
+stick to the open layers. (A future Auth0 sign-in will cover browser users
+properly; keys are for server-to-server consumers.)
+
+**Downloading restricted pixels.** Restricted assets carry an
+`s3://…` href that no client can fetch directly. Exchange it for a short-lived
+signed URL, then range-read that with GDAL/rasterio/QGIS as usual:
+
+```bash
+curl -H "X-API-Key: philsa_…" \
+  "https://philsa-stac-gateway.philsa.workers.dev/assets/sign?url=<asset href>"
+# → {"url":"https://….r2.cloudflarestorage.com/…?X-Amz-Signature=…",
+#    "expires_in":300,"expires_at":"…"}
+```
+
+The URL expires in 5 minutes by default (`&expires_in=` up to 900 s), so sign per
+operation rather than caching one. Large COGs stream straight from storage - they
+never proxy through the gateway. Every signing is logged against your key.
 
 ---
 
@@ -230,14 +279,15 @@ That's the whole discovery surface: `GET /collections`,
 - **Per-date mosaic, with a fallback.** For a dated layer, PhilSA usually
   publishes a seamless **MosaicJSON** stitching that day's granules into one
   layer. When a date has no mosaic, render the individual item **COGs** instead.
-  (Both recipes are below; §6 shows how to choose automatically.)
+  (Both recipes are below; section 6 shows how to choose automatically.)
 - **Tiles are `WebMercatorQuad` (EPSG:3857) at `tilesize=512`.** That matches
   every web map library's default grid. Mount 512-px sources as `tileSize: 512`.
-- **No API key, no CORS setup on your side.** The STAC API and TiTiler send
-  permissive CORS headers, so browser apps can call them cross-origin out of the
-  box. The exception is the public R2 store: until PhilSA applies its read CORS
+- **No API key for the open layers, and no CORS setup on your side.** The STAC
+  API and TiTiler send permissive CORS headers, so browser apps can call them
+  cross-origin out of the box. (Restricted layers need a key and a server to hold
+  it - section 2a.) The other exception is the public R2 store: until PhilSA applies its read CORS
   policy to the bucket (`deploy/r2/apply-cors.sh`, PhilSA-side, one-time), a
-  browser can't probe the per-date mosaics directly, and the §5 recipes silently
+  browser can't probe the per-date mosaics directly, and the section 5 recipes silently
   fall back from the single-source mosaic to per-item COGs - still correct, just
   a few more tile sources.
 
@@ -258,7 +308,7 @@ const R2    = "https://pub-17ab60a2ca7142a48ae8e2685cd853f7.r2.dev";
 ```js
 // Add PhilSA's NDVI for a given date onto YOUR MapLibre map.
 async function addPhilSANdvi(map, date /* "2026-07-07" */) {
-  const params = "rescale=-0.2,0.9&colormap_name=rdylgn";  // from the §2 table
+  const params = "rescale=-0.2,0.9&colormap_name=rdylgn";  // from the section 2 table
   const tiles = await philsaTiles("sentinel2-ndvi", date, params);
   map.addSource("philsa-ndvi", { type: "raster", tileSize: 512, tiles });
   map.addLayer({ id: "philsa-ndvi", type: "raster", source: "philsa-ndvi" });
@@ -279,12 +329,19 @@ async function philsaTiles(collection, date, params) {
     body: JSON.stringify({ collections: [collection], datetime:
       `${date}T00:00:00Z/${date}T23:59:59Z`, limit: 100 }),
   });
+  if (r.status === 401) throw new Error(`"${collection}" is restricted - see section 2a`);
   const { features } = await r.json();
   return features.filter(f => f.assets?.data?.href).map(f =>
     `${TILER}/cog/tiles/WebMercatorQuad/{z}/{x}/{y}.png` +
     `?tilesize=512&url=${encodeURIComponent(f.assets.data.href)}&${params}`);
 }
 ```
+
+This helper covers the **open** layers. Point it at a restricted collection from a
+browser and both paths fail by design - the mosaic 404s (those bytes aren't on
+public R2) and the search 401s - hence the explicit check. Restricted layers go
+through your own backend, which holds the key and adds the `X-API-Key` header to
+both the search and the tile requests.
 
 ### 5b. Leaflet
 
@@ -311,8 +368,9 @@ Two ways in:
 
 - **As a STAC catalog** - install the **STAC API Browser** plugin, add
   `https://philsa-stac-gateway.philsa.workers.dev` as a connection, search a collection, and
-  load an item's `data` (COG) asset directly. COGs are public, so QGIS streams
-  only the pixels in view.
+  load an item's `data` (COG) asset directly. Open COGs are public, so QGIS
+  streams only the pixels in view. For a restricted layer, paste a freshly signed
+  URL from section 2a instead - and mind that it expires in five minutes.
 
 ### 5d. Python (server-side: zonal stats over your own parcels)
 
@@ -362,7 +420,7 @@ silently trusted.
 ## 6. Building tile URLs precisely
 
 Every TiTiler tile URL is the same shape - a base path, the `url=` of what to
-render, and the **render params** from §2:
+render, and the **render params** from section 2:
 
 ```
 # a single COG (per-item / fallback):
@@ -376,7 +434,7 @@ Where:
 
 - `<COG_HREF>` comes from a STAC item's `assets.data.href`.
 - `<MOSAIC_URL>` is `{R2}/02-silver/<collection>/mosaics/<collection>_<DATE>.mosaicjson`.
-- `<PARAMS>` is the render string for the collection (§2). **URL-encode** the
+- `<PARAMS>` is the render string for the collection (section 2). **URL-encode** the
   `url=` value; leave `{z}/{x}/{y}` literal for your map library to fill.
 
 ### Categorical layers (colormap JSON)
@@ -385,7 +443,7 @@ Two layers use a discrete class→RGBA colormap instead of a rescale. Pass it as
 **URL-encoded** JSON object in `colormap=`:
 
 ```jsonc
-// sentinel1-flood  (water classes coloured; land left transparent)
+// sentinel1-flood  (water classes coloured; land left transparent) - restricted, section 2a
 colormap = {"1":[33,102,204,255], "2":[120,170,230,255]}
 
 // esri-10m-lulc  (Impact Observatory 9-class palette)
@@ -416,9 +474,9 @@ The division of labour:
 - **You provide** your own vectors - farm parcels, claims, assets, road networks -
   as your own GeoJSON/vector layers in the same map.
 
-So a typical agency map is: your parcels on top → PhilSA NDVI/flood tiles below →
-basemap at the bottom. In code that's just adding a PhilSA raster source (§5a/5b)
-and your own `geojson` source to the same map instance. For analysis (§5d), it's
+So a typical agency map is: your parcels on top → PhilSA NDVI/radar tiles below →
+basemap at the bottom. In code that's just adding a PhilSA raster source (sections 5a and 5b)
+and your own `geojson` source to the same map instance. For analysis (section 5d), it's
 your geometries × PhilSA COGs → your numbers in your database.
 
 ---
@@ -427,9 +485,9 @@ your geometries × PhilSA COGs → your numbers in your database.
 
 - **Read-only.** The API never accepts writes. Don't build a workflow that expects
   to push data back - you pull and render.
-- **Open now, restricted later.** Everything in §2 is open (no key). A future
-  licensed/sensitive tier will require an API key and use short-lived signed URLs;
-  it won't change how the open layers work.
+- **Two tiers, and a 401 is an answer.** Most of section 2 is open and needs no key; the
+  layers marked *restricted* need one (section 2a). Treat `401` as "request access", not
+  as an error to retry - and never ship a key to a browser.
 - **Be gentle (rate limits).** Shared free-tier infra. Cache tiles on your side,
   don't hammer `POST /search` in tight loops, and prefer the per-date **mosaic**
   (one source) over many per-item COG sources when a mosaic exists.
@@ -448,7 +506,10 @@ your geometries × PhilSA COGs → your numbers in your database.
 - **Browse the catalog visually** - the STAC Browser and the PhilSA webmap render
   exactly these endpoints; use them to eyeball a layer/date before you wire it up.
 - **Every collection's metadata** - `GET /collections/{id}` returns its extent,
-  license, and description.
+  license, and description. Restricted collections also carry
+  `"philsa:access": "restricted"`; open ones omit the property, so treat *absent*
+  as open. It's a label for humans and auditors - the gateway enforces the tier
+  regardless of what the metadata says.
 - **Questions / a restricted-tier key / a new layer** - contact the PhilSA
   geospatial platform team.
 

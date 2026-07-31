@@ -62,8 +62,10 @@
     <p class="hint">
       PhilSA hosts the Earth-observation layers; this page just points at their
       open <strong>STAC</strong> + <strong>tile</strong> endpoints (see the
-      <code>PHILSA</code> config at the top of the source). No PhilSA library or
-      key. Full recipes: <a href="guide.html">the integration guide</a>.
+      <code>PHILSA</code> config at the top of the source). No PhilSA library, and
+      no key for the open layers - any marked <em>restricted</em> need a key your
+      server holds. Full recipes:
+      <a href="guide.html">the integration guide</a>.
     </p>
     <p class="hint" id="attrib"></p>
   </div>
@@ -83,15 +85,22 @@ const PHILSA = {
 };
 
 // The PhilSA layers + the render params that make each look right. Copied from
-// the canonical cheat-sheet in INTEGRATION_GUIDE.md §2 (colormaps: §6) - if a
+// the canonical cheat-sheet in INTEGRATION_GUIDE.md section 2 (colormaps: section 6) - if a
 // layer looks different from the PhilSA webmap, re-sync from there.
 // Categorical layers use a colormap object.
+//
+// `restricted: true` marks PhilSA's governed tier (INTEGRATION_GUIDE.md section 2a).
+// Those layers need an API key, which is a SERVER-SIDE secret - a key pasted
+// into this file would be readable by every visitor. So this browser-only
+// starter shows them as unavailable rather than pretending otherwise; to
+// actually render one, proxy the STAC and tile requests through your own
+// backend and add the X-API-Key header there.
 const LAYERS = {
   "sentinel2-ndvi":      { label: "Vegetation health (NDVI)",     temporal: true,  params: "rescale=-0.2,0.9&colormap_name=rdylgn" },
   "sentinel1-ratio":     { label: "Radar vegetation (VH/VV)",     temporal: true,  params: "rescale=-14,-2&colormap_name=ylgn" },
   "sentinel2-truecolor": { label: "Natural colour (Sentinel-2)",  temporal: true,  params: "" },
   "sentinel1-sar":       { label: "Radar backscatter (VV)",       temporal: true,  params: "rescale=20,52" },
-  "sentinel1-flood":     { label: "Flood extent (POC proxy ⚠️)",  temporal: true,
+  "sentinel1-flood":     { label: "Flood extent (POC proxy ⚠️) - restricted", temporal: true, restricted: true,
       params: "colormap=" + encodeURIComponent(JSON.stringify({ "1":[33,102,204,255], "2":[120,170,230,255] })) },
   "esri-10m-lulc":       { label: "Land cover (10 m, 2025)",       temporal: false,
       params: "colormap=" + encodeURIComponent(JSON.stringify({
@@ -131,6 +140,10 @@ const setStatus = (msg, err = false) => {
 let philsaLayerIds = [];   // MapLibre layer/source ids we manage, for cleanup
 let renderSeq = 0;         // discard slow responses that a newer selection superseded
 
+const RESTRICTED_MSG = (c) =>
+  `“${LAYERS[c]?.label || c}” is in PhilSA's restricted tier: it needs an API key, ` +
+  `which only your server may hold. See guide.html section 2a.`;
+
 // Return XYZ tile-URL templates for a layer+date: per-date mosaic if it exists,
 // else that day's item COGs (or, for non-temporal layers, all item COGs).
 async function philsaTiles(collection, date) {
@@ -151,6 +164,8 @@ async function philsaTiles(collection, date) {
   const r = await fetch(`${PHILSA.stac}/search`, {
     method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
   });
+  // 401 = PhilSA's restricted tier, not an outage. Don't retry it.
+  if (r.status === 401 || r.status === 403) throw new Error(RESTRICTED_MSG(collection));
   const { features = [] } = await r.json();
   return features.filter((f) => f.assets?.data?.href).map((f) =>
     `${PHILSA.tiler}/cog/tiles/WebMercatorQuad/{z}/{x}/{y}.png` +
@@ -169,6 +184,13 @@ async function renderPhilSA() {
   const collection = el("layer").value;
   const date = el("date").value;
   const seq = ++renderSeq;
+  // Restricted layers can't be rendered from a browser at all - say so plainly
+  // instead of firing requests that are designed to 401.
+  if (LAYERS[collection].restricted) {
+    clearPhilSA();
+    setStatus(RESTRICTED_MSG(collection), true);
+    return;
+  }
   setStatus("Loading tiles… (first request can take ~30–60 s if the service was idle)");
   try {
     const tiles = await philsaTiles(collection, date);
@@ -195,10 +217,12 @@ async function renderPhilSA() {
 // Populate the date dropdown for a temporal collection (distinct dates, latest first).
 async function loadDates(collection) {
   const dateSel = el("date"), dateLabel = el("dateLabel");
-  const { temporal } = LAYERS[collection];
+  const { temporal, restricted } = LAYERS[collection];
   dateSel.style.display = dateLabel.style.display = temporal ? "" : "none";
   dateSel.innerHTML = "";
   if (!temporal) return;
+  // Its dates are part of what the tier withholds - asking would just 401.
+  if (restricted) { dateSel.add(new Option("(needs access)", "")); return; }
   try {
     const r = await fetch(`${PHILSA.stac}/collections/${collection}/items?limit=100`);
     const { features = [] } = await r.json();
@@ -221,7 +245,7 @@ map.on("load", async () => {
   // ── ADD YOUR OWN DATA (optional) ──────────────────────────────────────────
   // If MY_DATA is set (top of file), draw it on top of the PhilSA layers. Fill +
   // outline only - no text, so no glyphs/font setup is needed. This is also where
-  // you'd wire a parcel click to your backend (see INTEGRATION_GUIDE.md §5d).
+  // you'd wire a parcel click to your backend (see INTEGRATION_GUIDE.md section 5d).
   if (MY_DATA) {
     map.addSource("mydata", { type: "geojson", data: MY_DATA });
     map.addLayer({ id: "mydata-fill", type: "fill", source: "mydata",
