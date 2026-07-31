@@ -135,21 +135,27 @@ inside the submodule, push to `origin`, then record the new gitlink as above.
   silver derivatives (NDVI, true-colour, SAR backscatter, and a first Sentinel-1
   flood proxy) are built and cataloged. Next: Copernicus EMS/GFM flood,
   OSM/synthetic vectors, and Earth Search Sentinel-2 L2A.
-- ◐ **Storage (Cloudflare R2).** Public bucket live (open COGs + PMTiles). Next:
-  the private bucket for sensitive/licensed imagery, plus presigned URLs for
-  restricted assets.
+- ✅ **Storage (Cloudflare R2).** Public bucket (open COGs + PMTiles) and the
+  private bucket for restricted assets are both live. Restricted items carry
+  `s3://` hrefs and are fetched through short-lived presigned URLs minted by the
+  gateway; the pipelines write new restricted scenes straight to the private
+  bucket.
 - ◐ **Frontend.** STAC Browser is up; the MapLibre webmap (rebuilt **AI-first**:
   a chat assistant drives the same layer store as the manual panel via STAC
-  tools — see `webmap/README.md`) renders the open layers via TiTiler. Next:
-  restricted/authenticated layers.
+  tools — see `webmap/README.md`) renders the open layers via TiTiler, and
+  reports restricted ones as restricted rather than as a failure. Next:
+  authenticated layers, which need the Auth0 tenant below.
 - ◐ **Auth & governance.** Live at the edge gateway: partner **API keys** +
   **Auth0 JWT** verification, **collection-level RBAC** (`sentinel1-flood` is the
   first restricted collection — hidden from anonymous `/collections`, refused on
   its own routes, filtered out of unscoped `/search`, and un-renderable by
-  TiTiler), and a presigned-URL endpoint for private-bucket assets. Policy and
-  operator guide in **`deploy/AUTH.md`**. Next: create the Auth0 tenant, issue an
-  R2 token covering the private bucket, and move the restricted bytes off the
-  public host.
+  TiTiler), and a presigned-URL endpoint for private-bucket assets. The
+  restricted bytes have been moved off the public host, and the TiTiler origin is
+  locked to the gateway by a shared secret — so the restriction holds on the
+  pixels, not just in the catalog. Policy and operator guide in
+  **`deploy/AUTH.md`**. Next: create the Auth0 tenant (JWT verification stays off
+  until it exists, API keys work meanwhile), and close the last bypass — the STAC
+  API origin still serves restricted *metadata* directly.
 
 When you finish a milestone, update this list and `poc-architecture.mmd` so they
 stay honest.
