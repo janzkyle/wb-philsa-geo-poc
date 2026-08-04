@@ -221,6 +221,26 @@ function UploadRow({ onError }: { onError: (msg: string) => void }) {
   );
 }
 
+// Every layer row carries the same 0-1 slider, but it fades a different thing
+// per kind - and one GeoJSON upload adds *two* rows (the shapes, then their clip
+// mask), so a bare pair of identical sliders reads as a mystery. Name each one.
+const OPACITY_CONTROLS: Record<string, { label: string; hint: string }> = {
+  "geojson-local": {
+    label: "Shape opacity",
+    hint: "Fades the uploaded outlines and fills.",
+  },
+  "geojson-mask": {
+    label: "Dimming outside",
+    hint:
+      "How strongly everything outside the uploaded boundaries is dimmed. " +
+      "Lower it to fade the surroundings back in; uncheck the row to un-clip.",
+  },
+};
+const DEFAULT_OPACITY_CONTROL = {
+  label: "Layer opacity",
+  hint: "Fades this layer over whatever is beneath it.",
+};
+
 export default function LayerPanel() {
   const layers = useMapStore((s) => s.layers);
   const removeLayers = useMapStore((s) => s.removeLayers);
@@ -246,69 +266,76 @@ export default function LayerPanel() {
           No data layers yet - add one below, or just ask the assistant.
         </p>
       )}
-      {rasters.map((l) => (
-        <div key={l.id} className="layerrow">
-          <div className="layerhead">
-            <label>
-              <input
-                type="checkbox"
-                checked={l.visible}
-                onChange={(e) =>
-                  updateLayer(l.id, { visible: e.target.checked })
-                }
-              />
-              <span title={l.description}>{l.label}</span>
-            </label>
-            <span className="layerbtns">
-              {l.legend && (
+      {rasters.map((l) => {
+        const opacityCtl = OPACITY_CONTROLS[l.kind] ?? DEFAULT_OPACITY_CONTROL;
+        return (
+          <div key={l.id} className="layerrow">
+            <div className="layerhead">
+              <label>
+                <input
+                  type="checkbox"
+                  checked={l.visible}
+                  onChange={(e) =>
+                    updateLayer(l.id, { visible: e.target.checked })
+                  }
+                />
+                <span title={l.description}>{l.label}</span>
+              </label>
+              <span className="layerbtns">
+                {l.legend && (
+                  <button
+                    type="button"
+                    className="mini"
+                    title="Legend"
+                    onClick={() =>
+                      setLegendOpen((s) => ({ ...s, [l.id]: !s[l.id] }))
+                    }
+                  >
+                    {legendOpen[l.id] ? "▾" : "▸"}
+                  </button>
+                )}
                 <button
                   type="button"
                   className="mini"
-                  title="Legend"
-                  onClick={() =>
-                    setLegendOpen((s) => ({ ...s, [l.id]: !s[l.id] }))
-                  }
+                  title="Remove layer"
+                  onClick={() => removeLayers([l.id])}
                 >
-                  {legendOpen[l.id] ? "▾" : "▸"}
+                  ✕
                 </button>
-              )}
-              <button
-                type="button"
-                className="mini"
-                title="Remove layer"
-                onClick={() => removeLayers([l.id])}
-              >
-                ✕
-              </button>
-            </span>
-          </div>
-          <input
-            type="range"
-            min={0}
-            max={1}
-            step={0.05}
-            value={l.opacity}
-            title={`Opacity ${Math.round(l.opacity * 100)}%`}
-            onChange={(e) => updateLayer(l.id, { opacity: +e.target.value })}
-          />
-          {l.passes && l.passes.length > 0 && (
-            <div
-              className={
-                l.passes.length > 1 ? "passnote warn" : "passnote"
-              }
-              title={
-                l.passes.length > 1
-                  ? "This date stitches multiple satellite passes (different orbit/look geometry) into one mosaic - backscatter across them is not directly comparable."
-                  : undefined
-              }
-            >
-              {l.passes.length > 1 ? "⚠ " : ""}
-              {describePasses(l.passes)}
+              </span>
             </div>
-          )}
-          {legendOpen[l.id] && l.legend && <LegendView legend={l.legend} />}
-        </div>
-      ))}
+            <label className="opacityctl" title={opacityCtl.hint}>
+              <span className="opacityname">{opacityCtl.label}</span>
+              <span className="opacityval">{Math.round(l.opacity * 100)}%</span>
+              <input
+                type="range"
+                min={0}
+                max={1}
+                step={0.05}
+                value={l.opacity}
+                aria-label={`${opacityCtl.label} - ${l.label}`}
+                onChange={(e) => updateLayer(l.id, { opacity: +e.target.value })}
+              />
+            </label>
+            {l.passes && l.passes.length > 0 && (
+              <div
+                className={
+                  l.passes.length > 1 ? "passnote warn" : "passnote"
+                }
+                title={
+                  l.passes.length > 1
+                    ? "This date stitches multiple satellite passes (different orbit/look geometry) into one mosaic - backscatter across them is not directly comparable."
+                    : undefined
+                }
+              >
+                {l.passes.length > 1 ? "⚠ " : ""}
+                {describePasses(l.passes)}
+              </div>
+            )}
+            {legendOpen[l.id] && l.legend && <LegendView legend={l.legend} />}
+          </div>
+        );
+      })}
 
       <h2>Add data</h2>
       {error && (

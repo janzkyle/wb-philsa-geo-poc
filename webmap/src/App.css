@@ -197,9 +197,31 @@
   background: #eef1f6;
 }
 
+/* Named opacity slider: the caption says what this particular slider fades,
+   because an uploaded polygon puts two of them (shapes, clip mask) in a row. */
+.opacityctl {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: baseline;
+  margin-top: 6px;
+  cursor: pointer;
+}
+
+.opacityname,
+.opacityval {
+  font-size: 11px;
+  color: #6b7686;
+  line-height: 1.35;
+}
+
+.opacityval {
+  font-variant-numeric: tabular-nums;
+}
+
 .layerrow input[type="range"] {
   width: 100%;
-  margin: 6px 0 0;
+  margin: 2px 0 0;
+  grid-column: 1 / -1;
   accent-color: #0038a8;
 }
 
