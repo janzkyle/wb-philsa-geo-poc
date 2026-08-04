@@ -1,6 +1,6 @@
 .app {
   display: grid;
-  grid-template-columns: 340px 1fr 360px;
+  grid-template-columns: 340px 1fr;
   height: 100%;
 }
 
@@ -533,87 +533,99 @@
   line-height: 1.25;
 }
 
-/* --- Chat panel ------------------------------------------------------------- */
-
 .chatpanel {
+  --chat-inset: 20px;
+  --chat-max-h: min(60vh, 620px);
+
+  position: fixed;
+  right: var(--chat-inset);
+  bottom: var(--chat-inset);
+  z-index: 10;
+  width: 360px;
+  max-width: calc(100vw - 2 * var(--chat-inset));
+  max-height: var(--chat-max-h);
   display: flex;
   flex-direction: column;
   padding: 0;
+  overflow: hidden;
+  border-radius: 12px;
+  box-shadow: 0 8px 28px rgba(15, 30, 60, 0.28);
 }
 
 .chathead {
+  flex: none;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 14px 12px 10px 16px;
-  border-bottom: 1px solid #e3e7ee;
+  padding: 10px 10px 10px 14px;
+  background: #0038a8; /* Philippine national blue */
+  color: #fff;
 }
 
-.chattitle {
-  margin: 0 !important;
+/* Scoped past `.panel h2`, which would otherwise win on specificity and keep
+   its section-heading margin, padding and underline inside the widget bar. */
+.chathead .chattitle {
+  margin: 0;
   padding: 0;
   border-bottom: none;
+  color: #fff;
+  font-size: 12px;
 }
 
 .chatcollapse {
   flex: none;
   border: none;
   background: none;
-  color: #6b7686;
-  font-size: 20px;
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 18px;
   line-height: 1;
   cursor: pointer;
-  padding: 2px 7px;
+  padding: 3px 8px;
   border-radius: 6px;
 }
 
 .chatcollapse:hover {
-  background: #eef1f6;
-  color: #22406e;
+  background: rgba(255, 255, 255, 0.16);
+  color: #fff;
 }
 
-/* Collapsed: a thin vertical strip with a button to reopen. */
-.app:has(.chatpanel.collapsed) {
-  grid-template-columns: 340px 1fr auto;
-}
-
-.chatpanel.collapsed {
-  padding: 0;
-}
-
-.chatexpand {
-  height: 100%;
-  border: none;
-  background: none;
-  cursor: pointer;
-  padding: 14px 6px;
+/* Collapsed: just the header bar, a tab resting in the same corner. */
+.chattab {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 10;
   display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: 10px;
-  color: #6b7686;
+  gap: 8px;
+  border: none;
+  border-radius: 999px;
+  padding: 10px 18px;
+  background: #0038a8;
+  color: #fff;
+  cursor: pointer;
+  box-shadow: 0 6px 20px rgba(15, 30, 60, 0.3);
 }
 
-.chatexpand:hover {
-  background: #f6f9fd;
-  color: #22406e;
+.chattab:hover {
+  background: #002a80;
 }
 
-.chatexpand-icon {
-  font-size: 18px;
+.chattab-icon {
+  font-size: 15px;
+  line-height: 1;
 }
 
-.chatexpand-label {
-  writing-mode: vertical-rl;
-  transform: rotate(180deg);
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.07em;
+.chattab-label {
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
 }
 
 .chatlog {
-  flex: 1;
+  flex: 1 1 auto;
+  min-height: 0;
   overflow-y: auto;
   padding: 12px 14px;
   display: flex;
@@ -624,6 +636,7 @@
 .chatempty p {
   font-size: 13px;
   color: #6b7686;
+  margin: 0 0 10px;
 }
 
 .suggestion {
@@ -640,6 +653,10 @@
 
 .suggestion:hover {
   background: #eaf1fa;
+}
+
+.suggestion:last-child {
+  margin-bottom: 0;
 }
 
 .msg {
@@ -697,6 +714,7 @@
 }
 
 .chatform {
+  flex: none;
   display: flex;
   gap: 7px;
   padding: 10px 12px;
@@ -724,19 +742,26 @@
   cursor: default;
 }
 
-/* Narrow screens: stack panels over the map. */
+/* Narrow screens: the map takes the whole frame and the chat spans its width. */
 @media (max-width: 900px) {
   .app {
     grid-template-columns: 1fr;
-    grid-template-rows: 1fr 45vh;
   }
 
   .layerpanel {
     display: none;
   }
 
-  .app:has(.chatpanel.collapsed) {
-    grid-template-columns: 1fr;
-    grid-template-rows: 1fr auto;
+  .chatpanel {
+    --chat-inset: 12px;
+    --chat-max-h: 62vh;
+
+    left: var(--chat-inset);
+    width: auto;
+  }
+
+  .chattab {
+    right: 12px;
+    bottom: 12px;
   }
 }

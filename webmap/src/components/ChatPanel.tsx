@@ -89,20 +89,18 @@ export default function ChatPanel() {
 
   if (collapsed) {
     return (
-      <div className="panel chatpanel collapsed">
-        <button
-          type="button"
-          className="chatexpand"
-          onClick={() => setCollapsed(false)}
-          aria-label="Expand map assistant"
-          title="Expand map assistant"
-        >
-          <span className="chatexpand-icon" aria-hidden="true">
-            💬
-          </span>
-          <span className="chatexpand-label">Map assistant</span>
-        </button>
-      </div>
+      <button
+        type="button"
+        className="chattab"
+        onClick={() => setCollapsed(false)}
+        aria-label="Open map assistant"
+        title="Open map assistant"
+      >
+        <span className="chattab-icon" aria-hidden="true">
+          💬
+        </span>
+        <span className="chattab-label">Map assistant</span>
+      </button>
     );
   }
 
@@ -114,10 +112,10 @@ export default function ChatPanel() {
           type="button"
           className="chatcollapse"
           onClick={() => setCollapsed(true)}
-          aria-label="Collapse map assistant"
-          title="Collapse map assistant"
+          aria-label="Minimise map assistant"
+          title="Minimise map assistant"
         >
-          ›
+          ‒
         </button>
       </div>
       <div className="chatlog" ref={scrollRef}>
