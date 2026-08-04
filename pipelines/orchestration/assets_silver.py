@@ -85,7 +85,7 @@ class AdminPmtilesConfig(dg.Config):
 
 
 class MosaicsConfig(dg.Config):
-    collections: str = ""  # space-separated; empty = script default (all three)
+    collections: str = ""  # space-separated; empty = script default (all four)
     stac_api: str = ""  # empty = script default (http://localhost:8082)
 
 

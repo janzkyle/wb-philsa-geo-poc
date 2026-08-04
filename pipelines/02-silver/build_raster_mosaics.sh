@@ -13,9 +13,12 @@
 # NOTE: this reads item hrefs from the CATALOG, so it must run AFTER the gold
 # step (catalog_silver.py) has registered the scenes it should stitch.
 #
-# COLLECTIONS defaults to the three *scene* collections; sentinel1-flood is
+# COLLECTIONS defaults to the four *scene* collections; sentinel1-flood is
 # deliberately excluded (categorical proxy mask, not a continuous layer) — pass
-# COLLECTIONS="... sentinel1-flood" to include it.
+# COLLECTIONS="... sentinel1-flood" to include it. Keep this list in step with
+# the temporal RasterDefs in webmap/src/config.ts: a temporal collection missing
+# here has no mosaic, so the webmap's HEAD probe 404s on every one of its dates
+# and silently falls back to per-item COG tiles (tilted partial footprints).
 #
 # Creds come from the gitignored .env (AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY
 # / R2_ACCOUNT_ID / R2_BUCKET). Never hard-coded here.
@@ -35,7 +38,7 @@ done
 cd "$REPO_ROOT"
 
 STAC_API="${STAC_API:-http://localhost:8082}"
-COLLECTIONS="${COLLECTIONS:-sentinel2-truecolor sentinel2-ndvi sentinel1-sar}"
+COLLECTIONS="${COLLECTIONS:-sentinel2-truecolor sentinel2-ndvi sentinel1-sar sentinel1-ratio}"
 DST_PREFIX="${DST_PREFIX:-02-silver}"   # <prefix>/<coll>/mosaics/<coll>_<date>.mosaicjson
 MINZOOM="${MINZOOM:-8}"
 MAXZOOM="${MAXZOOM:-14}"
