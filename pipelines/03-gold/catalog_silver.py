@@ -141,13 +141,14 @@ PRODUCTS = [
      "renders": {"ratio": {"title": "VH/VV cross-ratio (dB)", "assets": ["data"],
                            "rescale": [[-14, -2]], "colormap_name": "ylgn",
                            "resampling": "bilinear"}}},
-    # access: "restricted" moves this product to the PRIVATE bucket — objects are
-    # listed and read there, and item hrefs become s3:// URIs instead of public
-    # r2.dev URLs. Without it a re-catalog would silently republish the layer to
-    # the open tier (and, once the bytes have moved, point every href at a deleted
-    # object). Enforcement itself lives in the gateway — see deploy/AUTH.md.
+    # Set access: "restricted" here to move a product to the PRIVATE bucket —
+    # objects are listed and read there, and item hrefs become s3:// URIs instead
+    # of public r2.dev URLs. Leaving it off keeps the product in the open tier;
+    # setting it without also moving the bytes (or the reverse) is what produces a
+    # half-restricted collection. Both directions are scripted — see the
+    # `collection-tier` skill. Enforcement itself lives in the gateway (AUTH.md).
+    # sentinel1-flood was returned to the open tier on 2026-08-04.
     {"collection": "sentinel1-flood", "prefix": "02-silver/sentinel1-flood",
-     "access": "restricted",
      "title": "Sentinel-1 Flood / Water Mask — Philippines",
      "source_product": "sentinel1-flood", "extra_keywords": ["flood", "water", "SAR", "threshold"],
      "description": "Open-water / flood mask derived from Sentinel-1 VV backscatter (dB) by "

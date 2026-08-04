@@ -83,7 +83,7 @@ if [ "$ACCESS" = "restricted" ]; then
        gateway environments).
     2. The collection's asset bytes live in the PRIVATE R2 bucket, not the public
        one — otherwise they stay downloadable from the public r2.dev host, which
-       bypasses the gateway entirely. See deploy/scripts/move-assets-private.sh.
+       bypasses the gateway entirely. See the `collection-tier` skill.
     3. The item asset hrefs point at the gateway's /assets/sign endpoint.
 
 EOF

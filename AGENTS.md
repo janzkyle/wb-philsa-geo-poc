@@ -33,12 +33,13 @@ in context every session; the bodies are not. The docs a skill names stay
 canonical — don't copy their prose into it, because pointers don't drift and
 copies do.
 
-| Skill                 | Covers                                                                               |
-| --------------------- | ------------------------------------------------------------------------------------ |
-| `philsa-deploy`       | Neon / Render / Workers deploys, prod ingest, R2 setup + CORS, and the deploy traps. |
-| `submodule-bump`      | Landing a submodule change the two-commit way (scripted).                            |
-| `ph-admin-geoparquet` | Building the PH admin-boundary GeoParquet from OCHA COD-AB.                          |
-| `format-agents-md`    | Autoformatting this file (and other repo markdown) with mdformat + GFM.              |
+| Skill                 | Covers                                                                                                 |
+| --------------------- | ------------------------------------------------------------------------------------------------------ |
+| `philsa-deploy`       | Neon / Render / Workers deploys, prod ingest, R2 setup + CORS, and the deploy traps.                   |
+| `submodule-bump`      | Landing a submodule change the two-commit way (scripted).                                              |
+| `ph-admin-geoparquet` | Building the PH admin-boundary GeoParquet from OCHA COD-AB.                                            |
+| `collection-tier`     | Moving a collection between the open and restricted tiers (bytes, hrefs, gateway policy, catalog tag). |
+| `format-agents-md`    | Autoformatting this file (and other repo markdown) with mdformat + GFM.                                |
 
 A skill earns its place only by **consolidating traps that live in several docs**
 (`philsa-deploy`) or by **shipping a script** (`submodule-bump`,

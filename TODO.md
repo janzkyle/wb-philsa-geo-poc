@@ -516,7 +516,7 @@ Operator guide + Auth0 tenant setup: **`deploy/AUTH.md`**.
 - [ ] **Move the restricted bytes** — until this runs, the restriction is
       metadata only: `sentinel1-flood` COGs are still world-readable straight off
       the public `r2.dev` host, which the gateway isn't in the path of.
-      `deploy/scripts/move-assets-private.sh prod sentinel1-flood --apply` copies
+      `bash .claude/skills/collection-tier/move_assets_tier.sh prod sentinel1-flood restrict --apply` copies
       to the private bucket, verifies the count, repoints the STAC hrefs, then
       deletes the public copies (dry-run by default). Needs the R2 token fix above.
 - [ ] **Auth0 tenant** — create it and fill `AUTH0_DOMAIN` in both `[env.*.vars]`

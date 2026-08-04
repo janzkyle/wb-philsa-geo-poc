@@ -196,8 +196,8 @@ world-readable and the gateway isn't in that path. Until the bytes move, the
 restriction is metadata only:
 
 ```bash
-deploy/scripts/move-assets-private.sh prod sentinel1-flood            # dry run
-deploy/scripts/move-assets-private.sh prod sentinel1-flood --apply
+bash .claude/skills/collection-tier/move_assets_tier.sh prod sentinel1-flood restrict            # dry run
+bash .claude/skills/collection-tier/move_assets_tier.sh prod sentinel1-flood restrict --apply
 ```
 
 It copies to the private bucket, verifies the count, repoints the STAC hrefs, and
@@ -336,7 +336,7 @@ Only the STAC gateway signs URLs, so the tiles gateway needs no R2 secrets.
 > `vars`/binding entry in `wrangler.toml` changes.
 >
 > Update the repo-root `.env` to match whichever token you use, so
-> `move-assets-private.sh` can write to the private bucket too.
+> the `collection-tier` skill's script can write to the private bucket too.
 >
 > Until this is sorted, `/assets/sign` returns a correctly-signed URL that R2
 > refuses. Nothing else in the auth layer depends on it.

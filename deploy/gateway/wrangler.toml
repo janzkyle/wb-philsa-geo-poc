@@ -76,10 +76,10 @@ KIND = "stac"
 # The ENFORCEMENT authority for collection-level access. The matching
 # `philsa:access` property in pgSTAC is documentation — keep the two in sync with
 # ../scripts/tag-collection-access.sh.
-RESTRICTED_COLLECTIONS = "sentinel1-flood"
+# RESTRICTED_COLLECTIONS = "sentinel1-flood"
 # R2 object-key prefixes whose bytes are restricted. Used to gate TiTiler renders
 # and to bound what /assets/sign is willing to sign.
-RESTRICTED_ASSET_PREFIXES = "02-silver/sentinel1-flood/"
+# RESTRICTED_ASSET_PREFIXES = "02-silver/sentinel1-flood/"
 # Identity provider (Auth0). Fill AUTH0_DOMAIN in after creating the tenant —
 # see ../AUTH.md. Swapping to PhilSA/CopPhil Keycloak later changes only these.
 AUTH0_DOMAIN = ""
@@ -114,7 +114,8 @@ ORIGIN = "https://philsa-titiler.onrender.com"
 KIND = "tiler"
 # The tiler doesn't know about collections, only objects — but it MUST refuse to
 # render restricted ones, or the STAC-side restriction is cosmetic.
-RESTRICTED_ASSET_PREFIXES = "02-silver/sentinel1-flood/"
+# Empty while sentinel1-flood is back in the open tier — see the collection-tier skill.
+# RESTRICTED_ASSET_PREFIXES = "02-silver/sentinel1-flood/"
 AUTH0_DOMAIN = ""
 AUTH0_AUDIENCE = "https://api.philsa-poc.example/stac"
 AUTH0_ROLES_CLAIM = "https://philsa.gov.ph/roles"

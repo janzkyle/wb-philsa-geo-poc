@@ -189,7 +189,7 @@ logged with the principal and object key. Full detail, including how to issue an
 revoke partner keys: **`deploy/AUTH.md`**.
 
 **Real end-to-end as of 2026-07-29.** The R2 token now covers
-`world-bank-philsa-geo-private`, and `move-assets-private.sh` has moved the
+`world-bank-philsa-geo-private`, and the `collection-tier` skill has moved the
 `sentinel1-flood` objects off the public `r2.dev` host and deleted the public
 copies — so the restriction is enforced on the bytes, not just in the catalog and
 the tiler. Item hrefs are `s3://world-bank-philsa-geo-private/…`, which nothing
