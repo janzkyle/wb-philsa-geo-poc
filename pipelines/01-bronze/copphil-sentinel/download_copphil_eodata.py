@@ -11,11 +11,22 @@ so it is downloaded (and only uploaded as bronze when `--r2` is given) rather
 than cataloged in place.
 
 Selection: by default each run pulls every scene from the `--dates N` (default 3)
-most recent acquisition dates *per collection* over the Central Luzon AOI
-(`--region`, default central-luzon), with Sentinel-2 filtered to `--max-cloud`
-(default 20%). That yields a few overlapping, mostly cloud-free looks of the same
-area for change comparison. Use `--region philippines` for the full national box
-(and raise --max-cloud to 100 to disable the cloud filter).
+most recent acquisition dates *per collection* nationwide, with Sentinel-2
+filtered to `--max-cloud` (default 20%). That yields the freshest complete looks
+at the country for change comparison. `--aoi WKT` narrows to a sub-region;
+raising `--max-cloud` to 100 disables the cloud filter.
+
+`--all` drops the date window entirely and takes every scene CopPhil holds for
+the *remaining* filters — AOI, collection, product type, and (for S2) cloud
+ceiling still apply. For a true full sweep:
+
+    --all --max-cloud 100
+
+Sizing matters here: a national run is large even at `--dates 3` (Sentinel
+granules are ~1 GB each and the country takes many per pass), and `--all` is
+many TB. Every run prints its scene count and total bytes per collection before
+anything moves, so `--dry-run` first, then bound it with `--days N` (a rolling
+window), `--limit N` (a hard per-collection ceiling), or `--aoi`.
 
 CopPhil API (a Copernicus CSC OData catalog — same shape as the Copernicus Data
 Space Ecosystem):
@@ -34,7 +45,7 @@ removed after a verified upload.
 Credentials come from the environment, or the gitignored repo-root `.env`:
     COPPHIL_USERNAME, COPPHIL_PASSWORD   (required — your CopPhil account)
     COPPHIL_CLIENT_ID                    (default: copphil-public)
-    COPPHIL_AOI_WKT                      (overrides --region; default region: central-luzon)
+    COPPHIL_AOI_WKT                      (same as --aoi; default: the PH national box)
     R2_BUCKET        target bucket (only needed with --r2)
     R2_ACCOUNT_ID    Cloudflare account id (forms the S3 endpoint; --r2 only)
     R2_PUBLIC_BASE   optional public base URL for printed object URLs
@@ -46,6 +57,7 @@ From the repo root:
     python3 pipelines/01-bronze/copphil-sentinel/download_copphil_eodata.py --dry-run
     python3 pipelines/01-bronze/copphil-sentinel/download_copphil_eodata.py            # latest 3 dates → local
     python3 pipelines/01-bronze/copphil-sentinel/download_copphil_eodata.py --r2       # also upload as bronze
+    python3 pipelines/01-bronze/copphil-sentinel/download_copphil_eodata.py --all --dry-run   # size the full backfill
 (CopPhil + R2 creds both come from the repo-root .env.)
 """
 import argparse
@@ -86,13 +98,11 @@ DOWNLOAD = os.environ.get(
     "https://download.infra.copphil.philsa.gov.ph/odata/v1/Products",
 ).rstrip("/")
 
-# Named AOIs (lon/lat, WGS84) — pick with --region, or override with COPPHIL_AOI_WKT.
-REGIONS = {
-    "philippines": "POLYGON((116.0 4.5,127.0 4.5,127.0 21.5,116.0 21.5,116.0 4.5))",
-    # Region III (Central Luzon): Zambales/Bataan → Aurora, Bulacan → Nueva Ecija.
-    "central-luzon": "POLYGON((119.8 14.6,121.8 14.6,121.8 16.4,119.8 16.4,119.8 14.6))",
-}
-DEFAULT_REGION = "central-luzon"
+# Default AOI: the national bounding box (lon/lat, WGS84). CopPhil is the
+# Philippine Copernicus mirror, so this is effectively "everything it holds" —
+# it stays an explicit clause rather than an omitted one so the query states its
+# own bounds. Narrow it with --aoi WKT (or the COPPHIL_AOI_WKT env var).
+PH_AOI_WKT = "POLYGON((116.0 4.5,127.0 4.5,127.0 21.5,116.0 21.5,116.0 4.5))"
 
 # Medallion-tiered R2 key prefix for this dataset: <tier>/<dataset>/...
 DEFAULT_R2_PREFIX = "01-bronze/copphil-sentinel"
@@ -193,8 +203,9 @@ def search_latest_dates(filter_str, num_dates, cap=0, page_size=100, max_pages=1
     """All scenes from the `num_dates` most-recent distinct acquisition dates.
 
     Pages the catalogue in date-desc order, keeping every scene whose date is
-    among the first `num_dates` distinct dates seen. `cap` (>0) is a hard ceiling
-    on scenes returned, as a safety valve against an unexpectedly huge day.
+    among the first `num_dates` distinct dates seen. `num_dates` 0 disables the
+    date window (see `search_all`). `cap` (>0) is a hard ceiling on scenes
+    returned, as a safety valve against an unexpectedly huge day.
     """
     kept, dates, skip = [], [], 0
     for _ in range(max_pages):
@@ -213,7 +224,36 @@ def search_latest_dates(filter_str, num_dates, cap=0, page_size=100, max_pages=1
         if len(page) < page_size:
             break
         skip += page_size
+    else:
+        # Ran the whole page budget without the catalogue running dry — the
+        # result is silently truncated, so say so rather than look complete.
+        print(f"  !! page ceiling hit at {len(kept)} scene(s) — result is TRUNCATED; "
+              "narrow with --aoi/--days/--max-cloud", file=sys.stderr)
     return kept
+
+
+def search_all(filter_str, cap=0, page_size=100, max_pages=2000):
+    """Every scene matching the filter — pages until the catalogue runs dry.
+
+    Backs `--all`: no date window, so the only bounds left are the filter itself
+    (collection, product type, AOI, cloud) and `cap` (`--limit`, 0 = uncapped).
+    `max_pages` is a runaway backstop (200k scenes), not an intended limit.
+    """
+    return search_latest_dates(filter_str, 0, cap=cap, page_size=page_size,
+                               max_pages=max_pages)
+
+
+def _describe(products):
+    """'N scene(s) across M date(s), ~X GB: <dates>' — the pre-download summary.
+
+    Long date lists (the `--all` case) collapse to first…last so a full-archive
+    run doesn't print hundreds of dates.
+    """
+    dates = sorted({_scene_date(p) for p in products if _scene_date(p)}, reverse=True)
+    total = sum(int(p["ContentLength"]) for p in products if p.get("ContentLength"))
+    span = ", ".join(dates) if len(dates) <= 6 else f"{dates[-1]} … {dates[0]}"
+    size = f", ~{total/1e9:.1f} GB" if total else ""
+    return f"{len(products)} scene(s) across {len(dates)} date(s){size}: {span}"
 
 
 def _fetch_to_file(pid, part, expected, auth, retries):
@@ -346,11 +386,18 @@ def main():
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--collections", nargs="*", default=list(COLLECTIONS),
                     choices=list(COLLECTIONS), help="which collections (default: both)")
-    ap.add_argument("--region", choices=list(REGIONS), default=DEFAULT_REGION,
-                    help=f"AOI preset (default {DEFAULT_REGION}); COPPHIL_AOI_WKT env overrides")
+    ap.add_argument("--aoi", default=None,
+                    help="AOI as WGS84 WKT, to narrow the search (default: the PH "
+                         "national box, i.e. everything the CopPhil mirror holds). "
+                         "COPPHIL_AOI_WKT sets the same thing")
     ap.add_argument("--dates", type=int, default=3,
                     help="fetch every scene from the N most recent acquisition dates "
                          "per collection, nationwide (default 3; 0 = disable, use --limit)")
+    ap.add_argument("--all", action="store_true", dest="fetch_all",
+                    help="no date window — every scene CopPhil holds for the other "
+                         "filters (AOI, product type, cloud). Overrides --dates. "
+                         "Very large: --dry-run it first, and add --max-cloud 100 "
+                         "for a true full archive")
     ap.add_argument("--limit", type=int, default=0,
                     help="cap scenes per collection (0 = no cap). With --dates 0, "
                          "this is the newest-N-scenes count instead (min 1)")
@@ -370,17 +417,21 @@ def main():
     ap.add_argument("--dry-run", action="store_true", help="search + list, no download/upload")
     args = ap.parse_args()
 
+    # Precedence: --aoi > COPPHIL_AOI_WKT > the national default.
     aoi_env = os.environ.get("COPPHIL_AOI_WKT")
-    aoi_wkt = aoi_env or REGIONS[args.region]
-    aoi_label = "COPPHIL_AOI_WKT" if aoi_env else args.region
+    aoi_wkt = args.aoi or aoi_env or PH_AOI_WKT
+    aoi_label = "--aoi" if args.aoi else ("COPPHIL_AOI_WKT" if aoi_env else "philippines")
     since = iso_days_ago(args.days)
     name_token = {"sentinel-1": args.s1_match, "sentinel-2": args.s2_match}
     r2 = make_r2(args.dry_run) if args.r2 else None
 
     print(f">> catalogue: {CATALOGUE}")
     print(f">> AOI      : {aoi_label}  {aoi_wkt}")
-    if args.dates:
-        cloud = "" if args.max_cloud >= 100 else f", S2 cloud ≤ {args.max_cloud:g}%"
+    cloud = "" if args.max_cloud >= 100 else f", S2 cloud ≤ {args.max_cloud:g}%"
+    if args.fetch_all:
+        capped = f", capped at {args.limit} per collection" if args.limit else ""
+        print(f">> select   : ALL scenes — no date window{cloud}{capped}")
+    elif args.dates:
         print(f">> select   : latest {args.dates} acquisition date(s) per collection{cloud}")
     if r2 is not None:
         print(f">> dest     : local {args.out}  +  R2 s3://{r2.bucket}/{r2.prefix}/")
@@ -407,15 +458,16 @@ def main():
         print(f"\n>> {key} ({col_name} / Name~{token})")
         flt = build_filter(col_name, token, aoi_wkt, since,
                            args.max_cloud, supports_cloud)
-        if args.dates:
+        if args.fetch_all:
+            products = search_all(flt, cap=args.limit)
+        elif args.dates:
             products = search_latest_dates(flt, args.dates, cap=args.limit)
         else:
             products = search(flt, max(args.limit, 1))
         if not products:
             print("  (no matching scenes)")
             continue
-        dates = sorted({_scene_date(p) for p in products if _scene_date(p)}, reverse=True)
-        print(f"  {len(products)} scene(s) across {len(dates)} date(s): {', '.join(dates)}")
+        print(f"  {_describe(products)}")
         for p in products:
             res = handle(p, args.out, auth, args.dry_run, r2)
             totals[res] = totals.get(res, 0) + 1

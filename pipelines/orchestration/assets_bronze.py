@@ -22,8 +22,9 @@ BRONZE_SCRIPT = (
 class CopphilDownloadConfig(dg.Config):
     """Mirrors the script's CLI flags (see its --help for semantics)."""
 
-    region: str = "central-luzon"  # AOI preset (philippines | central-luzon)
+    aoi: str = ""  # WGS84 WKT to narrow the search ("" = the script's PH-wide default)
     dates: int = 3  # fetch every scene from the N most recent acquisition dates over the AOI
+    fetch_all: bool = False  # --all: no date window, every scene for the other filters
     limit: int = 0  # cap scenes per collection (0 = no cap)
     days: int = 0
     max_cloud: float = 20.0  # Sentinel-2 cloudCover ceiling (100 = no filter)
@@ -37,10 +38,11 @@ class CopphilDownloadConfig(dg.Config):
     kinds={"python"},
     description=(
         "Raw Sentinel-1/2 SAFE zips from the CopPhil OData mirror — the latest "
-        "N cloud-free acquisition dates over the AOI (default: Central Luzon, "
+        "N cloud-free acquisition dates over the AOI (default: nationwide, "
         "S2 cloud ≤ 20%%), downloaded to local eodata/ for the downstream silver "
         "step (download_copphil_eodata.py; pass to_r2 to also upload them as "
-        "bronze under 01-bronze/copphil-sentinel/)."
+        "bronze under 01-bronze/copphil-sentinel/). A nationwide run is large — "
+        "set limit, days, or aoi to bound it."
     ),
 )
 def copphil_sentinel(
@@ -51,12 +53,15 @@ def copphil_sentinel(
     cmd = [
         sys.executable,
         str(BRONZE_SCRIPT),
-        "--region", config.region,
         "--dates", str(config.dates),
         "--limit", str(config.limit),
         "--days", str(config.days),
         "--max-cloud", str(config.max_cloud),
     ]
+    if config.aoi:
+        cmd += ["--aoi", config.aoi]
+    if config.fetch_all:
+        cmd.append("--all")  # overrides --dates in the script
     if config.to_r2:
         cmd.append("--r2")
     if config.dry_run:
@@ -68,6 +73,7 @@ def copphil_sentinel(
         metadata={
             "command": " ".join(cmd),
             "dry_run": config.dry_run,
+            "fetch_all": config.fetch_all,
             "to_r2": config.to_r2,
             "dest": "01-bronze/copphil-sentinel (R2)" if config.to_r2 else "local eodata/",
         }

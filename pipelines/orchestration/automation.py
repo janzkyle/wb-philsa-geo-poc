@@ -34,11 +34,11 @@ CATALOGUE = os.environ.get(
     "COPPHIL_CATALOGUE_URL",
     "https://catalogue.infra.copphil.philsa.gov.ph/odata/v1/Products",
 ).rstrip("/")
-# Central Luzon (Region III) — matches the bronze script's default AOI so the
+# PH national box — matches the bronze script's default AOI (PH_AOI_WKT) so the
 # sensor polls the same area it will download. COPPHIL_AOI_WKT overrides both.
 AOI_WKT = os.environ.get(
     "COPPHIL_AOI_WKT",
-    "POLYGON((119.8 14.6,121.8 14.6,121.8 16.4,119.8 16.4,119.8 14.6))",
+    "POLYGON((116.0 4.5,127.0 4.5,127.0 21.5,116.0 21.5,116.0 4.5))",
 )
 # (OData Collection/Name, product-name token) — same pair the bronze script targets.
 COLLECTIONS = {
