@@ -1,12 +1,25 @@
 // Endpoints + catalog styling for the AI-first PhilSA webmap.
 // Override any of these at build time with a VITE_* env var (see .env.example).
 
-export const STAC_API =
-  import.meta.env.VITE_STAC_API ?? "http://localhost:8082";
+// An endpoint may be given as an origin-relative path ("/stac", "/titiler") to
+// route through the Vite dev proxy so the app talks same-origin. That is what
+// makes the map work behind an HTTPS tunnel (ngrok): a browser blocks
+// http://localhost:8082 calls from an https:// page as insecure mixed content.
+// Downstream consumers want a real URL - MapLibre tile templates and the
+// `new URL(next, base)` paging in lib/stac.ts - so resolve it once, here.
+const absolute = (u: string): string =>
+  u.startsWith("/") && typeof window !== "undefined"
+    ? new URL(u, window.location.origin).toString().replace(/\/$/, "")
+    : u;
+
+export const STAC_API = absolute(
+  import.meta.env.VITE_STAC_API ?? "http://localhost:8082",
+);
 
 // TiTiler - dynamic raster tiler for the silver COGs (compose.viz.yml, port 8083).
-export const TITILER =
-  import.meta.env.VITE_TITILER ?? "http://localhost:8083";
+export const TITILER = absolute(
+  import.meta.env.VITE_TITILER ?? "http://localhost:8083",
+);
 
 // Public R2 base that serves the admin-boundary PMTiles, MosaicJSON and COGs
 // to the BROWSER (PMTiles, ph_admin_index.json, GeoParquet, and the existence

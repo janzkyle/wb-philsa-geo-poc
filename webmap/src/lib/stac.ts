@@ -160,6 +160,21 @@ export async function searchStac(p: SearchParams): Promise<StacItemLite[]> {
   return ((fc.features ?? []) as StacFeature[]).map((f) => toLite(f));
 }
 
+// The path+query of a paging link, relative to wherever STAC_API is mounted -
+// the piece worth keeping from an href whose origin we don't trust. Handles a
+// relative href too, and doesn't double the mount path if the server already
+// included it.
+function pathAndQuery(href: string): string {
+  const base = new URL(`${STAC_API}/`, "http://stac.invalid");
+  const u = new URL(href, base);
+  const mount = base.pathname.replace(/\/$/, "");
+  const path =
+    mount && u.pathname.startsWith(`${mount}/`)
+      ? u.pathname.slice(mount.length)
+      : u.pathname;
+  return `${path}${u.search}`;
+}
+
 // All items of one collection, following pgSTAC's `next` links so a growing
 // archive doesn't silently truncate the date lists. Page cap bounds the worst
 // case (20 × 200 = 4,000 items) - raise it if a collection ever outgrows that.
@@ -181,8 +196,11 @@ export async function collectionItems(
     const next = ((fc.links ?? []) as { rel?: string; href?: string }[]).find(
       (l) => l.rel === "next",
     )?.href;
-    // hrefs are normally absolute; resolve just in case a proxy makes them relative
-    url = next ? new URL(next, `${STAC_API}/`).toString() : undefined;
+    // Keep only the path+query and re-hang it off STAC_API. pgSTAC builds the
+    // href from the request it saw, which behind a proxy is the wrong origin
+    // (and, from an https page, the wrong scheme) - following it verbatim
+    // would 404 or trip the browser's mixed-content block.
+    url = next ? `${STAC_API}${pathAndQuery(next)}` : undefined;
   }
   return out;
 }
