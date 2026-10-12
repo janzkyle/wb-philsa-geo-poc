@@ -42,8 +42,11 @@ head_sampling_rate = 1
 CHAT_ALLOW_ORIGIN = "https://philsa-webmap.onrender.com,http://localhost:5173"
 
 # Optional: pin the first model tried. Unset = chatCore.DEFAULT_MODEL, with the
-# live free-model catalog as the fallback chain either way.
-# GENAI_MODEL = "nvidia/nemotron-3-super-120b-a12b:free"
+# live free-model catalog as the fallback chain either way. Gemini runs via
+# OpenRouter BYOK (Google AI Studio key attached in OpenRouter's integrations
+# settings); the OpenRouter key's credit limit must not be $0 or every call is
+# rejected before BYOK kicks in.
+GENAI_MODEL = "google/gemini-3.8-flash"
 
 # --- Secrets (NOT set here — wrangler secret put, or the dashboard) -----------
 #   OPENROUTER_API_KEY   the key the browser must never see
