@@ -6,7 +6,8 @@ observation assets in place rather than re-hosting them, fronted by a STAC
 Browser and a MapLibre webmap.
 
 The end-to-end target architecture is in **`poc-architecture.mmd`** (render the
-Mermaid diagram to see how the pieces connect). Contributing or working in this
+Mermaid diagram to see how the pieces connect; every box is badged ✅
+implemented · 🟡 partial · ⏳ not yet, per `TODO.md`). Contributing or working in this
 repo? Read **`AGENTS.md`** for the conventions and guardrails — this README is
 just *what it is* and *how to run it*.
 
