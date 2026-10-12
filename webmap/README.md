@@ -63,6 +63,15 @@ models cost nothing. `GENAI_MODEL` overrides the *first* model tried (e.g. a
 paid one when you have credit); the free fallbacks still apply behind it.
 `GET :8087/health` shows the current chain.
 
+**Gemini for demos (OpenRouter BYOK).** Attach a Google AI Studio key in
+OpenRouter (Settings → Integrations → Google AI Studio) and set
+`GENAI_MODEL=google/gemini-3.8-flash`; no code change, the same OpenRouter
+client routes it to your key. Two traps: the *OpenRouter* key must not carry a
+`$0` credit limit (OpenRouter rejects the call with "Key limit exceeded" before
+BYOK is consulted, and the chain silently falls back to the free models), and
+on Google's free tier prompts are used to improve Google's products, so keep
+restricted data out of demo chats.
+
 Frontend endpoints (STAC/TiTiler/R2/chat) are Vite build-time `VITE_*` vars —
 see `.env.example`. In dev, `VITE_CHAT_API` is left at `/api/chat` and Vite
 proxies it to :8087. **In a production build it must be set to the deployed
