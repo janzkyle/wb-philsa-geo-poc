@@ -7,8 +7,11 @@ Browser and a MapLibre webmap.
 
 The end-to-end target architecture is in **`poc-architecture.mmd`** (render the
 Mermaid diagram to see how the pieces connect; every box is badged ✅
-implemented · 🟡 partial · ⏳ not yet, per `TODO.md`). Contributing or working in this
-repo? Read **`AGENTS.md`** for the conventions and guardrails — this README is
+implemented · 🟡 partial · ⏳ not yet, per `TODO.md`).
+
+**New to the repo?** Ask Claude Code to onboard you — the `philsa-onboarding`
+skill is a guided, hands-on tour, module by module. Contributing or working in
+this repo? Read **`AGENTS.md`** for the conventions and guardrails — this README is
 just *what it is* and *how to run it*.
 
 **Deploying it for free?** See **`deploy/DEPLOYMENT.md`** — the prod database on
@@ -94,8 +97,9 @@ favicon, and accent color (Philippine national blue) are PhilSA-specific.
 cd stac-browser && npm install && npm start   # serves on http://localhost:8080, already pointed at the API
 ```
 
-Overrides without editing the submodule: `SB_catalogUrl` (deployed API host) and
-`SB_catalogImage` (logo URL) env vars, or `public/runtime-config.js`. The API
+Overrides without editing the submodule: `SB_catalogUrl` (deployed API host),
+`SB_titilerUrl` (TiTiler for map previews), `SB_r2Bucket`, and `SB_catalogImage`
+(logo URL) env vars, or `public/runtime-config.js`. The API
 itself is branded via `STAC_FASTAPI_TITLE` / `STAC_FASTAPI_DESCRIPTION` /
 `STAC_FASTAPI_LANDING_ID` in `stac-fastapi-pgstac/compose.yml` (env-overridable).
 
