@@ -10,7 +10,7 @@ The deal in one line: **PhilSA hosts and serves the Earth-observation layers; yo
 render them over your own data** (farm parcels, road networks, admin units,
 claims). Nothing here re-hosts PhilSA data - you point your app at PhilSA's URLs.
 
-_Last updated: 2026-07-29_
+_Last updated: 2026-10-12_
 
 > This file is the **canonical copy**. A webpage version ships with the partner
 > template (`partner-template/guide.html`) with the markdown embedded verbatim -
@@ -62,8 +62,8 @@ Each layer is a STAC **collection**. This table is your cheat-sheet - the
 `collection id` goes into every STAC and tile URL, and the **render params** are
 what make a layer look right (skip them and a single-band layer renders black).
 It is the **canonical copy** for integrators: the PhilSA webmap
-(`webmap/src/config.ts`) and the partner template restate these params, and all
-are kept in step with the `renders` metadata the catalog publishes.
+(`webmap/src/config.ts`), the partner template, and the STAC Browser restate these
+params, and all are kept in step with the `renders` metadata the catalog publishes.
 
 | Collection id | What it is | Dated? | Access | Render params (TiTiler query string) | Value unit |
 |---|---|---|---|---|---|
@@ -71,7 +71,7 @@ are kept in step with the `renders` metadata the catalog publishes.
 | `sentinel2-ndvi` | Vegetation health / greenness | yes | open | `rescale=-0.2,0.9&colormap_name=rdylgn` | NDVI |
 | `sentinel1-ratio` | Radar vegetation index (VH/VV, sees through cloud) | yes | open | `rescale=-14,-2&colormap_name=ylgn` | dB (VH/VV) |
 | `sentinel1-sar` | Radar backscatter (VV, all-weather) | yes | open | `rescale=20,52` | dB (VV) |
-| `sentinel1-flood` | Open-water / flood mask ⚠️ POC proxy | yes | **restricted** | `colormap=` *(categorical, see section 6)* | - |
+| `sentinel1-flood` | Open-water / flood mask ⚠️ POC proxy | yes | open | `colormap=` *(categorical, see section 6)* | - |
 | `esri-10m-lulc` | Annual land cover (10 m, 2025) | no | open | `colormap=` *(categorical, see section 6)* | - |
 
 - **Dated?** "yes" = a per-acquisition-date collection; you pick a `YYYY-MM-DD`
@@ -86,7 +86,8 @@ are kept in step with the `renders` metadata the catalog publishes.
 
 The **Access** column in section 2 is the current list of restricted
 collections - treat it as the authority, since the tier grows over time.
-`sentinel1-flood` was the first of them. A restricted collection behaves like any
+None is restricted today (`sentinel1-flood` proved the tier end to end and is
+open again). A restricted collection behaves like any
 other once you hold a credential, and like it does not exist until you do.
 Concretely, without a key:
 
@@ -336,7 +337,7 @@ Two layers use a discrete class→RGBA colormap instead of a rescale. Pass it as
 **URL-encoded** JSON object in `colormap=`:
 
 ```jsonc
-// sentinel1-flood  (water classes coloured; land left transparent) - restricted, section 2a
+// sentinel1-flood  (water classes coloured; land left transparent)
 colormap = {"1":[33,102,204,255], "2":[120,170,230,255]}
 
 // esri-10m-lulc  (Impact Observatory 9-class palette)

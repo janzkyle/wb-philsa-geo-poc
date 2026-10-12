@@ -173,6 +173,15 @@ services:
       # Points at the always-on STAC gateway, not the onrender origin directly.
       - key: SB_catalogUrl
         value: https://philsa-stac-gateway.philsa.workers.dev
+      # Map previews of the silver COGs are tiled by TiTiler. Unset, the Browser
+      # falls back to http://localhost:8083 (its local-dev default), so every
+      # visitor's previews break — point it at the tiles gateway.
+      - key: SB_titilerUrl
+        value: https://philsa-tiles-gateway.philsa.workers.dev
+      # Header logo must be an absolute URL (stac-js drops relative hrefs); the
+      # default is the local dev origin (:8080).
+      - key: SB_catalogImage
+        value: https://philsa-browser.onrender.com/philsa-logo.png
     routes:
       - type: rewrite
         source: /*

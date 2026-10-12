@@ -12,7 +12,7 @@ anonymous request pays no auth cost whatsoever (no KV read, no JWKS fetch).
 | | **Open tier** | **Restricted tier** |
 | --- | --- | --- |
 | Who | anyone, anonymous | partner agencies, named |
-| Collections | all except those below | `sentinel1-flood` |
+| Collections | all except those below | none today — `sentinel1-flood` proved the path end to end and is open again |
 | Credential | none | API key **or** Auth0 JWT |
 | Asset bytes | public R2, direct download | private R2, presigned URL only |
 | Tiles | TiTiler renders freely | TiTiler refuses without the role |
