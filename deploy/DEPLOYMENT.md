@@ -231,10 +231,12 @@ Promoting the same data to prod uses `prod-ingest.sh prod` (not
   `*.workers.dev` (no custom domains in this POC) with caching, rate limits, a
   re-block on writes, and the **auth layer** (partner API keys, Auth0 JWTs,
   collection-level RBAC, presigned R2 URLs) — see **`AUTH.md`**.
-- **Restricted tier** — `sentinel1-flood` is restricted, so anonymous callers no
-  longer see it in `/collections`, can't search it, and can't tile it. The
-  frontends are anonymous today, so the layer is simply absent for them until
-  they pass a credential. `AUTH.md` covers issuing keys and switching on logins.
+- **Restricted tier** — live, but **no collection is restricted today**.
+  `sentinel1-flood` proved it end to end (hidden from anonymous `/collections`,
+  unsearchable, untileable) and was then returned to open. A restricted
+  collection is simply absent for the anonymous frontends until they pass a
+  credential. `AUTH.md` covers issuing keys and switching on logins; the
+  `collection-tier` skill moves a collection between tiers.
 - **R2 CORS** — the public bucket needs a read CORS policy for browsers to fetch
   mosaics directly (else the webmap/template fall back to per-item COGs). Apply
   once with `deploy/r2/apply-cors.sh` — see `deploy/r2/README.md`.

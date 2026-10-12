@@ -15,36 +15,47 @@ pipeline script resolves the repo root by walking up until it finds `.git` or
 
 Each area owns its own doc; the cross-cutting rules follow below.
 
-| Working on…                               | Read                                                                                                 | Notes                                                                                                                                                                                                                                                      |
-| ----------------------------------------- | ---------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Data pipelines (ingest, transforms, glue) | [`pipelines/README.md`](./pipelines/README.md)                                                       | Medallion tiers, script index, R2 key layout, data lineage.                                                                                                                                                                                                |
-| Dagster orchestration                     | [`pipelines/orchestration/README.md`](./pipelines/orchestration/README.md)                           | **Optional** layer. It shells out to scripts via Pipes subprocesses — it never imports or edits them.                                                                                                                                                      |
-| The MapLibre webmap / chat assistant      | [`webmap/README.md`](./webmap/README.md)                                                             | One Zustand store, two drivers (layer panel + AI tools). Render params are mirrored in **four** places — `src/config.ts`, `catalog_silver.py`, `INTEGRATION_GUIDE.md` section 2, `partner-template/index.html`. Change one, change all; never add a fifth. |
-| Deployment (Neon, Render, Workers)        | the **`philsa-deploy`** skill → [`deploy/DEPLOYMENT.md`](./deploy/DEPLOYMENT.md)                     | Prod DB on Neon, app tier on one `render.yaml` Blueprint, repeatable scripts in `deploy/scripts/`.                                                                                                                                                         |
-| The catalog API or Browser UI             | [`README.md` → Working with the submodules](./README.md#working-with-the-submodules)                 | Both are **git submodules** pointing at our forks. See the guardrails below.                                                                                                                                                                               |
-| Reusable agent tooling                    | [`.claude/skills/`](./.claude/skills/)                                                               | Skills live here (not `.agents/`). Index below.                                                                                                                                                                                                            |
-| Partner integration / API surface         | [`INTEGRATION_GUIDE.md`](./INTEGRATION_GUIDE.md), [`PHILSA_INTEROP_API.md`](./PHILSA_INTEROP_API.md) | Section 2 of the guide is the source of truth for base URLs + render params. Anchor-agency use cases in [`PCIC_WEBMAP_USE_CASES.md`](./PCIC_WEBMAP_USE_CASES.md).                                                                                          |
+| Working on…                               | Read                                                                                                                                                | Notes                                                                                                                                                                                                                                                                                                                  |
+| ----------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Data pipelines (ingest, transforms, glue) | [`pipelines/README.md`](./pipelines/README.md)                                                                                                      | Medallion tiers, script index, R2 key layout, data lineage.                                                                                                                                                                                                                                                            |
+| Dagster orchestration                     | [`pipelines/orchestration/README.md`](./pipelines/orchestration/README.md)                                                                          | **Optional** layer. It shells out to scripts via Pipes subprocesses — it never imports or edits them.                                                                                                                                                                                                                  |
+| The MapLibre webmap / chat assistant      | [`webmap/README.md`](./webmap/README.md)                                                                                                            | One Zustand store, two drivers (layer panel + AI tools). Render params are mirrored in **five** places — `INTEGRATION_GUIDE.md` section 2 (the source of truth), `src/config.ts`, `catalog_silver.py`, `partner-template/index.html`, `stac-browser/config.js` (submodule). Change one, change all; never add a sixth. |
+| Deployment (Neon, Render, Workers)        | the **`philsa-deploy`** skill → [`deploy/DEPLOYMENT.md`](./deploy/DEPLOYMENT.md); new environment / other platforms → **`philsa-deploy-bootstrap`** | Prod DB on Neon, app tier on one `render.yaml` Blueprint, repeatable scripts in `deploy/scripts/`.                                                                                                                                                                                                                     |
+| The catalog API or Browser UI             | [`README.md` → Working with the submodules](./README.md#working-with-the-submodules)                                                                | Both are **git submodules** pointing at our forks. See the guardrails below.                                                                                                                                                                                                                                           |
+| Reusable agent tooling                    | [`.claude/skills/`](./.claude/skills/)                                                                                                              | Skills live here. `.agents/skills` is a symlink to it so Codex reads the same list. Index below.                                                                                                                                                                                                                       |
+| Partner integration / API surface         | [`INTEGRATION_GUIDE.md`](./INTEGRATION_GUIDE.md), [`PHILSA_INTEROP_API.md`](./PHILSA_INTEROP_API.md)                                                | Section 2 of the guide is the source of truth for base URLs + render params. Anchor-agency use cases in [`PCIC_WEBMAP_USE_CASES.md`](./PCIC_WEBMAP_USE_CASES.md).                                                                                                                                                      |
 
 ### Skills — the task-gated knowledge
 
 [`.claude/skills/`](./.claude/skills/) holds what you only need for a *particular*
-job, loaded on demand so it isn't carried on every task. Skill *descriptions* are
-in context every session; the bodies are not. The docs a skill names stay
-canonical — don't copy their prose into it, because pointers don't drift and
-copies do.
+job, loaded on demand so it isn't carried on every task. It is the **single**
+skill list for every agent: Claude Code reads it directly, and Codex reads it
+through the `.agents/skills → ../.claude/skills` symlink (Codex scans
+`.agents/skills` and follows symlinks). Add skills only under `.claude/skills/`
+and never copy them into `.agents/`. Codex doesn't merge same-named skills, so
+a copy shows up twice and drifts. Skill scripts keep their `.claude/skills/...`
+paths, which resolve for both agents. On Windows, clone with symlinks enabled
+(`git config --global core.symlinks true`, Developer Mode) or use WSL2.
 
-| Skill                 | Covers                                                                                                 |
-| --------------------- | ------------------------------------------------------------------------------------------------------ |
-| `philsa-deploy`       | Neon / Render / Workers deploys, prod ingest, R2 setup + CORS, and the deploy traps.                   |
-| `submodule-bump`      | Landing a submodule change the two-commit way (scripted).                                              |
-| `ph-admin-geoparquet` | Building the PH admin-boundary GeoParquet from OCHA COD-AB.                                            |
-| `collection-tier`     | Moving a collection between the open and restricted tiers (bytes, hrefs, gateway policy, catalog tag). |
-| `format-agents-md`    | Autoformatting this file (and other repo markdown) with mdformat + GFM.                                |
+Skill *descriptions* are in context every session; the bodies are not. The docs
+a skill names stay canonical — don't copy their prose into it, because pointers
+don't drift and copies do.
+
+| Skill                     | Covers                                                                                                 |
+| ------------------------- | ------------------------------------------------------------------------------------------------------ |
+| `philsa-onboarding`       | Guided, module-by-module onboarding for a new developer (ships `doctor.sh`, a read-only env check).    |
+| `philsa-deploy`           | Neon / Render / Workers deploys, prod ingest, R2 setup + CORS, and the deploy traps.                   |
+| `philsa-deploy-bootstrap` | Standing up a NEW deployment from scratch — reference stack, Azure, or on-prem — with a plan + gates.  |
+| `submodule-bump`          | Landing a submodule change the two-commit way (scripted).                                              |
+| `ph-admin-geoparquet`     | Building the PH admin-boundary GeoParquet from OCHA COD-AB.                                            |
+| `collection-tier`         | Moving a collection between the open and restricted tiers (bytes, hrefs, gateway policy, catalog tag). |
+| `format-agents-md`        | Autoformatting this file (and other repo markdown) with mdformat + GFM.                                |
 
 A skill earns its place only by **consolidating traps that live in several docs**
-(`philsa-deploy`) or by **shipping a script** (`submodule-bump`,
-`ph-admin-geoparquet`, `format-agents-md`). A skill that merely points at one doc
-is a signpost to a signpost — the table above already routes there. Don't add one.
+(`philsa-deploy`, `philsa-deploy-bootstrap`) or by **shipping a script**
+(`submodule-bump`, `ph-admin-geoparquet`, `format-agents-md`,
+`philsa-onboarding`). A skill that merely points at one doc is a signpost to a
+signpost — the table above already routes there. Don't add one.
 
 The cross-cutting rules below stay here on purpose — they must hold whenever any
 script is touched, and a skill only loads when its description matches.

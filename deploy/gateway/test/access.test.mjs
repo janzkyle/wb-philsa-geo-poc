@@ -1,6 +1,6 @@
 // Unit tests for the gateway's access policy + presigner.
 //
-//   cd deploy/gateway && node --test test/
+//   cd deploy/gateway && node --test test/*.test.mjs
 //
 // Everything under test is pure (or Web Crypto only), so this runs in plain Node
 // with no Worker runtime, no network, and no Cloudflare account.

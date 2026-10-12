@@ -37,3 +37,6 @@ __pycache__/
 
 # shared secret between the edge gateway and the Render origins (deploy/AUTH.md)
 deploy/.gateway-secret
+
+# personal onboarding progress + notes (philsa-onboarding skill)
+/.onboarding/

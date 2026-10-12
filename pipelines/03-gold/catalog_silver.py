@@ -21,6 +21,10 @@ source silver SAR item.
 
 Discovers COGs by listing each silver prefix in R2 (S3 ListObjectsV2, SigV4 via
 stdlib). Reads R2 creds from the repo-root `.env`; pgSTAC URL from STAC_API.
+Links stored INSIDE items (flood → SAR derived_from) use STAC_PUBLIC_URL
+instead — the consumer-facing catalog base — because STAC_API may be a
+private, short-lived write endpoint (prod-ingest.sh's localhost:8092) that no
+reader can follow. Unset, it falls back to STAC_API (right for local runs).
 
 Stdlib only. Usage (from repo root, with pgSTAC up on :8082):
     python3 pipelines/03-gold/catalog_silver.py
@@ -54,6 +58,8 @@ from r2 import R2, load_env_file  # noqa: E402 — shared stdlib SigV4 R2 client
 from stac_write import ensure_writable  # noqa: E402 — refuse read-only STAC targets
 
 STAC_API = os.environ.get("STAC_API", os.environ.get("DST", "http://localhost:8082")).rstrip("/")
+# Base for hrefs we persist in the catalog — never the private write endpoint.
+STAC_PUBLIC_URL = (os.environ.get("STAC_PUBLIC_URL") or STAC_API).rstrip("/")
 TIMEOUT = 60
 PROJ_EXT = "https://stac-extensions.github.io/projection/v1.1.0/schema.json"
 RASTER_EXT = "https://stac-extensions.github.io/raster/v1.1.0/schema.json"
@@ -93,7 +99,7 @@ PRODUCTS = [
      "lineage": "NDVI = (B08 − B04) / (B08 + B04) computed at 10 m from the Copernicus "
                 "Sentinel-2 L2A granule {source}; fill pixels set to nodata (−9999).",
      "renders": {"ndvi": {"title": "NDVI (red → green)", "assets": ["data"],
-                          "rescale": [[-0.2, 0.8]], "colormap_name": "rdylgn",
+                          "rescale": [[-0.2, 0.9]], "colormap_name": "rdylgn",
                           "resampling": "bilinear"}}},
     {"collection": "sentinel2-truecolor", "prefix": "02-silver/sentinel2-truecolor",
      "title": "Sentinel-2 True-Colour (TCI) — Philippines",
@@ -122,7 +128,7 @@ PRODUCTS = [
                 "converted to backscatter in dB (10·log10(DN²)) and geocoded. No "
                 "radiometric calibration, speckle filtering, or terrain correction.",
      "renders": {"backscatter": {"title": "VV backscatter (dB)", "assets": ["data"],
-                                 "rescale": [[15, 55]], "colormap_name": "gray",
+                                 "rescale": [[20, 52]], "colormap_name": "gray",
                                  "resampling": "bilinear"}}},
     {"collection": "sentinel1-ratio", "prefix": "02-silver/sentinel1-ratio",
      "title": "Sentinel-1 VH/VV Cross-Ratio — Philippines",
@@ -424,6 +430,8 @@ def main():
         return f"/vsis3/{bucket_for(prod)}/{key}"
 
     print(f">> pgSTAC : {STAC_API}")
+    if STAC_PUBLIC_URL != STAC_API:
+        print(f">> links  : {STAC_PUBLIC_URL}")
     print(f">> bucket : {bucket}")
     print(">> read   : vsis3 (authenticated)")
     if args.dry_run:
@@ -477,7 +485,7 @@ def main():
             if sib and iid.endswith("_flood"):
                 sar_id = iid[:-len("_flood")] + "_dB"
                 links.append({"rel": "derived_from", "type": "application/geo+json",
-                              "href": f"{STAC_API}/collections/{sib}/items/{sar_id}",
+                              "href": f"{STAC_PUBLIC_URL}/collections/{sib}/items/{sar_id}",
                               "title": f"Silver VV backscatter item {sar_id}"})
             it = build_item(prod, key, info, asset_href(prod, key), links)
             items.append(it)

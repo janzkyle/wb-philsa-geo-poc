@@ -47,6 +47,12 @@ if ! $silver_only; then
   [ -n "${YEAR:-}" ] && with_esri=true
 fi
 
+# Links the loaders store inside items must point at the catalog consumers
+# actually read — never at the private ingest endpoint below, which is gone the
+# moment prod-ingest.sh finishes. STAC_PUBLIC_URL (env file) wins; otherwise the
+# env file's own STAC_API, captured BEFORE the override.
+STAC_PUBLIC_URL="${STAC_PUBLIC_URL:-${STAC_API:-}}"
+
 # A private ingest API (from prod-ingest.sh) overrides the env file's STAC_API,
 # which for prod points at the public READ-ONLY URL and can't accept writes.
 STAC_API="${INGEST_STAC_API:-${STAC_API:-}}"
@@ -64,7 +70,13 @@ info "target write API: $STAC_API"
 info "checking the API is reachable …"
 curl -fsS "$STAC_API/collections" >/dev/null || die "cannot reach $STAC_API/collections"
 
-export STAC_API DST="$STAC_API"
+case "$STAC_PUBLIC_URL" in
+  *localhost*|*127.0.0.1*)
+    [ "$ENV_NAME" = "local" ] || die "STAC_PUBLIC_URL ($STAC_PUBLIC_URL) is a local address — set the public catalog URL in deploy/environments/$ENV_NAME.env" ;;
+esac
+info "public link base: $STAC_PUBLIC_URL"
+
+export STAC_API DST="$STAC_API" STAC_PUBLIC_URL
 
 if $silver_only; then
   info "silver-only reload — skipping the PhilSA mirror."

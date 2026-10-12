@@ -20,6 +20,11 @@ TIMEOUT = 30
 # only when transactions are enabled).
 _TRANSACTION_MARKERS = ("/extensions/transaction", "/conf/simpletx")
 
+# Cloudflare (which fronts the prod gateway) answers urllib's default
+# "Python-urllib/x.y" User-Agent with 403, which made this probe fail open
+# against exactly the host it exists to refuse. Identify ourselves instead.
+USER_AGENT = "philsa-poc-pipelines (stac_write.ensure_writable)"
+
 
 def ensure_writable(api, timeout=TIMEOUT):
     """Exit early, with a pointer to prod-ingest.sh, if `api` is read-only.
@@ -31,11 +36,13 @@ def ensure_writable(api, timeout=TIMEOUT):
     try:
         req = urllib.request.Request(
             f"{api.rstrip('/')}/conformance",
-            headers={"Accept": "application/json"},
+            headers={"Accept": "application/json", "User-Agent": USER_AGENT},
         )
         with urllib.request.urlopen(req, timeout=timeout) as r:
             conforms = json.load(r).get("conformsTo", [])
-    except Exception:
+    except Exception as e:  # fail open, but say so — a silent pass hides a misconfigured target
+        print(f"warning: could not verify {api} is writable ({e}); continuing — "
+              "the first write will report the real error.", file=sys.stderr)
         return
     if not any(m in c for c in conforms for m in _TRANSACTION_MARKERS):
         sys.exit(
