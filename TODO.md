@@ -4,6 +4,11 @@ Running task list for the PhilSA POC. Check items off as they land; the
 high-level narrative ("what's next") lives in `README.md` — this is the granular
 version. Keep both honest.
 
+Legend: `[x]` done · `[~]` partly done (the remaining work is spelled out inline)
+· `[ ]` not started. **Last audited against the code and the live prod gateway
+on 2026-10-11** for the handover to the PhilSA team; the item counts below
+(scenes, collections, assets) are as of that date.
+
 ## Ingest
 
 - [x] Mirror the PhilSA STAC (`stac.infra.copphil.philsa.gov.ph`) into pgSTAC by
@@ -19,19 +24,24 @@ version. Keep both honest.
         mirror_philsa_catalog.py` would rebuild the first three if ever needed.
 - [x] Load ESRI 10 m Annual LULC COGs by reference (`load_esri_lulc.sh`)
 - [x] Build PH admin-boundary GeoParquet adm0–adm4 (`ph-admin-geoparquet` skill)
-- [ ] **CopPhil S3 — raw Sentinel / EODATA** (`COP`): ingest raw Sentinel-1
+- [~] **CopPhil S3 — raw Sentinel / EODATA** (`COP`): ingest raw Sentinel-1
       (SAR) + Sentinel-2 (optical) scenes for the AOI; feeds the `clip · NDVI ·
       SAR flood` processing path
   - [x] Acquire scenes via the CopPhil API (`download_copphil_eodata.py`):
         Keycloak auth → OData search (latest S1 GRD + S2 L2A over the PH AOI) →
-        token-authed download. Creds in gitignored `.env.copphil`.
-  - [ ] Process raw SAFE zips → derived COGs in R2 (silver):
+        token-authed download. Creds (`COPPHIL_USERNAME` / `COPPHIL_PASSWORD`)
+        in the single gitignored repo-root `.env`. Default pulls the latest
+        `--dates 3`; `--all` takes every scene CopPhil holds (large — `--dry-run`
+        first, then bound with `--days` / `--limit` / `--aoi`).
+  - [~] Process raw SAFE zips → derived COGs in R2 (silver) — all five products
+        built and cataloged; what's left is the flood-method upgrades and
+        backfilling the remaining scenes (below):
     - [x] Sentinel-2 NDVI COG (`02-silver/sentinel2-ndvi/build_ndvi.sh`)
     - [x] Sentinel-2 true-colour TCI COG (`02-silver/sentinel2-truecolor/build_truecolor.sh`)
     - [x] Sentinel-1 VV backscatter (dB) COG (`02-silver/sentinel1-sar/build_sar.sh`)
     - [~] **Sentinel-1 flood layer from our CopPhil S1** (`COP`) — derive an
           actual flood-extent product from the VV scenes we already ingest.
-          **Built + cataloged (1 of 14 scenes):** `02-silver/sentinel1-flood/` —
+          **Built + cataloged (13 flood items in prod vs 26 SAR items):** `02-silver/sentinel1-flood/` —
           `otsu_flood.py` classifies the existing silver VV-dB COG into a Byte mask
           (1=water/0=land/2=permanent-water/255=nodata), **block-wise** for full
           ~28k×21k GRD scenes. Methods: **`sigma` (default, mean−k·std)**, `otsu`,
@@ -40,10 +50,14 @@ version. Keep both honest.
           robust default. Optional `--perm-water` mask + `--min-db` floor. Driven by
           `build_flood.sh` (stage from R2 silver → classify → COG → R2). Gold
           collection `sentinel1-flood` wired into `catalog_silver.py` (flood colormap
-          render) + stac-browser tile rule. **One scene live in pgSTAC** (sigma k=2 →
-          ~0.6% water). **Still to do:** batch the remaining 13 silver SAR scenes;
-          slope masking; rigorous route — change-detection vs a dry-season reference
-          (calibration · speckle · terrain-correction).
+          render) + stac-browser tile rule. **Open tier** (`philsa:access: open`;
+          it was restricted 2026-07-28 → 2026-08-04 to prove the auth layer, then
+          returned — see *Auth & governance*). **Still to do:** backfill flood for
+          the SAR scenes that don't have it yet (`build_silver.py --only flood`);
+          slope masking (needs the DEM below); rigorous route — change-detection
+          vs a dry-season reference (calibration · speckle · terrain-correction).
+          Flood has no per-date mosaics (`build_raster_mosaics.sh` leaves it out
+          by default; pass `COLLECTIONS=…` to include it).
           **Complements** (not replaces) Copernicus EMS/GFM below — our own
           derived layer + the authoritative reference.
     - [~] **Sentinel-1 VH/VV cross-ratio (radar vegetation index)** — the
@@ -58,17 +72,19 @@ version. Keep both honest.
           readability fix, done upstream — no colormap slider needed).
           Caveats: per-pol calibration LUTs don't cancel exactly; per-pixel
           ratio speckle is noisier (zone-level averaging handles it); NOT a
-          calibrated/validated crop product. **Built + verified (2026-07-11,
-          1 of 14 scenes):** full chain live for the 2026-07-07 S1D scene —
+          calibrated/validated crop product. **Built + verified (2026-07-11; 19
+          items in prod as of 2026-10-11, vs 26 SAR items):** full chain first
+          verified on the 2026-07-07 S1D scene —
           silver COG (1.8 GB), gold collection `sentinel1-ratio` (ylgn render,
           stretch −14…−2 dB = measured p2–p98; values land in the physical
           VH−VV range, confirming the gain cancellation), stac-browser tile
           rule, Dagster asset `silver/sentinel1_ratio` (auto-joins
           `copphil_chain_refresh`), webmap layer + legend + chat-assistant
           entry (verified in-browser: panel, date pick, tiles, legend).
-          **Still to do:** batch the remaining scenes (`build_silver.py
-          --only ratio`; ~2 GB Float32 COG per scene — mind R2 usage),
-          per-date mosaics.
+          **Still to do:** backfill the remaining scenes (`build_silver.py
+          --only ratio`; ~2 GB Float32 COG per scene — mind R2's 10 GB free
+          tier). Per-date mosaics are built (it's in `build_raster_mosaics.sh`'s
+          default list).
   - [x] Catalog silver COGs in pgSTAC by reference (gold,
         `pipelines/03-gold/catalog_silver.py`): S2 NDVI, S2 true-colour, S1 VV
         backscatter as STAC collections + items (asset hrefs → public R2)
@@ -100,10 +116,14 @@ version. Keep both honest.
       item_assets, classification classes, `processing:lineage`, and
       `derived_from`/`via` provenance links; mirror normalizes upstream
       `eo:bands.common_name` to the EO vocabulary
-- [ ] Report upstream to PhilSA: their catalog's `eo:bands.common_name` values
+- [ ] **For the PhilSA catalog team** (upstream fix, not POC work): the
+      `stac.infra.copphil.philsa.gov.ph` catalog's `eo:bands.common_name` values
       (`red-edge`, `coastal_blue`, `green_i`) are outside the EO-extension
-      vocabulary and fail STAC validation (our mirror normalizes them on ingest)
-- [ ] Use uv package manager for the environment. Use uv for all python scripts
+      vocabulary and fail STAC validation. Our mirror normalizes them on ingest,
+      so this only matters to other consumers of the upstream catalog.
+- [ ] Adopt `uv` for the Python environment and run every Python script through
+      it. Today only `pipelines/orchestration/` has a `pyproject.toml`; the
+      standalone scripts are stdlib + system GDAL with no lockfile.
 
 ## Geospatial AI
 
@@ -137,7 +157,7 @@ tools, not in the chat model's weights.
       ingest/transform/catalog script wrapped as a software-defined **asset** via
       Pipes subprocesses (scripts stay standalone + unmodified; their env/CLI
       params surface as run config). The medallion tiers form the asset graph —
-      11 assets, bronze → silver → gold lineage — giving run history, backfills,
+      12 assets, bronze → silver → gold lineage — giving run history, backfills,
       and a manual-run/trigger UI. Covers both asks: **one-time/manual** runs
       (UI "Materialize" or `dagster asset materialize`) and a **daily update
       check** (`copphil_new_scene_sensor` polls CopPhil OData hourly and only
@@ -147,9 +167,9 @@ tools, not in the chat model's weights.
       the existing pgSTAC Postgres; `compose.orchestration.yml` runs the
       webserver (UI :3030) + daemon on the pgSTAC network. See
       `pipelines/orchestration/README.md`.
-  - [ ] Add `tippecanoe` + `aws` CLI to the Dagster image so
-        `silver/ph_admin_pmtiles` and `silver/raster_mosaics` run in-container
-        (today they run best from the host).
+  - [x] `tippecanoe` (built from source) + `awscli` are in the Dagster image
+        (`pipelines/orchestration/Dockerfile`), so `silver/ph_admin_pmtiles` and
+        `silver/raster_mosaics` can run in-container.
 
 ## Storage — Cloudflare R2
 
@@ -157,14 +177,18 @@ tools, not in the chat model's weights.
 - [x] Upload PH admin-boundary GeoParquet to R2 (skill already supports this)
 - [x] Create the private bucket (sensitive data + licensed imagery) —
       `world-bank-philsa-geo-private`, no public access, no `r2.dev` domain.
-      Still empty: see *Auth & governance* → move the restricted bytes.
+      Proven end-to-end with `sentinel1-flood` (moved in 2026-07-28, moved back
+      out 2026-08-04). **Holds no published collection today** — every
+      cataloged collection is open. Use the `collection-tier` skill to move one
+      in or out.
 - [x] Decide the open/restricted **sensitivity tagging** scheme — `philsa:access`
       (`open`|`restricted`) on the **collection**, matching the existing
       `philsa:*` property convention. Per-collection, not per-item: that's how the
       data is actually licensed and it keeps enforcement off the hot path.
       See *Auth & governance*.
-- [~] Presigned-URL flow for restricted assets — built (`/assets/sign`), blocked
-      on an R2 API token that covers the private bucket. See *Auth & governance*.
+- [x] Presigned-URL flow for restricted assets — `/assets/sign` on the STAC
+      gateway; R2 token widened to the private bucket and verified end-to-end
+      (signed URL → `206`, 2026-07-28). See *Auth & governance*.
 
 ## Frontend — MapLibre webmap (ACTIVE track)
 
@@ -182,21 +206,26 @@ frozen at demoable and has since been deleted — see git history.)*
       `list_collections` · `resolve_region` (name→bbox from the R2
       `ph_admin_index.json` built by
       `pipelines/02-silver/ph-admin-boundaries/build_admin_search_index.py`) ·
-      `search_catalog`
+      `resolve_point` · `highlight_location` · `search_catalog`
       (pgSTAC `/search`; on zero hits reports each collection's nearest available
-      dates) · `add_layers` / `remove_layers` / `update_layer` · `set_view`.
+      dates) · `get_available_dates` · `add_layers` / `remove_layers` /
+      `update_layer` · `set_view`.
       "Show flood data for Central Luzon, first week of June" → resolve → search
       → add → zoom. Rasters via TiTiler — per-date **MosaicJSON when present**,
       falling back to per-item COG tiles (flood has no mosaics yet); admin
       outlines stream the same R2 PMTiles as before; per-layer legends kept.
-      Chat backend: `webmap/server/chat.mjs` (Node, OpenRouter via the AI SDK;
-      `OPENROUTER_API_KEY` in the repo-root `.env`). Models: free-first —
-      default `qwen/qwen3-coder:free` (`GENAI_MODEL` overrides), with automatic
-      fallback through tool-capable free models fetched live from the
+      Chat backend: shared core `webmap/server/chatCore.mjs` (OpenRouter via the
+      AI SDK), run locally by `server/chat.mjs` (Node; `OPENROUTER_API_KEY` in
+      the repo-root `.env`) and in prod as a Cloudflare Worker
+      (`server/worker.mjs`, config in `deploy/chat/wrangler.toml`, key as a
+      Worker secret). Models: free-first — default
+      `nvidia/nemotron-3-super-120b-a12b:free` (`GENAI_MODEL` overrides), with
+      automatic fallback through tool-capable free models fetched live from the
       OpenRouter catalog when a stream errors before producing output. Still
       to do: **deck.gl overlay** (GPU date-range scrubbing via
-      `DataFilterExtension`, GeoArrow vector layers); restricted (authenticated)
-      layers; footprint/discovery layer; surface EMS/GFM flood once ingested.
+      `DataFilterExtension`, GeoArrow vector layers); authenticated layers (see
+      *Auth & governance*); footprint/discovery layer; surface EMS/GFM flood
+      once ingested.
 - [x] **GeoJSON upload → zoom-to-extent + raster clip** (2026-07-10): uploading
       a local file already flew to its bbox; now polygon uploads also add a
       **clip mask** layer (`buildClipMaskLayer` in `lib/geojson.ts` — world
@@ -232,10 +261,14 @@ console is truly insurance-shaped — and even there, build
 the threshold-exceedance engine generic and keep the insurance vocabulary
 (UAI, payout, policy count) in a thin presentation layer.
 
-- [ ] `[generic]` **Zonal statistics** — the unlock for all three processes. TiTiler
-      already exposes `/cog/statistics` (POST a GeoJSON geometry → band stats),
-      and the zone geometries exist (adm3/adm4 PMTiles; bboxes in
-      `ph_admin_index.json`). Surface it two ways:
+- [~] `[generic]` **Zonal statistics** — the unlock for all three processes.
+      **Built for uploaded areas:** the webmap's Time-series tab ("Window
+      average", `webmap/src/lib/stats.ts`) calls TiTiler `/cog/statistics` per
+      uploaded polygon × acquisition date. It reports the mean plus valid-pixel
+      coverage, pools areas that span several granules, and exports CSV.
+      **Not yet:** stats over *admin* zones (the adm3/adm4
+      geometries exist as PMTiles; bboxes are in `ph_admin_index.json`), and
+      access from the chat assistant:
   - [ ] `zone_stats` AI tool — `(collection, zone or bbox, date range)` →
         mean/median NDVI, % flood pixels, % crop pixels (LULC). Turns "show
         NDVI in Nueva Ecija" into "what was the average NDVI in June, vs May?"
@@ -255,9 +288,11 @@ the threshold-exceedance engine generic and keep the insurance vocabulary
   - [ ] Propagate per-item **`eo:cloud_cover`** (from L2A metadata) into the
         STAC items in `catalog_silver.py`, so the webmap/AI can rank dates and
         warn ("best cloud-free date near June 5 is …").
-  - [ ] `zone_stats` must report the **valid-pixel fraction** per zone and
+  - [~] Zonal stats must report the **valid-pixel fraction** per zone and
         refuse/flag results below a threshold (e.g. <70 % valid) instead of
-        returning a silently biased mean.
+        returning a silently biased mean. The Time-series stats already compute
+        and export `coveragePct`. Nothing flags or refuses a low-coverage
+        result yet.
   - [ ] Parametric triggers read **temporal composites** (e.g. monthly median
         or max-NDVI per zone), never single scenes — standard index-insurance
         practice; also what the Sentinel-3 OLCI ingest (Ingest section) and
@@ -266,9 +301,10 @@ the threshold-exceedance engine generic and keep the insurance vocabulary
       / burn-cost): NDVI or flood-% per date over a selected zone, plotted with
       a draggable threshold line — the visual "how risky is this barangay"
       answer. The time-series-over-a-zone part is generic (drought monitoring,
-      vegetation trend); the threshold overlay is the insurance flavor. The
-      TimeSeries scrubber is the skeleton; this is its numeric sibling (needs
-      zonal stats above).
+      vegetation trend); the threshold overlay is the insurance flavor. The data
+      already exists: the Time-series "Window average" produces the per-area ×
+      per-date series, but only as a table/CSV. What's missing is the chart,
+      the threshold line, and admin-zone selection.
 - [ ] `[generic]` **Compare mode** (post-plant / pre-post event): swipe or
       side-by-side of two dates of one collection. Cheap on the existing layer
       factory.
@@ -391,7 +427,8 @@ local governments) consume PhilSA data from
 edge gateway, published on open standards so there's no bespoke client to build.
 Architecture + rollout in `PHILSA_INTEROP_API.md`; the external developer guide
 is `INTEGRATION_GUIDE.md`; `partner-template/` is a runnable single-file sample.
-**Phases 0–2 done; Phase 3 (govern) is next.**
+**Phases 0–2 done; Phase 3 (govern) is mostly built.** API keys and the
+restricted tier are live. Usage metrics and the Auth0 tenant are left.
 
 - [x] **Phase 1 — declare the contract** (2026-07-15): explicit open-data CORS
       pinned in `render.yaml` (`CORS_ORIGINS`/`CORS_METHODS` — note the pgstac
@@ -447,19 +484,23 @@ is `INTEGRATION_GUIDE.md`; `partner-template/` is a runnable single-file sample.
       absent). Confirm it's available on the account plan first.
 - [ ] **Smoke-test the prod ingest path** — run `prod-ingest.sh prod --silver-only`
       on the next catalog refresh to exercise the read-only guards +
-      `ensure_writable` conformance check end-to-end (needs Docker + Neon; couldn't
-      be run at review time).
+      `ensure_writable` conformance check end-to-end (needs Docker + Neon). Prod
+      has been written to since (13 flood / 19 ratio items, tier moves), so the
+      path works in practice, but no one has recorded a deliberate run of the
+      guard checks.
 
 **Next — Phase 3 (govern it; only once an agency actually commits):**
-- [ ] **API keys** for server/restricted consumers — the per-key hook is stubbed
-      in `worker.js`. A key identifies the agency, not a person; open collections
-      stay anonymous.
+- [x] **API keys** for server/restricted consumers — implemented
+      (`deploy/gateway/lib/auth.js`, minted/revoked with
+      `deploy/gateway/scripts/mint-key.mjs`; see *Auth & governance*). A key
+      identifies the agency, not a person; open collections stay anonymous.
+      What's left is operational: actually issuing keys to agencies.
 - [ ] **Usage metrics / attribution** — with Workers Logs on, aggregate
       who-pulled-what for reporting + capacity planning.
-- [ ] **Restricted-data tier** — presigned-URL path for the private R2 bucket
-      (see *Storage → private bucket / presigned* and *Auth & governance*). Blocked
-      on the private bucket existing; today "restricted" is a design, not a
-      capability.
+- [x] **Restricted-data tier** — built and proven end-to-end (private bucket,
+      `/assets/sign` presigned URLs, gateway RBAC, TiTiler locked to the
+      gateway). It's a working capability with no collection in it today. See
+      *Auth & governance*.
 
 **Next — Phase 4 (graduate; only if adoption warrants the ops cost):**
 - [ ] Custom domains (`stac.philsa.gov.ph`) — worker code + consumer URLs move,
@@ -488,14 +529,18 @@ Operator guide + Auth0 tenant setup: **`deploy/AUTH.md`**.
       change. *Auth0 tenant not created yet: `AUTH0_DOMAIN` ships empty, which
       disables JWTs and leaves API-key auth fully working.*
 - [x] **RBAC / collection-level access control on the catalog API** — deployed and
-      verified live. `sentinel1-flood` is the first restricted collection:
-      stripped from `/collections` (110 → 109 anonymously), `401` on its
-      collection/item routes, `401` on a search naming it, and filtered out of an
-      **unscoped** `/search` (the bypass that matters — origin returns 30 items
-      for a given date window, the gateway returns 28 with zero flood). The tiles
-      gateway refuses to render restricted COGs, including via the `urls`/`url_1`
-      mosaic params. Edge-cache keys are tier-scoped so a privileged response
-      can't be replayed to an anonymous caller.
+      verified live (2026-07-28) with `sentinel1-flood` as the test restricted
+      collection: stripped from `/collections` (110 → 109 anonymously), `401` on
+      its collection/item routes, `401` on a search naming it, and filtered out
+      of an **unscoped** `/search` (the bypass that matters — origin returns 30
+      items for a given date window, the gateway returns 28 with zero flood). The
+      tiles gateway refuses to render restricted COGs, including via the
+      `urls`/`url_1` mosaic params. Edge-cache keys are tier-scoped so a
+      privileged response can't be replayed to an anonymous caller.
+      **Today no collection is restricted:** `sentinel1-flood` was returned to
+      the open tier on 2026-08-04, so `RESTRICTED_COLLECTIONS` /
+      `RESTRICTED_ASSET_PREFIXES` are commented out in
+      `deploy/gateway/wrangler.toml` and all 110 collections are anonymous.
 - [x] **Data-sharing policy: who sees open vs. restricted** — written up in
       `deploy/AUTH.md` (tier table, roles, enforcement matrix, known limits).
       Sensitivity is tagged on collections as `philsa:access` via
@@ -503,27 +548,41 @@ Operator guide + Auth0 tenant setup: **`deploy/AUTH.md`**.
       `RESTRICTED_COLLECTIONS` var is the **enforcement authority**. Deliberately
       two places: enforcement must survive the DB being unreachable, and a
       catalog writer must not be able to quietly open the restricted tier.
-- [~] **Presigned URLs for restricted assets** — `/assets/sign` is built and
+- [x] **Presigned URLs for restricted assets** — `/assets/sign` is built and
       deployed; it refuses anonymous callers, refuses to sign open assets (so a
       leaked key can't proxy the bucket), and logs every signing with the
       principal + object key (that log is the access record). The SigV4
-      implementation is verified **byte-identical to botocore**, and signs the
-      public bucket successfully (`206` with Range). **Blocked on one dashboard
-      step:** the R2 API token in `.env` is scoped to `world-bank-philsa-geo`
-      only, so URLs into the private bucket return `403 AccessDenied`. Issue a
-      token covering both buckets — see the
-      warning box in `deploy/AUTH.md`.
-- [ ] **Move the restricted bytes** — until this runs, the restriction is
-      metadata only: `sentinel1-flood` COGs are still world-readable straight off
-      the public `r2.dev` host, which the gateway isn't in the path of.
-      `bash .claude/skills/collection-tier/move_assets_tier.sh prod sentinel1-flood restrict --apply` copies
-      to the private bucket, verifies the count, repoints the STAC hrefs, then
-      deletes the public copies (dry-run by default). Needs the R2 token fix above.
+      implementation is verified **byte-identical to botocore**. The R2 token
+      was widened to cover the private bucket, and a private-bucket object then
+      signed and returned `206` (2026-07-28).
+- [x] **Move the restricted bytes** — scripted both ways by the
+      `collection-tier` skill (`move_assets_tier.sh <env> <collection>
+      restrict|open`, dry-run by default; copies, verifies count + bytes,
+      repoints hrefs, then deletes the source copies). Run against prod for all
+      13 `sentinel1-flood` COGs (2026-07-28) and reversed on 2026-08-04.
+      `catalog_silver.py` (`access: "restricted"` per product) and
+      `build_flood.sh` (`R2_DEST_BUCKET`) keep a re-run from republishing a
+      restricted product to the public bucket.
+- [x] **TiTiler origin locked to the gateway** — the gateway injects
+      `X-Gateway-Auth` (`ORIGIN_SHARED_SECRET`) and the origin's
+      `gateway_guard.py` refuses requests without it (health paths excepted), so
+      the public Render hostname can't render private-bucket COGs.
+- [ ] **Close the last bypass: the STAC API origin** still serves restricted
+      *metadata* directly on its public Render hostname, around the gateway. Its
+      image builds from the submodule, so the TiTiler guard can't simply be
+      copied in — see *Known limits* in `deploy/AUTH.md`. This only matters
+      once a collection is restricted again.
+- [ ] **Decide which collections are restricted** (PhilSA call): the tier
+      works but nothing is in it. Licensed imagery and sensitive derivatives
+      are the obvious candidates. Apply each with the `collection-tier` skill.
 - [ ] **Auth0 tenant** — create it and fill `AUTH0_DOMAIN` in both `[env.*.vars]`
       blocks to switch on browser logins (`deploy/AUTH.md` has the click-path:
       API + audience, RBAC, roles, and the post-login Action that emits the roles
-      claim).
-- [ ] **Restricted layers in the frontends** — the webmap/dashboard/STAC Browser
-      currently see `sentinel1-flood` disappear (they're anonymous). Wire the
-      Auth0 SPA login and pass the bearer token through, or ship a partner key
-      server-side for the template.
+      claim). Or skip Auth0 and point the same OIDC vars at PhilSA/CopPhil
+      Keycloak.
+- [~] **Restricted layers in the frontends** — the webmap now shows a
+      restricted layer as *restricted* instead of a stuck spinner (2026-07-29).
+      Still anonymous everywhere (webmap, STAC Browser), so restricted data
+      can't actually be viewed there. Wire the Auth0/OIDC SPA login and pass
+      the bearer token through, or ship a partner key server-side for the
+      template.
